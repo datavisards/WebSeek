@@ -1,0 +1,9 @@
+/* operationview.css */
+.operation-log {
+  padding: 8px;
+  margin: 4px 0;
+  background-color: #f0f0f0;
+  border-left: 4px solid #4a90e2;
+  font-family: monospace;
+  font-size: 14px;
+}

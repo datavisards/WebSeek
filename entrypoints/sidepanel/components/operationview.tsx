@@ -1,10 +1,23 @@
 import React from 'react';
+import './operationview.css';
 
-const OperationView = () => (
+interface OperationViewProps {
+  logs: string[];
+}
+
+const OperationView = ({ logs }: OperationViewProps) => (
   <div className="view-container">
     <h3 className="view-title">Operations</h3>
     <div className="view-content">
-      {/* Add operation controls here */}
+      {logs.length > 0 ? (
+        logs.map((log, index) => (
+          <div key={index} className="operation-log">
+            {log}
+          </div>
+        ))
+      ) : (
+        <p>No operations yet.</p>
+      )}
     </div>
   </div>
 );

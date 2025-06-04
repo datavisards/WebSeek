@@ -5,7 +5,11 @@ type Instance =
   | { id: string; type: 'text'; content: string; x: number; y: number }
   | { id: string; type: 'image'; src: string; x: number; y: number };
 
-const InstanceView = () => {
+interface InstanceViewProps {
+  onOperation: (message: string) => void;
+}
+
+const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -13,7 +17,7 @@ const InstanceView = () => {
   const panStart = useRef<{ x: number; y: number; initialPan: { x: number; y: number; }; } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggingInstanceId, setDraggingInstanceId] = useState<string | null>(null);
-  const dragStartPos = useRef<{ mouseX: number; mouseY: number; instanceX: number; instanceY: number } | null>(null);
+  const dragStartPos = useRef<{ mouseX: number; mouseY: number; instanceX: number; instanceY: number; offsetX: number; offsetY: number } | null>(null);
 
   const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
 
@@ -36,6 +40,7 @@ const InstanceView = () => {
       if (item.kind === 'file' && item.type.startsWith('image/')) {
         const file = item.getAsFile();
         if (file) {
+          onOperation("Image added");
           const reader = new FileReader();
           reader.onload = (e) => {
             const result = e.target?.result;
@@ -52,6 +57,7 @@ const InstanceView = () => {
     if (!handled) {
       const text = event.dataTransfer.getData('text/plain');
       if (text) {
+        onOperation(`Text added: "${text}"`);
         setInstances(prev => [...prev, { id: generateId(), type: 'text', content: text, x, y }]);
       }
     }
@@ -68,6 +74,7 @@ const InstanceView = () => {
       if (item.type.startsWith('image/')) {
         const file = item.getAsFile();
         if (file) {
+          onOperation("Image added");
           const reader = new FileReader();
           reader.onload = (e) => {
             const result = e.target?.result;
@@ -79,6 +86,7 @@ const InstanceView = () => {
         }
       } else if (item.type === 'text/plain') {
         item.getAsString((text) => {
+          onOperation(`Text added: "${text}"`);
           setInstances(prev => [...prev, { id: generateId(), type: 'text', content: text, x: pasteX, y: pasteY }]);
         });
       }
@@ -138,10 +146,10 @@ const InstanceView = () => {
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
     if (isPanning && panStart.current) {
       const { x: startX, y: startY, initialPan } = panStart.current;
-      
+
       // Add a sensitivity factor (e.g., 0.5 for slower panning)
       const sensitivity = 0.5;
-      
+
       const dx = (event.clientX - startX) * sensitivity / zoom;
       const dy = (event.clientY - startY) * sensitivity / zoom;
 
@@ -161,18 +169,21 @@ const InstanceView = () => {
     event: React.MouseEvent<HTMLDivElement>,
     id: string,
   ) => {
-    event.stopPropagation(); // Prevent canvas panning start
-    if (event.button !== 0) return; // left button only
+    event.stopPropagation();
+    if (event.button !== 0) return;
 
     const instance = instances.find(inst => inst.id === id);
     if (!instance) return;
 
+    const { x: canvasX, y: canvasY } = screenToCanvas(event.clientX, event.clientY);
     setDraggingInstanceId(id);
     dragStartPos.current = {
       mouseX: event.clientX,
       mouseY: event.clientY,
       instanceX: instance.x,
       instanceY: instance.y,
+      offsetX: canvasX - instance.x,
+      offsetY: canvasY - instance.y,
     };
   };
 
@@ -181,11 +192,20 @@ const InstanceView = () => {
 
     event.preventDefault();
 
-    const { x: canvasX, y: canvasY } = screenToCanvas(event.clientX, event.clientY);
+    const { x: currentCanvasX, y: currentCanvasY } = screenToCanvas(
+      event.clientX,
+      event.clientY
+    );
+    const { offsetX, offsetY } = dragStartPos.current;
+
     setInstances(prev =>
       prev.map(inst => {
         if (inst.id === draggingInstanceId) {
-          return { ...inst, x: canvasX, y: canvasY };
+          return {
+            ...inst,
+            x: currentCanvasX - offsetX,
+            y: currentCanvasY - offsetY,
+          };
         }
         return inst;
       }),
@@ -267,20 +287,19 @@ const InstanceView = () => {
               onMouseDown={e => handleInstanceMouseDown(e, instance.id)}
             >
               {instance.type === 'text' ? (
-                <p style={{ margin: 0 }}>{instance.content}</p>
+                <p style={{ margin: 0, userSelect: 'none' }}>{instance.content}</p>
               ) : (
                 <img
                   src={instance.src}
                   alt="instance"
                   className="instance-image"
                   style={{
-                    maxWidth: 200 / zoom,
-                    maxHeight: 150 / zoom,
+                    maxWidth: '200px',
+                    maxHeight: '150px',
                     display: 'block',
                     pointerEvents: 'none',
                     userSelect: 'none',
                   }}
-                  draggable={false}
                 />
               )}
             </div>
