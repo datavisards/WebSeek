@@ -1,0 +1,11 @@
+.instance-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+.instance-block p {
+  margin: 0;
+  user-select: text;
+}
