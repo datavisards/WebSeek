@@ -1,11 +1,48 @@
-.instance-image {
-  display: block;
-  max-width: 100%;
-  height: auto;
+.resizer {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #000;
+  opacity: 0.5;
+  z-index: 1001;
+  cursor: nwse-resize;
+  border-radius: 50%;
+}
+
+.resizer[data-direction="top-left"] {
+  left: -4px;
+  top: -4px;
+  cursor: nwse-resize;
+}
+
+.resizer[data-direction="top-right"] {
+  right: -4px;
+  top: -4px;
+  cursor: nesw-resize;
+}
+
+.resizer[data-direction="bottom-right"] {
+  right: -4px;
+  bottom: -4px;
+  cursor: nwse-resize;
+}
+
+.resizer[data-direction="bottom-left"] {
+  left: -4px;
+  bottom: -4px;
+  cursor: nesw-resize;
+}
+
+.instance-block {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
   user-select: none;
 }
 
 .instance-block p {
-  margin: 0;
-  user-select: text;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }

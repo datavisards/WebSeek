@@ -2,8 +2,8 @@ import React, { useState, useRef } from 'react';
 import './instanceview.css';
 
 type Instance =
-  | { id: string; type: 'text'; content: string; x: number; y: number }
-  | { id: string; type: 'image'; src: string; x: number; y: number };
+  | { id: string; type: 'text'; content: string; x: number; y: number; width: number; height: number }
+  | { id: string; type: 'image'; src: string; x: number; y: number; width: number; height: number };
 
 interface InstanceViewProps {
   onOperation: (message: string) => void;
@@ -18,6 +18,19 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggingInstanceId, setDraggingInstanceId] = useState<string | null>(null);
   const dragStartPos = useRef<{ mouseX: number; mouseY: number; instanceX: number; instanceY: number; offsetX: number; offsetY: number } | null>(null);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeDirection, setResizeDirection] = useState<string | null>(null);
+  const resizerStart = useRef<{
+    mouseX: number;
+    mouseY: number;
+    instanceWidth: number;
+    instanceHeight: number;
+    instanceX: number;
+    instanceY: number;
+    initialCanvasX: number;
+    initialCanvasY: number;
+  } | null>(null);
 
   const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
 
@@ -45,7 +58,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
           reader.onload = (e) => {
             const result = e.target?.result;
             if (result) {
-              setInstances(prev => [...prev, { id: generateId(), type: 'image', src: result as string, x, y }]);
+              setInstances(prev => [...prev, { id: generateId(), type: 'image', src: result as string, x, y, width: 100, height: 100 }]);
             }
           };
           reader.readAsDataURL(file);
@@ -58,7 +71,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       const text = event.dataTransfer.getData('text/plain');
       if (text) {
         onOperation(`Text added: "${text}"`);
-        setInstances(prev => [...prev, { id: generateId(), type: 'text', content: text, x, y }]);
+        setInstances(prev => [...prev, { id: generateId(), type: 'text', content: text, x, y, width: 100, height: 20 }]);
       }
     }
   };
@@ -79,7 +92,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
           reader.onload = (e) => {
             const result = e.target?.result;
             if (result) {
-              setInstances(prev => [...prev, { id: generateId(), type: 'image', src: result as string, x: pasteX, y: pasteY }]);
+              setInstances(prev => [...prev, { id: generateId(), type: 'image', src: result as string, x: pasteX, y: pasteY, width: 100, height: 100 }]);
             }
           };
           reader.readAsDataURL(file);
@@ -87,7 +100,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       } else if (item.type === 'text/plain') {
         item.getAsString((text) => {
           onOperation(`Text added: "${text}"`);
-          setInstances(prev => [...prev, { id: generateId(), type: 'text', content: text, x: pasteX, y: pasteY }]);
+          setInstances(prev => [...prev, { id: generateId(), type: 'text', content: text, x: pasteX, y: pasteY, width: 100, height: 20 }]);
         });
       }
     }
@@ -103,21 +116,17 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     const containerRect = containerRef.current?.getBoundingClientRect();
     if (!containerRect) return;
 
-    // Step 1: Get mouse position relative to the container
     const mouseX = event.clientX - containerRect.left;
     const mouseY = event.clientY - containerRect.top;
 
-    // Step 2: Convert mouse position to canvas coordinates (current zoom + pan)
     const canvasX = (mouseX - pan.x) / zoom;
     const canvasY = (mouseY - pan.y) / zoom;
 
-    // Step 3: Compute new zoom level
     const zoomFactor = 1.1;
     const newZoom = event.deltaY < 0
       ? Math.min(5, zoom * zoomFactor)
       : Math.max(0.2, zoom / zoomFactor);
 
-    // Step 4: Compute new pan to keep the canvas position fixed
     const newPanX = mouseX - canvasX * newZoom;
     const newPanY = mouseY - canvasY * newZoom;
 
@@ -126,7 +135,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   };
 
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return; // left button only
+    if (event.button !== 0) return;
 
     const isOnInstance = instances.some(instance => {
       const element = document.getElementById(`instance-${instance.id}`);
@@ -134,6 +143,8 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     });
 
     if (!isOnInstance) {
+      setIsResizing(false);
+      setSelectedInstanceId(null);
       setIsPanning(true);
       panStart.current = {
         x: event.clientX,
@@ -146,23 +157,116 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
     if (isPanning && panStart.current) {
       const { x: startX, y: startY, initialPan } = panStart.current;
-
-      // Add a sensitivity factor (e.g., 0.5 for slower panning)
       const sensitivity = 0.5;
-
       const dx = (event.clientX - startX) * sensitivity / zoom;
       const dy = (event.clientY - startY) * sensitivity / zoom;
-
       setPan({
         x: initialPan.x + dx,
         y: initialPan.y + dy,
       });
+    }
+
+    if (isResizing && resizeDirection && selectedInstanceId) {
+      const instance = instances.find(inst => inst.id === selectedInstanceId);
+      if (!instance || !resizerStart.current) return;
+
+      const { x: currentCanvasX, y: currentCanvasY } = screenToCanvas(event.clientX, event.clientY);
+      const { instanceWidth, instanceHeight, instanceX, instanceY, initialCanvasX, initialCanvasY } = resizerStart.current;
+
+      const deltaX = currentCanvasX - initialCanvasX;
+      const deltaY = currentCanvasY - initialCanvasY;
+
+      let newWidth = instanceWidth;
+      let newHeight = instanceHeight;
+      let newX = instanceX;
+      let newY = instanceY;
+
+      switch (resizeDirection) {
+        case 'top-left':
+          newX = instanceX + deltaX;
+          newY = instanceY + deltaY;
+          newWidth = instanceWidth - deltaX;
+          newHeight = instanceHeight - deltaY;
+          break;
+        case 'top-right':
+          newY = instanceY + deltaY;
+          newWidth = instanceWidth + deltaX;
+          newHeight = instanceHeight - deltaY;
+          break;
+        case 'bottom-right':
+          newWidth = instanceWidth + deltaX;
+          newHeight = instanceHeight + deltaY;
+          break;
+        case 'bottom-left':
+          newX = instanceX + deltaX;
+          newWidth = instanceWidth - deltaX;
+          newHeight = instanceHeight + deltaY;
+          break;
+      }
+
+      newWidth = Math.max(10, newWidth);
+      newHeight = Math.max(10, newHeight);
+
+      setInstances(prev =>
+        prev.map(inst => {
+          if (inst.id === selectedInstanceId) {
+            return {
+              ...inst,
+              x: newX,
+              y: newY,
+              width: newWidth,
+              height: newHeight,
+            };
+          }
+          return inst;
+        }),
+      );
+    }
+
+    if (!isResizing && draggingInstanceId && dragStartPos.current) {
+      const { x: currentCanvasX, y: currentCanvasY } = screenToCanvas(
+        event.clientX,
+        event.clientY
+      );
+      const { offsetX, offsetY } = dragStartPos.current;
+
+      setInstances(prev =>
+        prev.map(inst => {
+          if (inst.id === draggingInstanceId) {
+            return {
+              ...inst,
+              x: currentCanvasX - offsetX,
+              y: currentCanvasY - offsetY,
+            };
+          }
+          return inst;
+        }),
+      );
     }
   };
 
   const handleMouseUp = () => {
     setIsPanning(false);
     panStart.current = null;
+    if (isResizing) {
+      setIsResizing(false);
+      setResizeDirection(null);
+      resizerStart.current = null;
+    }
+    setDraggingInstanceId(null);
+    dragStartPos.current = null;
+  };
+
+  const handleCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const isOnInstance = instances.some(instance => {
+      const element = document.getElementById(`instance-${instance.id}`);
+      return element && element.contains(event.target as Node);
+    });
+
+    if (!isOnInstance) {
+      setIsResizing(false);
+      setSelectedInstanceId(null);
+    }
   };
 
   const handleInstanceMouseDown = (
@@ -172,6 +276,9 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     event.stopPropagation();
     if (event.button !== 0) return;
 
+    if (isResizing) return;
+
+    setSelectedInstanceId(id);
     const instance = instances.find(inst => inst.id === id);
     if (!instance) return;
 
@@ -187,34 +294,26 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     };
   };
 
-  const handleInstanceMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!draggingInstanceId || !dragStartPos.current) return;
+  const handleResizerMouseDown = (direction: string, instanceId: string) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const instance = instances.find(inst => inst.id === instanceId);
+    if (!instance) return;
 
-    event.preventDefault();
+    const { x: initialCanvasX, y: initialCanvasY } = screenToCanvas(e.clientX, e.clientY);
+    resizerStart.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      instanceWidth: instance.width,
+      instanceHeight: instance.height,
+      instanceX: instance.x,
+      instanceY: instance.y,
+      initialCanvasX,
+      initialCanvasY,
+    };
 
-    const { x: currentCanvasX, y: currentCanvasY } = screenToCanvas(
-      event.clientX,
-      event.clientY
-    );
-    const { offsetX, offsetY } = dragStartPos.current;
-
-    setInstances(prev =>
-      prev.map(inst => {
-        if (inst.id === draggingInstanceId) {
-          return {
-            ...inst,
-            x: currentCanvasX - offsetX,
-            y: currentCanvasY - offsetY,
-          };
-        }
-        return inst;
-      }),
-    );
-  };
-
-  const handleInstanceMouseUp = () => {
-    setDraggingInstanceId(null);
-    dragStartPos.current = null;
+    setSelectedInstanceId(instanceId);
+    setIsResizing(true);
+    setResizeDirection(direction);
   };
 
   return (
@@ -226,18 +325,9 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       tabIndex={0}
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
-      onMouseMove={event => {
-        handleMouseMove(event);
-        handleInstanceMouseMove(event);
-      }}
-      onMouseUp={() => {
-        handleMouseUp();
-        handleInstanceMouseUp();
-      }}
-      onMouseLeave={() => {
-        handleMouseUp();
-        handleInstanceMouseUp();
-      }}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
       ref={containerRef}
       style={{ overflow: 'hidden', userSelect: isPanning || draggingInstanceId ? 'none' : 'auto' }}
     >
@@ -246,13 +336,14 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         className="view-content"
         style={{
           position: 'relative',
-          width: 800, // Fixed width for canvas
-          height: 400, // Fixed height for canvas
+          width: 800,
+          height: 400,
           border: '1px solid #ccc',
           overflow: 'hidden',
           cursor: isPanning ? 'grabbing' : 'grab',
           backgroundColor: '#fafafa',
         }}
+        onClick={handleCanvasClick}
       >
         <div
           style={{
@@ -274,8 +365,10 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                 position: 'absolute',
                 left: Number.isFinite(instance.x) ? instance.x : 0,
                 top: Number.isFinite(instance.y) ? instance.y : 0,
+                width: instance.width,
+                height: instance.height,
                 cursor: draggingInstanceId === instance.id ? 'grabbing' : 'grab',
-                userSelect: 'text',
+                userSelect: 'none',
                 maxWidth: '200px',
                 wordBreak: 'break-word',
                 background: 'white',
@@ -287,20 +380,45 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
               onMouseDown={e => handleInstanceMouseDown(e, instance.id)}
             >
               {instance.type === 'text' ? (
-                <p style={{ margin: 0, userSelect: 'none' }}>{instance.content}</p>
+                <p style={{ margin: 0, userSelect: 'none' }}>
+                  {instance.content}
+                </p>
               ) : (
                 <img
                   src={instance.src}
                   alt="instance"
                   className="instance-image"
                   style={{
-                    maxWidth: '200px',
-                    maxHeight: '150px',
+                    maxWidth: '100%',
+                    maxHeight: '100%',
                     display: 'block',
                     pointerEvents: 'none',
-                    userSelect: 'none',
                   }}
                 />
+              )}
+              {selectedInstanceId === instance.id && (
+                <>
+                  <div
+                    className="resizer"
+                    data-direction="top-left"
+                    onMouseDown={handleResizerMouseDown('top-left', instance.id)}
+                  />
+                  <div
+                    className="resizer"
+                    data-direction="top-right"
+                    onMouseDown={handleResizerMouseDown('top-right', instance.id)}
+                  />
+                  <div
+                    className="resizer"
+                    data-direction="bottom-right"
+                    onMouseDown={handleResizerMouseDown('bottom-right', instance.id)}
+                  />
+                  <div
+                    className="resizer"
+                    data-direction="bottom-left"
+                    onMouseDown={handleResizerMouseDown('bottom-left', instance.id)}
+                  />
+                </>
               )}
             </div>
           ))}
