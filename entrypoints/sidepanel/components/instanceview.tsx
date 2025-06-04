@@ -1,9 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './instanceview.css';
 
+type EmbeddedInstance =
+  | { type: 'text'; content: string; }
+  | { type: 'image'; src: string; };
+
+type SketchItem =
+  | { type: 'stroke'; id: string; points: Array<{ x: number, y: number }>; color: string; width: number; }
+  | { type: 'instance'; id: string; instance: EmbeddedInstance; x: number; y: number; width: number; height: number; };
+
 type Instance =
   | { id: string; type: 'text'; content: string; x: number; y: number; width: number; height: number }
-  | { id: string; type: 'image'; src: string; x: number; y: number; width: number; height: number };
+  | { id: string; type: 'image'; src: string; x: number; y: number; width: number; height: number }
+  | { id: string; type: 'sketch'; x: number; y: number; width: number; height: number; content: SketchItem[]; thumbnail: string };
 
 interface InstanceViewProps {
   onOperation: (message: string) => void;
@@ -32,6 +41,14 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     initialCanvasY: number;
   } | null>(null);
 
+  // Sketch editor state
+  const [editingSketchId, setEditingSketchId] = useState<string | null>(null);
+  const [sketchColor, setSketchColor] = useState('#000000');
+  const [sketchWidth, setSketchWidth] = useState(3);
+  const [currentStroke, setCurrentStroke] = useState<{ id: string, points: Array<{ x: number, y: number }> } | null>(null);
+  const sketchCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [availableInstances, setAvailableInstances] = useState<Instance[]>([]);
+
   const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
 
   const screenToCanvas = (screenX: number, screenY: number) => {
@@ -49,7 +66,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
-      
+
       const containerRect = container.getBoundingClientRect();
       const mouseX = e.clientX - containerRect.left;
       const mouseY = e.clientY - containerRect.top;
@@ -168,7 +185,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
     if (event.touches.length !== 1) return;
-    
+
     const touch = event.touches[0];
     const isOnInstance = instances.some(instance => {
       const element = document.getElementById(`instance-${instance.id}`);
@@ -281,7 +298,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
     if (event.touches.length !== 1) return;
     const touch = event.touches[0];
-    
+
     if (isPanning && panStart.current) {
       const { x: startX, y: startY, initialPan } = panStart.current;
       const sensitivity = 0.5;
@@ -373,9 +390,189 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     setResizeDirection(direction);
   };
 
+  // Sketch creation and editing functions
+  const handleCreateSketch = () => {
+    const newSketch: Instance = {
+      id: generateId(),
+      type: 'sketch',
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300,
+      content: [],
+      thumbnail: ''
+    };
+    setInstances(prev => [...prev, newSketch]);
+    setAvailableInstances(prev => [...prev]);
+    setEditingSketchId(newSketch.id);
+  };
+
+  const handleAddToSketch = (instance: Instance) => {
+    if (!editingSketchId) return;
+
+    let embedded: EmbeddedInstance | null = null;
+
+    if (instance.type === 'text') {
+      embedded = { type: 'text', content: instance.content };
+    } else if (instance.type === 'image') {
+      embedded = { type: 'image', src: instance.src };
+    }
+
+    if (embedded) {
+      setInstances(prev => prev.map(inst => {
+        if (inst.id === editingSketchId && inst.type === 'sketch') {
+          const newItem: SketchItem = {
+            type: 'instance',
+            id: generateId(),
+            instance: embedded!,
+            x: 50,
+            y: 50,
+            width: instance.width,
+            height: instance.height
+          };
+          return { ...inst, content: [...inst.content, newItem] };
+        }
+        return inst;
+      }));
+      onOperation(`Added ${instance.type} to sketch`);
+    }
+  };
+
+  const handleSaveSketch = () => {
+    if (!editingSketchId || !sketchCanvasRef.current) return;
+
+    const canvas = sketchCanvasRef.current;
+    const thumbnail = canvas.toDataURL('image/png');
+
+    setInstances(prev => prev.map(inst => {
+      if (inst.id === editingSketchId && inst.type === 'sketch') {
+        return { ...inst, thumbnail };
+      }
+      return inst;
+    }));
+
+    setEditingSketchId(null);
+    onOperation("Sketch created");
+  };
+
+  const handleCancelSketch = () => {
+    setInstances(prev => prev.filter(inst => inst.id !== editingSketchId)); // Remove empty sketch
+    setEditingSketchId(null);
+  };
+
+  // Sketch drawing functions
+  const startDrawing = (e: React.MouseEvent) => {
+    if (!editingSketchId) return;
+
+    const rect = sketchCanvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const newStroke = {
+      id: generateId(),
+      points: [{ x, y }]
+    };
+
+    setCurrentStroke(newStroke);
+  };
+
+  const draw = (e: React.MouseEvent) => {
+    if (!currentStroke || !editingSketchId || !sketchCanvasRef.current) return;
+
+    const rect = sketchCanvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    setCurrentStroke(prev => ({
+      ...prev!,
+      points: [...prev!.points, { x, y }]
+    }));
+  };
+
+  const endDrawing = () => {
+    if (!currentStroke || !editingSketchId) return;
+
+    setInstances(prev => prev.map(inst => {
+      if (inst.id === editingSketchId && inst.type === 'sketch') {
+        const newItem: SketchItem = {
+          type: 'stroke',
+          id: currentStroke.id,
+          points: currentStroke.points,
+          color: sketchColor,
+          width: sketchWidth
+        };
+        return { ...inst, content: [...inst.content, newItem] };
+      }
+      return inst;
+    }));
+
+    setCurrentStroke(null);
+  };
+
+  // Render sketch to canvas
+  useEffect(() => {
+    if (!editingSketchId || !sketchCanvasRef.current) return;
+
+    const sketch = instances.find(inst =>
+      inst.id === editingSketchId && inst.type === 'sketch'
+    ) as typeof instances[0] & { type: 'sketch' } | undefined;
+
+    if (!sketch) return;
+
+    const canvas = sketchCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw all sketch items
+    sketch.content.forEach(item => {
+      if (item.type === 'stroke') {
+        ctx.beginPath();
+        ctx.strokeStyle = item.color;
+        ctx.lineWidth = item.width;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        item.points.forEach((point, i) => {
+          if (i === 0) {
+            ctx.moveTo(point.x, point.y);
+          } else {
+            ctx.lineTo(point.x, point.y);
+          }
+        });
+
+        ctx.stroke();
+      }
+      // Instances are drawn in the editor UI separately
+    });
+
+    // Draw current stroke in progress
+    if (currentStroke) {
+      ctx.beginPath();
+      ctx.strokeStyle = sketchColor;
+      ctx.lineWidth = sketchWidth;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      currentStroke.points.forEach((point, i) => {
+        if (i === 0) {
+          ctx.moveTo(point.x, point.y);
+        } else {
+          ctx.lineTo(point.x, point.y);
+        }
+      });
+
+      ctx.stroke();
+    }
+  }, [editingSketchId, instances, currentStroke, sketchColor, sketchWidth]);
+
   return (
     <div
-      className="view-container"
+      className="view-container instance-view"
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onPaste={handlePaste}
@@ -390,100 +587,238 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       ref={containerRef}
       style={{ overflow: 'hidden', userSelect: isPanning || draggingInstanceId ? 'none' : 'auto' }}
     >
-      <h3 className="view-title">Instances</h3>
-      <div
-        className="view-content"
-        style={{
-          position: 'relative',
-          width: 800,
-          height: 400,
-          border: '1px solid #ccc',
-          overflow: 'hidden',
-          cursor: isPanning ? 'grabbing' : 'grab',
-          backgroundColor: '#fafafa',
-          touchAction: 'none', // Important for touch events
-        }}
-        onClick={handleCanvasClick}
-      >
-        <div
-          style={{
-            width: '100%',
-            height: '100%',
-            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-            transformOrigin: '0 0',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-          }}
-        >
-          {instances.map(instance => (
-            <div
-              key={instance.id}
-              id={`instance-${instance.id}`}
-              className="instance-block"
-              style={{
-                position: 'absolute',
-                left: Number.isFinite(instance.x) ? instance.x : 0,
-                top: Number.isFinite(instance.y) ? instance.y : 0,
-                width: instance.width,
-                height: instance.height,
-                cursor: draggingInstanceId === instance.id ? 'grabbing' : 'grab',
-                userSelect: 'none',
-                maxWidth: '200px',
-                wordBreak: 'break-word',
-                background: 'white',
-                padding: '4px',
-                borderRadius: '4px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                zIndex: draggingInstanceId === instance.id ? 1000 : 'auto',
-              }}
-              onMouseDown={e => handleInstanceMouseDown(e, instance.id)}
-            >
-              {instance.type === 'text' ? (
-                <p style={{ margin: 0, userSelect: 'none' }}>
-                  {instance.content}
-                </p>
-              ) : (
-                <img
-                  src={instance.src}
-                  alt="instance"
-                  className="instance-image"
+      {editingSketchId ? (
+        <div className="sketch-editor">
+          <div className="sketch-tools">
+            <label>
+              Color:
+              <input
+                type="color"
+                value={sketchColor}
+                onChange={e => setSketchColor(e.target.value)}
+              />
+            </label>
+            <label>
+              Brush Size:
+              <input
+                type="range"
+                min="1"
+                max="20"
+                value={sketchWidth}
+                onChange={e => setSketchWidth(parseInt(e.target.value))}
+              />
+              {sketchWidth}px
+            </label>
+            <button onClick={handleSaveSketch} className="sketch-button">Save Sketch</button>
+            <button onClick={handleCancelSketch} className="sketch-button cancel">Cancel</button>
+          </div>
+
+          <div className="sketch-container">
+            <canvas
+              ref={sketchCanvasRef}
+              width={800}
+              height={500}
+              onMouseDown={startDrawing}
+              onMouseMove={draw}
+              onMouseUp={endDrawing}
+              onMouseLeave={endDrawing}
+              style={{ border: '1px solid #000', cursor: 'crosshair', backgroundColor: 'white' }}
+            />
+
+            {(instances.find(inst => inst.id === editingSketchId && inst.type === 'sketch') as Extract<Instance, { type: 'sketch' }> | undefined)
+              ?.content.filter((item): item is SketchItem & { type: 'instance' } => item.type === 'instance')
+              .map(item => (
+                <div
+                  key={item.id}
+                  className="embedded-instance"
                   style={{
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    display: 'block',
+                    position: 'absolute',
+                    left: item.x,
+                    top: item.y,
+                    width: item.width,
+                    height: item.height,
+                    border: '1px dashed #999',
                     pointerEvents: 'none',
                   }}
-                />
-              )}
-              {selectedInstanceId === instance.id && (
-                <>
+                >
+                  {item.instance.type === 'text' ? (
+                    <p style={{ margin: 0, fontSize: '12px' }}>{item.instance.content}</p>
+                  ) : (
+                    <img
+                      src={item.instance.src}
+                      alt="embedded"
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
+                  )}
+                </div>
+              ))
+            }
+          </div>
+
+          <div className="available-instances">
+            <h4 style={{ margin: 0 }}>Add to Sketch:</h4>
+            <div className="instance-thumbs">
+              {instances
+                .filter(inst => inst.id !== editingSketchId && inst.type !== 'sketch')
+                .map(instance => (
                   <div
-                    className="resizer"
-                    data-direction="top-left"
-                    onMouseDown={handleResizerMouseDown('top-left', instance.id)}
-                  />
-                  <div
-                    className="resizer"
-                    data-direction="top-right"
-                    onMouseDown={handleResizerMouseDown('top-right', instance.id)}
-                  />
-                  <div
-                    className="resizer"
-                    data-direction="bottom-right"
-                    onMouseDown={handleResizerMouseDown('bottom-right', instance.id)}
-                  />
-                  <div
-                    className="resizer"
-                    data-direction="bottom-left"
-                    onMouseDown={handleResizerMouseDown('bottom-left', instance.id)}
-                  />
-                </>
-              )}
+                    key={instance.id}
+                    className="instance-thumb"
+                    onClick={() => handleAddToSketch(instance)}
+                  >
+                    {instance.type === 'text' ? (
+                      <p className="thumb-text">{instance.content.slice(0, 20)}{instance.content.length > 20 ? '...' : ''}</p>
+                    ) : (
+                      <img
+                        src={(instance.type === 'image' ? instance.src : '')}
+                        alt="thumb"
+                        className="thumb-image"
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    )}
+                  </div>
+                ))
+              }
             </div>
-          ))}
+          </div>
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="view-title-container">
+            <h3 style={{ 'margin': 0 }}>Instances</h3>
+            <button onClick={handleCreateSketch}>
+              Create New Sketch
+            </button>
+          </div>
+          <div
+            className="view-content"
+            style={{
+              position: 'relative',
+              width: 800,
+              height: 400,
+              border: '1px solid #ccc',
+              overflow: 'hidden',
+              cursor: isPanning ? 'grabbing' : 'grab',
+              backgroundColor: '#fafafa',
+              touchAction: 'none',
+            }}
+            onClick={handleCanvasClick}
+          >
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transformOrigin: '0 0',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+              }}
+            >
+              {instances.map(instance => (
+                <div
+                  key={instance.id}
+                  id={`instance-${instance.id}`}
+                  className="instance-block"
+                  style={{
+                    position: 'absolute',
+                    left: Number.isFinite(instance.x) ? instance.x : 0,
+                    top: Number.isFinite(instance.y) ? instance.y : 0,
+                    width: instance.width,
+                    height: instance.height,
+                    cursor: draggingInstanceId === instance.id ? 'grabbing' : 'grab',
+                    userSelect: 'none',
+                    maxWidth: '200px',
+                    wordBreak: 'break-word',
+                    background: 'white',
+                    padding: '4px',
+                    borderRadius: '4px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                    zIndex: draggingInstanceId === instance.id ? 1000 : 'auto',
+                  }}
+                  onMouseDown={e => handleInstanceMouseDown(e, instance.id)}
+                  onDoubleClick={() => {
+                    if (instance.type === 'sketch') {
+                      setEditingSketchId(instance.id);
+                      setAvailableInstances(instances.filter(i => i.id !== instance.id));
+                    }
+                  }}
+                >
+                  {instance.type === 'text' ? (
+                    <p style={{ margin: 0, userSelect: 'none' }}>
+                      {instance.content}
+                    </p>
+                  ) : instance.type === 'image' ? (
+                    <img
+                      src={(instance.type === 'image' ? instance.src : '')}
+                      alt="instance"
+                      className="instance-image"
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        display: 'block',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                  ) : (
+                    <div className="sketch-thumbnail">
+                      {instance.thumbnail ? (
+                        <img
+                          src={instance.thumbnail}
+                          alt="sketch"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'contain'
+                          }}
+                          draggable={false}
+                        />
+                      ) : (
+                        <div style={{
+                          width: '100%',
+                          height: '100%',
+                          background: '#eee',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px',
+                          color: '#666'
+                        }}>
+                          <span>Empty Sketch</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {selectedInstanceId === instance.id && (
+                    <>
+                      <div
+                        className="resizer"
+                        data-direction="top-left"
+                        onMouseDown={handleResizerMouseDown('top-left', instance.id)}
+                      />
+                      <div
+                        className="resizer"
+                        data-direction="top-right"
+                        onMouseDown={handleResizerMouseDown('top-right', instance.id)}
+                      />
+                      <div
+                        className="resizer"
+                        data-direction="bottom-right"
+                        onMouseDown={handleResizerMouseDown('bottom-right', instance.id)}
+                      />
+                      <div
+                        className="resizer"
+                        data-direction="bottom-left"
+                        onMouseDown={handleResizerMouseDown('bottom-left', instance.id)}
+                      />
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };

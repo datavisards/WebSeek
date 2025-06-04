@@ -6,8 +6,8 @@ interface OperationViewProps {
 }
 
 const OperationView = ({ logs }: OperationViewProps) => (
-  <div className="view-container">
-    <h3 className="view-title">Operations</h3>
+  <div className="view-container operation-view">
+    <h3 className="view-title-container">Operations</h3>
     <div className="view-content">
       {logs.length > 0 ? (
         logs.map((log, index) => (

@@ -1,43 +1,42 @@
+#root {
+  position: relative;
+  height: calc(100vh - 20px);
+}
+
 .side-panel {
   display: flex;
   flex-direction: column;
+  height: 100%; /* fill parent's height */
   padding: 5px;
-  height: calc(100% - 10px); /* Ensure the side panel takes full height */
-  gap: 16px; /* Space between views */
+  gap: 16px;
 }
 
 .view-container {
-  border: 0.15px solid #ccc;
   display: flex;
   flex-direction: column;
-  height: 100%; /* Make sure the container takes full height */
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); /* Optional: add shadow for better visibility */
+  flex: 6; /* equal height for all view-containers */
+  border: 0.15px solid #ccc;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   border-radius: 10px;
+  overflow: hidden; /* prevent content overflow */
 }
 
 .operation-view {
-  flex: 3; /* 3 parts */
+  flex: 4;
 }
 
-.instance-view {
-  flex: 7; /* 7 parts */
-}
-
-.view-title {
+.view-title-container {
+  padding: 12px;
   margin: 0;
-  padding: 12px; /* Add padding for title */
-  background-color: #f5f5f5; /* Optional: background for title */
+  background-color: #f5f5f5;
   border-top-left-radius: 10px;
   border-top-right-radius: 10px;
+  display: flex;
+  align-items: center;
 }
 
 .view-content {
-  flex-grow: 1; /* Allow it to grow and fill the space */
-  padding: 12px; /* Add padding for content */
-  overflow: auto; /* Allow scrolling if content overflows */
-}
-
-#root {
-    position: relative; 
-    height: calc(100vh - 16px); /* Full height for the root element */
+  flex-grow: 1; /* fill remaining space */
+  padding: 12px;
+  overflow-y: auto; /* vertical scroll */
 }
