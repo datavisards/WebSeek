@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "My Side Panel Extension",
+  "version": "1.0",
+  "permissions": ["storage"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "side_panel": {
+    "default_path": "side-panel.html"
+  }
+}
