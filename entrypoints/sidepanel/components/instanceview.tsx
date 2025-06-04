@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import './instanceview.css';
 
 type Instance =
@@ -14,7 +14,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
-  const panStart = useRef<{ x: number; y: number; initialPan: { x: number; y: number; }; } | null>(null);
+  const panStart = useRef<{ x: number; y: number; initialPan: { x: number; y: number } } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggingInstanceId, setDraggingInstanceId] = useState<string | null>(null);
   const dragStartPos = useRef<{ mouseX: number; mouseY: number; instanceX: number; instanceY: number; offsetX: number; offsetY: number } | null>(null);
@@ -41,6 +41,40 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     const y = (screenY - rect.top - pan.y) / zoom;
     return { x, y };
   };
+
+  // Handle wheel events with proper passive listeners
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      
+      const containerRect = container.getBoundingClientRect();
+      const mouseX = e.clientX - containerRect.left;
+      const mouseY = e.clientY - containerRect.top;
+
+      const canvasX = (mouseX - pan.x) / zoom;
+      const canvasY = (mouseY - pan.y) / zoom;
+
+      const zoomFactor = 1.1;
+      const newZoom = e.deltaY < 0
+        ? Math.min(5, zoom * zoomFactor)
+        : Math.max(0.2, zoom / zoomFactor);
+
+      const newPanX = mouseX - canvasX * newZoom;
+      const newPanY = mouseY - canvasY * newZoom;
+
+      setZoom(newZoom);
+      setPan({ x: newPanX, y: newPanY });
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [zoom, pan]);
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -77,6 +111,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   };
 
   const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    event.preventDefault();
     const rect = containerRef.current?.getBoundingClientRect();
     const pasteX = rect ? (rect.width / 2 - pan.x) / zoom : 0;
     const pasteY = rect ? (rect.height / 2 - pan.y) / zoom : 0;
@@ -108,30 +143,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-  };
-
-  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
-
-    const containerRect = containerRef.current?.getBoundingClientRect();
-    if (!containerRect) return;
-
-    const mouseX = event.clientX - containerRect.left;
-    const mouseY = event.clientY - containerRect.top;
-
-    const canvasX = (mouseX - pan.x) / zoom;
-    const canvasY = (mouseY - pan.y) / zoom;
-
-    const zoomFactor = 1.1;
-    const newZoom = event.deltaY < 0
-      ? Math.min(5, zoom * zoomFactor)
-      : Math.max(0.2, zoom / zoomFactor);
-
-    const newPanX = mouseX - canvasX * newZoom;
-    const newPanY = mouseY - canvasY * newZoom;
-
-    setZoom(newZoom);
-    setPan({ x: newPanX, y: newPanY });
+    event.dataTransfer.dropEffect = 'copy';
   };
 
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -149,6 +161,27 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       panStart.current = {
         x: event.clientX,
         y: event.clientY,
+        initialPan: { x: pan.x, y: pan.y },
+      };
+    }
+  };
+
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 1) return;
+    
+    const touch = event.touches[0];
+    const isOnInstance = instances.some(instance => {
+      const element = document.getElementById(`instance-${instance.id}`);
+      return element && element.contains(touch.target as Node);
+    });
+
+    if (!isOnInstance) {
+      setIsResizing(false);
+      setSelectedInstanceId(null);
+      setIsPanning(true);
+      panStart.current = {
+        x: touch.clientX,
+        y: touch.clientY,
         initialPan: { x: pan.x, y: pan.y },
       };
     }
@@ -245,6 +278,23 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     }
   };
 
+  const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    
+    if (isPanning && panStart.current) {
+      const { x: startX, y: startY, initialPan } = panStart.current;
+      const sensitivity = 0.5;
+      const dx = (touch.clientX - startX) * sensitivity / zoom;
+      const dy = (touch.clientY - startY) * sensitivity / zoom;
+      setPan({
+        x: initialPan.x + dx,
+        y: initialPan.y + dy,
+      });
+    }
+    event.preventDefault();
+  };
+
   const handleMouseUp = () => {
     setIsPanning(false);
     panStart.current = null;
@@ -253,6 +303,13 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       setResizeDirection(null);
       resizerStart.current = null;
     }
+    setDraggingInstanceId(null);
+    dragStartPos.current = null;
+  };
+
+  const handleTouchEnd = () => {
+    setIsPanning(false);
+    panStart.current = null;
     setDraggingInstanceId(null);
     dragStartPos.current = null;
   };
@@ -323,11 +380,13 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       onDragOver={handleDragOver}
       onPaste={handlePaste}
       tabIndex={0}
-      onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       ref={containerRef}
       style={{ overflow: 'hidden', userSelect: isPanning || draggingInstanceId ? 'none' : 'auto' }}
     >
@@ -342,6 +401,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
           overflow: 'hidden',
           cursor: isPanning ? 'grabbing' : 'grab',
           backgroundColor: '#fafafa',
+          touchAction: 'none', // Important for touch events
         }}
         onClick={handleCanvasClick}
       >
