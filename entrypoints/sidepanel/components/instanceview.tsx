@@ -1,6 +1,6 @@
 import { browser, type Browser } from 'wxt/browser';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './instanceview.css';
 
 // Define types for embedded instances and sketch items
@@ -64,6 +64,10 @@ interface InstanceViewProps {
 
 const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const [instances, setInstances] = useState<Instance[]>([]);
+  const instancesRef = useRef<Instance[]>([]); // Update the latest instances (For callback)
+  useEffect(() => {
+    instancesRef.current = instances;
+  }, [instances]);
   // Counters for different instance types
   const [textCount, setTextCount] = useState(0);
   const [imageCount, setImageCount] = useState(0);
@@ -90,6 +94,10 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(
     null
   );
+  const selectedInstanceIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedInstanceIdRef.current = selectedInstanceId;
+  }, [selectedInstanceId]);
   // Resizing state
   const [isResizing, setIsResizing] = useState(false);
   const [resizeDirection, setResizeDirection] = useState<string | null>(null);
@@ -123,6 +131,12 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   } | null>(null);
   const [currentMode, setCurrentMode] = useState<'draw' | 'move'>('draw'); // Mode for sketching or moving instances during creation of sketches
   const bgPort = useRef<Browser.runtime.Port | null>(null);
+  const [deletedInstances, setDeletedInstances] = useState<Instance[]>([]);
+  const deletedInstancesRef = useRef<Instance[]>([]);
+  useEffect(() => {
+    deletedInstancesRef.current = deletedInstances;
+  }, [deletedInstances]);
+  const [showTrash, setShowTrash] = useState(false);
 
   // Helper function to generate unique IDs
   const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
@@ -905,7 +919,6 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     return () => port.disconnect();
   }, []);
 
-
   const handleElementSelected = (message: any) => {
     const rect = containerRef.current?.getBoundingClientRect();
     const x = rect ? rect.width / 2 : 0;
@@ -949,6 +962,30 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     setIsCaptureEnabled(true);
   };
 
+  // Delete selected instance
+  const deleteSelectedInstance = useCallback(() => {
+    const instanceId = selectedInstanceIdRef.current;
+    if (!instanceId) return;
+
+    const instanceToDelete = instancesRef.current.find(inst => inst.id === instanceId);
+    if (!instanceToDelete) return;
+
+    // Set all state updates together
+    setInstances(prev => prev.filter(inst => inst.id !== instanceId));
+    setDeletedInstances(prev => [...prev, instanceToDelete]);
+    setSelectedInstanceId(null);
+  }, []);
+
+  // Restore an instance from trash
+  const restoreInstance = useCallback((instanceId: string) => {
+    const instanceToRestore = deletedInstancesRef.current.find(inst => inst.id === instanceId);
+    if (!instanceToRestore) return;
+
+    // Update states
+    setDeletedInstances(prev => prev.filter(inst => inst.id !== instanceId));
+    setInstances(prev => [...prev, instanceToRestore]);
+  }, []);
+
   const handleCaptureElement = () => {
     // send message via the background port
     if (bgPort.current) {
@@ -961,7 +998,9 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   // Add keyboard escape handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      console.log("Key pressed:", e.key);
       if (e.key === 'Escape') {
+        e.preventDefault();
         if (!isCaptureEnabled && bgPort.current) {
           bgPort.current.postMessage({ action: 'exit_selection' });
         }
@@ -969,6 +1008,9 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         setDraggingInstanceId(null);
         setDraggingEmbeddedId(null);
         setIsCaptureEnabled(true);
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteSelectedInstance();
       }
     };
 
@@ -1029,6 +1071,18 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       ref={containerRef}
       style={{ overflow: 'hidden', userSelect: isPanning || draggingInstanceId ? 'none' : 'auto' }}
     >
+      {/* TRASH BUTTON - NEW FEATURE */}
+      {!editingSketchId && !showTrash && (
+        <div className="trash-icon" onClick={() => setShowTrash(true)}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+            <path d="M3 6v18h18v-18h-18zm5 14c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm4-18h-8v-2h-2v2h-8v2h18v-2z" />
+          </svg>
+          {deletedInstances.length > 0 && (
+            <span className="trash-count">{deletedInstances.length}</span>
+          )}
+        </div>
+      )}
+
       {editingSketchId ? (
         <div className="sketch-editor">
           <div className="sketch-tools">
@@ -1136,6 +1190,54 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                   </div>
                 ))}
             </div>
+          </div>
+        </div>
+      ) : showTrash ? ( // TRASH VIEW - NEW FEATURE
+        <div className="trash-view">
+          <div className="trash-header">
+            <h3>Trash Bin ({deletedInstances.length})</h3>
+            <button onClick={() => setShowTrash(false)}>Back to Instances</button>
+          </div>
+
+          <div className="trash-content">
+            {deletedInstances.length === 0 ? (
+              <p className="empty-trash">Trash is empty</p>
+            ) : (
+              <div className="trash-list">
+                {deletedInstances.map(instance => (
+                  <div key={instance.id} className="trash-item">
+                    <div className="trash-preview">
+                      {instance.type === 'text' ? (
+                        <p>{instance.content}</p>
+                      ) : instance.type === 'image' ? (
+                        <img
+                          src={instance.src}
+                          alt="deleted"
+                          style={{ maxWidth: '100px', maxHeight: '100px' }}
+                        />
+                      ) : (
+                        <div className="sketch-preview">
+                          {instance.thumbnail ? (
+                            <img
+                              src={instance.thumbnail}
+                              alt="sketch preview"
+                              style={{ width: '100px', height: '80px' }}
+                            />
+                          ) : (
+                            <span>Sketch</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="trash-actions">
+                      <button onClick={() => restoreInstance(instance.id)}>
+                        Restore
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       ) : (

@@ -144,3 +144,140 @@ button[disabled] {
   0% { outline-color: #007bff; }
   100% { outline-color: transparent; }
 }
+
+/* TRASH ICON */
+.trash-icon {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 1001;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  transition: all 0.2s ease;
+}
+
+.trash-icon:hover {
+  transform: scale(1.1);
+  background: #ffebee;
+}
+
+.trash-icon svg {
+  fill: #757575;
+}
+
+.trash-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #f44336;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+/* TRASH VIEW */
+.trash-view {
+  padding: 15px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.trash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 15px;
+}
+
+.trash-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.empty-trash {
+  text-align: center;
+  color: #757575;
+  padding: 20px;
+}
+
+.trash-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 15px;
+}
+
+.trash-item {
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+.trash-preview {
+  padding: 10px;
+  text-align: center;
+  border-bottom: 1px solid #eee;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trash-preview p {
+  margin: 0;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.trash-preview img {
+  max-height: 100px;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.trash-actions {
+  padding: 10px;
+  background: #f9f9f9;
+}
+
+.trash-actions button {
+  width: 100%;
+  padding: 8px;
+  background: #4caf50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.trash-actions button:hover {
+  background: #388e3c;
+}
+
+.sketch-preview {
+  padding: 10px;
+  text-align: center;
+}
