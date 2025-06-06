@@ -133,3 +133,14 @@ button[disabled] {
 .sketch-button.active {
   background-color: #2a6496;
 }
+
+.instance-block.highlight {
+  outline: 2px solid #007bff !important;
+  outline-offset: 2px;
+  animation: highlight 1s ease-out;
+}
+
+@keyframes highlight {
+  0% { outline-color: #007bff; }
+  100% { outline-color: transparent; }
+}

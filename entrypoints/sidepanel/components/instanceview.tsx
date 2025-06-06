@@ -64,6 +64,10 @@ interface InstanceViewProps {
 
 const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const [instances, setInstances] = useState<Instance[]>([]);
+  // Counters for different instance types
+  const [textCount, setTextCount] = useState(0);
+  const [imageCount, setImageCount] = useState(0);
+  const [sketchCount, setSketchCount] = useState(0);
   const [isCaptureEnabled, setIsCaptureEnabled] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -118,6 +122,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     initialY: number;
   } | null>(null);
   const [currentMode, setCurrentMode] = useState<'draw' | 'move'>('draw'); // Mode for sketching or moving instances during creation of sketches
+  const bgPort = useRef<Browser.runtime.Port | null>(null);
 
   // Helper function to generate unique IDs
   const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
@@ -177,13 +182,16 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       if (item.kind === 'file' && item.type.startsWith('image/')) {
         const file = item.getAsFile();
         if (file) {
-          onOperation("Image added");
+          const newId = `Image${imageCount + 1}`;
+          setImageCount(prev => prev + 1);
+          onOperation(`Created [${newId}](#instance-${newId})`);
           const reader = new FileReader();
           reader.onload = (e) => {
             const result = e.target?.result;
             if (result) {
               setInstances(prev => [...prev, {
-                id: generateId(),
+                // id: generateId(),
+                id: newId,
                 type: 'image',
                 src: result as string,
                 x,
@@ -202,9 +210,11 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     if (!handled) {
       const text = event.dataTransfer.getData('text/plain');
       if (text) {
-        onOperation(`Text added: "${text}"`);
+        const newId = `Text${textCount + 1}`;
+        setTextCount(prev => prev + 1);
+        onOperation(`Created [${newId}](#instance-${newId})`);
         setInstances(prev => [...prev, {
-          id: generateId(),
+          id: newId,
           type: 'text',
           content: text,
           x,
@@ -229,13 +239,16 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       if (item.type.startsWith('image/')) {
         const file = item.getAsFile();
         if (file) {
-          onOperation("Image added");
+          const newId = `Image${imageCount + 1}`;
+          setImageCount(prev => prev + 1);
+          onOperation(`Created [${newId}](#instance-${newId})`);
           const reader = new FileReader();
           reader.onload = (e) => {
             const result = e.target?.result;
             if (result) {
               setInstances(prev => [...prev, {
-                id: generateId(),
+                // id: generateId(),
+                id: newId,
                 type: 'image',
                 src: result as string,
                 x: pasteX,
@@ -249,9 +262,11 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         }
       } else if (item.type === 'text/plain') {
         item.getAsString((text) => {
-          onOperation(`Text added: "${text}"`);
+          const newId = `Text${textCount + 1}`;
+          setTextCount(prev => prev + 1);
+          onOperation(`Created [${newId}](#instance-${newId})`);
           setInstances(prev => [...prev, {
-            id: generateId(),
+            id: newId,
             type: 'text',
             content: text,
             x: pasteX,
@@ -541,8 +556,10 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
 
   // Create a new sketch
   const handleCreateSketch = () => {
+    const newId = `Sketch${sketchCount + 1}`;
+    setSketchCount(prev => prev + 1);
     const newSketch: Instance = {
-      id: generateId(),
+      id: newId,
       type: 'sketch',
       x: 0,
       y: 0,
@@ -707,7 +724,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
 
     setCurrentStroke(null);
     setEditingSketchId(null);
-    onOperation("Sketch created");
+    onOperation(`Created [${sketch.id}](#instance-${sketch.id})`);
   };
 
   // Cancel sketch creation
@@ -862,8 +879,11 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   };
 
   useEffect(() => {
-    const messageHandler = (msg: any) => {
-      console.log("Received message from background:", msg);
+    let port = browser.runtime.connect({ name: 'side-panel' });
+    bgPort.current = port;
+    port.onMessage.addListener((msg) => {
+      console.log("UI received FROM BACKGROUND:", msg);
+      // Handle messages (msg.action, etc.)
       if (msg.action === 'element_selected') {
         handleElementSelected(msg);
       } else if (msg.action === 'selection_canceled') {
@@ -874,16 +894,11 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         setDraggingInstanceId(null);
         setDraggingEmbeddedId(null);
       }
-    };
+    });
 
-    // Listen for messages from the background script
-    browser.runtime.onMessage.addListener(messageHandler);
-
-    return () => {
-      // Cleanup listener on unmount
-      browser.runtime.onMessage.removeListener(messageHandler);
-    };
+    return () => port.disconnect();
   }, []);
+
 
   const handleElementSelected = (message: any) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -891,31 +906,37 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     const y = rect ? rect.height / 2 : 0;
 
     if (message.type === 'text') {
-      onOperation(`Text captured from page: "${message.data}"`);
+      const newId = `Text${textCount + 1}`;
+      setTextCount(prev => prev + 1);
+      onOperation(`Created [${newId}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`);
       setInstances(prev => [
         ...prev,
         {
-          id: generateId(),
+          id: newId,
           type: 'text',
           content: message.data,
-          x: x,
-          y: y,
+          x,
+          y,
           width: 100,
-          height: 20
+          height: 20,
+          sourcePageId: message.pageId,
         }
       ]);
     } else if (message.type === 'image') {
-      onOperation("Image captured from page");
+      const newId = `Image${imageCount + 1}`;
+      setImageCount(prev => prev + 1);
+      onOperation(`Created [${newId}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`);
       setInstances(prev => [
         ...prev,
         {
-          id: generateId(),
+          id: newId,
           type: 'image',
           src: message.data,
-          x: x,
-          y: y,
+          x,
+          y,
           width: 100,
-          height: 100
+          height: 100,
+          sourcePageId: message.pageId,
         }
       ]);
     }
@@ -923,25 +944,20 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   };
 
   const handleCaptureElement = () => {
-    console.log("Sending message to start element selection");
-
-    // Send message directly to the active tab
-    browser.tabs.query({ active: true, currentWindow: true })
-      .then((tabs) => {
-        if (tabs[0]?.id) {
-          browser.tabs.sendMessage(tabs[0].id, { action: 'start_element_selection' })
-            .then(() => { setIsCaptureEnabled(false); })
-            .catch((error) => console.error("Error sending message:", error));
-        }
-      });
+    // send message via the background port
+    if (bgPort.current) {
+      console.log("Sending message to start element selection", bgPort.current);
+      bgPort.current.postMessage({ action: 'start_element_selection' });
+      setIsCaptureEnabled(false);
+    }
   };
 
   // Add keyboard escape handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (!isCaptureEnabled) {
-          browser.runtime.sendMessage({ action: 'exit_selection' });
+        if (!isCaptureEnabled && bgPort.current) {
+          bgPort.current.postMessage({ action: 'exit_selection' });
         }
         setSelectedInstanceId(null);
         setDraggingInstanceId(null);
@@ -955,6 +971,40 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isCaptureEnabled]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (!hash.startsWith('#instance-')) return;
+
+      const instanceId = hash.replace('#instance-', '');
+      const instanceElement = document.getElementById(`instance-${instanceId}`);
+
+      if (instanceElement && containerRef.current) {
+        const rect = instanceElement.getBoundingClientRect();
+        const containerRect = containerRef.current.getBoundingClientRect();
+
+        // Calculate position relative to container
+        const offsetX = rect.left - containerRect.left;
+        const offsetY = rect.top - containerRect.top;
+
+        // Adjust pan to center the instance
+        setPan({
+          x: pan.x - offsetX / zoom + containerRect.width / 2 - rect.width / 2,
+          y: pan.y - offsetY / zoom + containerRect.height / 2 - rect.height / 2,
+        });
+
+        // Highlight the instance
+        instanceElement.classList.add('highlight');
+        setTimeout(() => {
+          instanceElement.classList.remove('highlight');
+        }, 2000);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [pan, zoom]);
 
   return (
     <div
