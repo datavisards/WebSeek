@@ -1188,10 +1188,10 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                     maxWidth: '200px',
                     wordBreak: 'break-word',
                     background: 'white',
-                    padding: '4px',
                     borderRadius: '4px',
                     boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                     zIndex: draggingInstanceId === instance.id ? 1000 : 'auto',
+                    padding: '4px'
                   }}
                   onMouseDown={e => handleInstanceMouseDown(e, instance.id)}
                   onDoubleClick={() => {
@@ -1202,7 +1202,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                   }}
                 >
                   {instance.type === 'text' ? (
-                    <p style={{ margin: 0, userSelect: 'none' }}>
+                    <p style={{ margin: 0, userSelect: 'none', overflow: 'hidden', height: '100%', width: '100%' }}>
                       {instance.content}
                     </p>
                   ) : instance.type === 'image' ? (
