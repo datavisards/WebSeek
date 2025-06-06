@@ -47,6 +47,11 @@
   user-select: none;
 }
 
+button[disabled] {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
 button {
   /* padding: 8px 12px; */
   background-color: #4a90e2;

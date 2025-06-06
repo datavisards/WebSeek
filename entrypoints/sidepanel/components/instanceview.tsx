@@ -1,33 +1,92 @@
+import { browser, type Browser } from 'wxt/browser';
+
 import React, { useState, useRef, useEffect } from 'react';
 import './instanceview.css';
 
+// Define types for embedded instances and sketch items
 type EmbeddedInstance =
-  | { type: 'text'; content: string; }
-  | { type: 'image'; src: string; };
+  | { type: 'text'; content: string }
+  | { type: 'image'; src: string };
 
 type SketchItem =
-  | { type: 'stroke'; id: string; points: Array<{ x: number, y: number }>; color: string; width: number; }
-  | { type: 'instance'; id: string; instance: EmbeddedInstance; x: number; y: number; width: number; height: number; };
+  | {
+    type: 'stroke';
+    id: string;
+    points: Array<{ x: number; y: number }>;
+    color: string;
+    width: number;
+  }
+  | {
+    type: 'instance';
+    id: string;
+    instance: EmbeddedInstance;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 
+// Define the Instance type for text, image, and sketch
 type Instance =
-  | { id: string; type: 'text'; content: string; x: number; y: number; width: number; height: number }
-  | { id: string; type: 'image'; src: string; x: number; y: number; width: number; height: number }
-  | { id: string; type: 'sketch'; x: number; y: number; width: number; height: number; content: SketchItem[]; thumbnail: string };
+  | {
+    id: string;
+    type: 'text';
+    content: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }
+  | {
+    id: string;
+    type: 'image';
+    src: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }
+  | {
+    id: string;
+    type: 'sketch';
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    content: SketchItem[];
+    thumbnail: string;
+  };
 
+// Props interface for the component
 interface InstanceViewProps {
   onOperation: (message: string) => void;
 }
 
 const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const [instances, setInstances] = useState<Instance[]>([]);
+  const [isCaptureEnabled, setIsCaptureEnabled] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
-  const panStart = useRef<{ x: number; y: number; initialPan: { x: number; y: number } } | null>(null);
+  const panStart = useRef<{
+    x: number;
+    y: number;
+    initialPan: { x: number; y: number };
+  } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [draggingInstanceId, setDraggingInstanceId] = useState<string | null>(null);
-  const dragStartPos = useRef<{ mouseX: number; mouseY: number; instanceX: number; instanceY: number; offsetX: number; offsetY: number } | null>(null);
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const dragStartPos = useRef<{
+    mouseX: number;
+    mouseY: number;
+    instanceX: number;
+    instanceY: number;
+    offsetX: number;
+    offsetY: number;
+  } | null>(null);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(
+    null
+  );
+  // Resizing state
   const [isResizing, setIsResizing] = useState(false);
   const [resizeDirection, setResizeDirection] = useState<string | null>(null);
   const resizerStart = useRef<{
@@ -45,12 +104,25 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const [editingSketchId, setEditingSketchId] = useState<string | null>(null);
   const [sketchColor, setSketchColor] = useState('#000000');
   const [sketchWidth, setSketchWidth] = useState(3);
-  const [currentStroke, setCurrentStroke] = useState<{ id: string, points: Array<{ x: number, y: number }> } | null>(null);
+  const [currentStroke, setCurrentStroke] = useState<{
+    id: string;
+    points: Array<{ x: number; y: number }>;
+  } | null>(null);
   const sketchCanvasRef = useRef<HTMLCanvasElement>(null);
   const [availableInstances, setAvailableInstances] = useState<Instance[]>([]);
+  const [draggingEmbeddedId, setDraggingEmbeddedId] = useState<string | null>(null);
+  const dragEmbeddedStart = useRef<{
+    mouseCanvasX: number;
+    mouseCanvasY: number;
+    initialX: number;
+    initialY: number;
+  } | null>(null);
+  const [currentMode, setCurrentMode] = useState<'draw' | 'move'>('draw'); // Mode for sketching or moving instances during creation of sketches
 
+  // Helper function to generate unique IDs
   const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
 
+  // Convert screen coordinates to canvas coordinates
   const screenToCanvas = (screenX: number, screenY: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
@@ -59,7 +131,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     return { x, y };
   };
 
-  // Handle wheel events with proper passive listeners
+  // Handle wheel events for zooming
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -93,6 +165,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     };
   }, [zoom, pan]);
 
+  // Handle drag and drop
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     const { x, y } = screenToCanvas(event.clientX, event.clientY);
@@ -109,7 +182,15 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
           reader.onload = (e) => {
             const result = e.target?.result;
             if (result) {
-              setInstances(prev => [...prev, { id: generateId(), type: 'image', src: result as string, x, y, width: 100, height: 100 }]);
+              setInstances(prev => [...prev, {
+                id: generateId(),
+                type: 'image',
+                src: result as string,
+                x,
+                y,
+                width: 100,
+                height: 100
+              }]);
             }
           };
           reader.readAsDataURL(file);
@@ -122,11 +203,20 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       const text = event.dataTransfer.getData('text/plain');
       if (text) {
         onOperation(`Text added: "${text}"`);
-        setInstances(prev => [...prev, { id: generateId(), type: 'text', content: text, x, y, width: 100, height: 20 }]);
+        setInstances(prev => [...prev, {
+          id: generateId(),
+          type: 'text',
+          content: text,
+          x,
+          y,
+          width: 100,
+          height: 20
+        }]);
       }
     }
   };
 
+  // Handle paste events
   const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
     event.preventDefault();
     const rect = containerRef.current?.getBoundingClientRect();
@@ -144,7 +234,15 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
           reader.onload = (e) => {
             const result = e.target?.result;
             if (result) {
-              setInstances(prev => [...prev, { id: generateId(), type: 'image', src: result as string, x: pasteX, y: pasteY, width: 100, height: 100 }]);
+              setInstances(prev => [...prev, {
+                id: generateId(),
+                type: 'image',
+                src: result as string,
+                x: pasteX,
+                y: pasteY,
+                width: 100,
+                height: 100
+              }]);
             }
           };
           reader.readAsDataURL(file);
@@ -152,17 +250,27 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       } else if (item.type === 'text/plain') {
         item.getAsString((text) => {
           onOperation(`Text added: "${text}"`);
-          setInstances(prev => [...prev, { id: generateId(), type: 'text', content: text, x: pasteX, y: pasteY, width: 100, height: 20 }]);
+          setInstances(prev => [...prev, {
+            id: generateId(),
+            type: 'text',
+            content: text,
+            x: pasteX,
+            y: pasteY,
+            width: 100,
+            height: 20
+          }]);
         });
       }
     }
   };
 
+  // Handle drag over
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
   };
 
+  // Handle mouse down for panning
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
 
@@ -183,6 +291,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     }
   };
 
+  // Handle touch start for mobile
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
     if (event.touches.length !== 1) return;
 
@@ -204,6 +313,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     }
   };
 
+  // Handle mouse move for panning and resizing
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
     if (isPanning && panStart.current) {
       const { x: startX, y: startY, initialPan } = panStart.current;
@@ -293,8 +403,40 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         }),
       );
     }
+
+    if (draggingEmbeddedId && dragEmbeddedStart.current) {
+      const rect = sketchCanvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      // Get current mouse position in canvas coordinates
+      const currentCanvasX = event.clientX - rect.left;
+      const currentCanvasY = event.clientY - rect.top;
+
+      setInstances(prev =>
+        prev.map(sketchInst => {
+          if (sketchInst.type === 'sketch' && sketchInst.id === editingSketchId) {
+            const updatedContent = sketchInst.content.map(item => {
+              if (item.type === 'instance' && item.id === draggingEmbeddedId) {
+                const dragData = dragEmbeddedStart.current;
+                if (!dragData) return item;
+
+                return {
+                  ...item,
+                  x: dragData.initialX + (currentCanvasX - dragData.mouseCanvasX),
+                  y: dragData.initialY + (currentCanvasY - dragData.mouseCanvasY),
+                };
+              }
+              return item;
+            });
+            return { ...sketchInst, content: updatedContent };
+          }
+          return sketchInst;
+        })
+      );
+    }
   };
 
+  // Handle touch move
   const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
     if (event.touches.length !== 1) return;
     const touch = event.touches[0];
@@ -312,6 +454,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     event.preventDefault();
   };
 
+  // Handle mouse up to end panning/resizing
   const handleMouseUp = () => {
     setIsPanning(false);
     panStart.current = null;
@@ -322,8 +465,11 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     }
     setDraggingInstanceId(null);
     dragStartPos.current = null;
+    setDraggingEmbeddedId(null);
+    dragEmbeddedStart.current = null;
   };
 
+  // Handle touch end
   const handleTouchEnd = () => {
     setIsPanning(false);
     panStart.current = null;
@@ -331,6 +477,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     dragStartPos.current = null;
   };
 
+  // Handle canvas click to deselect
   const handleCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const isOnInstance = instances.some(instance => {
       const element = document.getElementById(`instance-${instance.id}`);
@@ -343,9 +490,10 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     }
   };
 
+  // Handle instance mouse down for dragging
   const handleInstanceMouseDown = (
     event: React.MouseEvent<HTMLDivElement>,
-    id: string,
+    id: string
   ) => {
     event.stopPropagation();
     if (event.button !== 0) return;
@@ -368,6 +516,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     };
   };
 
+  // Handle resizer mouse down for resizing
   const handleResizerMouseDown = (direction: string, instanceId: string) => (e: React.MouseEvent) => {
     e.stopPropagation();
     const instance = instances.find(inst => inst.id === instanceId);
@@ -390,7 +539,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     setResizeDirection(direction);
   };
 
-  // Sketch creation and editing functions
+  // Create a new sketch
   const handleCreateSketch = () => {
     const newSketch: Instance = {
       id: generateId(),
@@ -407,6 +556,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     setEditingSketchId(newSketch.id);
   };
 
+  // Add an instance to the sketch
   const handleAddToSketch = (instance: Instance) => {
     if (!editingSketchId) return;
 
@@ -434,33 +584,139 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         }
         return inst;
       }));
-      onOperation(`Added ${instance.type} to sketch`);
     }
   };
 
-  const handleSaveSketch = () => {
+  // Save the sketch
+  const handleSaveSketch = async () => {
     if (!editingSketchId || !sketchCanvasRef.current) return;
 
     const canvas = sketchCanvasRef.current;
-    const thumbnail = canvas.toDataURL('image/png');
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
 
-    setInstances(prev => prev.map(inst => {
-      if (inst.id === editingSketchId && inst.type === 'sketch') {
-        return { ...inst, thumbnail };
+    if (!tempCtx) return;
+
+    // Fill background as white
+    tempCtx.fillStyle = 'white';
+    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+    const sketch = instances.find(inst =>
+      inst.id === editingSketchId && inst.type === 'sketch'
+    ) as Extract<Instance, { type: 'sketch' }> | undefined;
+
+    if (!sketch) return;
+
+    // Draw all strokes
+    sketch.content.forEach(item => {
+      if (item.type === 'stroke') {
+        tempCtx.beginPath();
+        tempCtx.strokeStyle = item.color;
+        tempCtx.lineWidth = item.width;
+        tempCtx.lineCap = 'round';
+        tempCtx.lineJoin = 'round';
+
+        item.points.forEach((point, i) => {
+          if (i === 0) {
+            tempCtx.moveTo(point.x, point.y);
+          } else {
+            tempCtx.lineTo(point.x, point.y);
+          }
+        });
+        tempCtx.stroke();
       }
-      return inst;
-    }));
+      // Draw embedded text items
+      else if (item.type === 'instance' && item.instance.type === 'text') {
+        tempCtx.fillStyle = '#000';
+        tempCtx.font = '12px sans-serif';
+        tempCtx.fillText(item.instance.content, item.x, item.y + 15);
+      }
+      // Queue image drawing (async)
+      else if (item.type === 'instance' && item.instance.type === 'image') {
+        const img = new Image();
+        img.src = item.instance.src;
+        img.onload = () => {
+          tempCtx.drawImage(img, item.x, item.y, item.width, item.height);
+        };
+      }
+    });
 
+    // Add current stroke if still drawing
+    if (currentStroke) {
+      tempCtx.beginPath();
+      tempCtx.strokeStyle = sketchColor;
+      tempCtx.lineWidth = sketchWidth;
+      tempCtx.lineCap = 'round';
+      tempCtx.lineJoin = 'round';
+
+      currentStroke.points.forEach((point, i) => {
+        if (i === 0) {
+          tempCtx.moveTo(point.x, point.y);
+        } else {
+          tempCtx.lineTo(point.x, point.y);
+        }
+      });
+      tempCtx.stroke();
+    }
+
+    // Wait for all images to load before finalizing the thumbnail
+    await new Promise(resolve => {
+      const interval = setInterval(() => {
+        if (sketch.content.every(item => {
+          if (item.type === 'instance' && item.instance.type === 'image') {
+            const img = new Image();
+            img.src = item.instance.src;
+            return img.complete;
+          }
+          return true;
+        })) {
+          clearInterval(interval);
+          resolve(undefined);
+        }
+      }, 100);
+    });
+
+    const thumbnail = tempCanvas.toDataURL('image/png');
+
+    // Update instance with thumbnail
+    setInstances(prev =>
+      prev.map(inst => {
+        if (inst.id === editingSketchId && inst.type === 'sketch') {
+          return {
+            ...inst,
+            content: [
+              ...inst.content,
+              ...(currentStroke
+                ? [{
+                  type: 'stroke',
+                  id: currentStroke.id,
+                  points: currentStroke.points,
+                  color: sketchColor,
+                  width: sketchWidth
+                } as SketchItem]
+                : [])
+            ],
+            thumbnail
+          };
+        }
+        return inst;
+      })
+    );
+
+    setCurrentStroke(null);
     setEditingSketchId(null);
     onOperation("Sketch created");
   };
 
+  // Cancel sketch creation
   const handleCancelSketch = () => {
     setInstances(prev => prev.filter(inst => inst.id !== editingSketchId)); // Remove empty sketch
     setEditingSketchId(null);
   };
 
-  // Sketch drawing functions
+  // Start drawing on the sketch canvas
   const startDrawing = (e: React.MouseEvent) => {
     if (!editingSketchId) return;
 
@@ -478,6 +734,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     setCurrentStroke(newStroke);
   };
 
+  // Continue drawing
   const draw = (e: React.MouseEvent) => {
     if (!currentStroke || !editingSketchId || !sketchCanvasRef.current) return;
 
@@ -491,6 +748,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     }));
   };
 
+  // End drawing and save stroke
   const endDrawing = () => {
     if (!currentStroke || !editingSketchId) return;
 
@@ -570,6 +828,134 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     }
   }, [editingSketchId, instances, currentStroke, sketchColor, sketchWidth]);
 
+  const handleEmbeddedMouseDown = (e: React.MouseEvent, itemId: string) => {
+    e.stopPropagation();
+    setDraggingEmbeddedId(itemId);
+
+    const rect = sketchCanvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    // Calculate canvas-relative coordinates for initial position
+    const initialCanvasX = e.clientX - rect.left;
+    const initialCanvasY = e.clientY - rect.top;
+
+    // Find the sketch and the embedded item
+    const sketch = instances.find(inst =>
+      inst.id === editingSketchId && inst.type === 'sketch'
+    ) as Extract<Instance, { type: 'sketch' }> | undefined;
+
+    if (!sketch) return;
+
+    const embeddedItem = sketch.content.find(item =>
+      item.type === 'instance' && item.id === itemId
+    );
+
+    if (!embeddedItem || embeddedItem.type !== 'instance') return;
+
+    dragEmbeddedStart.current = {
+      // Store canvas-relative coordinates
+      mouseCanvasX: initialCanvasX,
+      mouseCanvasY: initialCanvasY,
+      initialX: embeddedItem.x,
+      initialY: embeddedItem.y,
+    };
+  };
+
+  useEffect(() => {
+    const messageHandler = (msg: any) => {
+      console.log("Received message from background:", msg);
+      if (msg.action === 'element_selected') {
+        handleElementSelected(msg);
+      } else if (msg.action === 'selection_canceled') {
+        console.log("Element selection canceled");
+        setIsCaptureEnabled(true);
+      } else if (msg.action === 'exit_selection') {
+        setSelectedInstanceId(null);
+        setDraggingInstanceId(null);
+        setDraggingEmbeddedId(null);
+      }
+    };
+
+    // Listen for messages from the background script
+    browser.runtime.onMessage.addListener(messageHandler);
+
+    return () => {
+      // Cleanup listener on unmount
+      browser.runtime.onMessage.removeListener(messageHandler);
+    };
+  }, []);
+
+  const handleElementSelected = (message: any) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    const x = rect ? rect.width / 2 : 0;
+    const y = rect ? rect.height / 2 : 0;
+
+    if (message.type === 'text') {
+      onOperation(`Text captured from page: "${message.data}"`);
+      setInstances(prev => [
+        ...prev,
+        {
+          id: generateId(),
+          type: 'text',
+          content: message.data,
+          x: x,
+          y: y,
+          width: 100,
+          height: 20
+        }
+      ]);
+    } else if (message.type === 'image') {
+      onOperation("Image captured from page");
+      setInstances(prev => [
+        ...prev,
+        {
+          id: generateId(),
+          type: 'image',
+          src: message.data,
+          x: x,
+          y: y,
+          width: 100,
+          height: 100
+        }
+      ]);
+    }
+    setIsCaptureEnabled(true);
+  };
+
+  const handleCaptureElement = () => {
+    console.log("Sending message to start element selection");
+
+    // Send message directly to the active tab
+    browser.tabs.query({ active: true, currentWindow: true })
+      .then((tabs) => {
+        if (tabs[0]?.id) {
+          browser.tabs.sendMessage(tabs[0].id, { action: 'start_element_selection' })
+            .then(() => { setIsCaptureEnabled(false); })
+            .catch((error) => console.error("Error sending message:", error));
+        }
+      });
+  };
+
+  // Add keyboard escape handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (!isCaptureEnabled) {
+          browser.runtime.sendMessage({ action: 'exit_selection' });
+        }
+        setSelectedInstanceId(null);
+        setDraggingInstanceId(null);
+        setDraggingEmbeddedId(null);
+        setIsCaptureEnabled(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isCaptureEnabled]);
+
   return (
     <div
       className="view-container instance-view"
@@ -590,6 +976,19 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       {editingSketchId ? (
         <div className="sketch-editor">
           <div className="sketch-tools">
+            <button
+              className={`sketch-button ${currentMode === 'draw' ? 'active' : ''}`}
+              onClick={() => setCurrentMode('draw')}
+            >
+              Draw
+            </button>
+            <button
+              className={`sketch-button ${currentMode === 'move' ? 'active' : ''}`}
+              onClick={() => setCurrentMode('move')}
+            >
+              Move
+            </button>
+
             <label>
               Color:
               <input
@@ -613,16 +1012,23 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
             <button onClick={handleCancelSketch} className="sketch-button cancel">Cancel</button>
           </div>
 
-          <div className="sketch-container">
+          <div className="sketch-container" style={{ position: 'relative', backgroundColor: 'white' }}>
             <canvas
               ref={sketchCanvasRef}
               width={800}
               height={500}
-              onMouseDown={startDrawing}
-              onMouseMove={draw}
+              onMouseDown={currentMode === 'draw' ? startDrawing : undefined}
+              onMouseMove={currentMode === 'draw' ? draw : undefined}
               onMouseUp={endDrawing}
               onMouseLeave={endDrawing}
-              style={{ border: '1px solid #000', cursor: 'crosshair', backgroundColor: 'white' }}
+              style={{
+                position: 'relative',
+                border: '1px solid #000',
+                cursor: currentMode === 'draw' ? 'crosshair' : 'default',
+                backgroundColor: 'transparent',
+                pointerEvents: 'auto',
+                zIndex: currentMode === 'draw' ? 20 : 10
+              }}
             />
 
             {(instances.find(inst => inst.id === editingSketchId && inst.type === 'sketch') as Extract<Instance, { type: 'sketch' }> | undefined)
@@ -638,16 +1044,20 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                     width: item.width,
                     height: item.height,
                     border: '1px dashed #999',
-                    pointerEvents: 'none',
+                    cursor: 'move',
+                    pointerEvents: currentMode === 'move' ? 'auto' : 'none',
+                    zIndex: currentMode === 'draw' ? 10 : 20
                   }}
+                  onMouseDown={currentMode === 'move' ? (e) => handleEmbeddedMouseDown(e, item.id) : undefined}
                 >
                   {item.instance.type === 'text' ? (
-                    <p style={{ margin: 0, fontSize: '12px' }}>{item.instance.content}</p>
+                    <p style={{ margin: 0, fontSize: '12px', userSelect: 'none' }}>{item.instance.content}</p>
                   ) : (
                     <img
                       src={item.instance.src}
                       alt="embedded"
                       style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      draggable={false}
                     />
                   )}
                 </div>
@@ -677,17 +1087,19 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                       />
                     )}
                   </div>
-                ))
-              }
+                ))}
             </div>
           </div>
         </div>
       ) : (
         <>
           <div className="view-title-container">
-            <h3 style={{ 'margin': 0 }}>Instances</h3>
+            <h3 style={{ margin: 0 }}>Instances</h3>
             <button onClick={handleCreateSketch}>
-              Create New Sketch
+              Sketch
+            </button>
+            <button onClick={handleCaptureElement} disabled={!isCaptureEnabled}>
+              Capture
             </button>
           </div>
           <div
@@ -696,10 +1108,8 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
               position: 'relative',
               width: 800,
               height: 400,
-              border: '1px solid #ccc',
               overflow: 'hidden',
               cursor: isPanning ? 'grabbing' : 'grab',
-              backgroundColor: '#fafafa',
               touchAction: 'none',
             }}
             onClick={handleCanvasClick}
