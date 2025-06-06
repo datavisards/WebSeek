@@ -729,7 +729,13 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
 
   // Cancel sketch creation
   const handleCancelSketch = () => {
-    setInstances(prev => prev.filter(inst => inst.id !== editingSketchId)); // Remove empty sketch
+    if (!editingSketchId) return;
+    const sketch = instances.find(inst =>
+      inst.id === editingSketchId && inst.type === 'sketch'
+    ) as Extract<Instance, { type: 'sketch' }> | undefined;
+    if (sketch && sketch.content.length === 0) {
+      setInstances(prev => prev.filter(inst => inst.id !== editingSketchId)); // Remove empty sketch
+    }
     setEditingSketchId(null);
   };
 
