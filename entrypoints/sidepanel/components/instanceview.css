@@ -47,13 +47,7 @@
   user-select: none;
 }
 
-button[disabled] {
-  background-color: #ccc;
-  cursor: not-allowed;
-}
-
 button {
-  /* padding: 8px 12px; */
   background-color: #4a90e2;
   color: white;
   border: none;
@@ -61,6 +55,16 @@ button {
   cursor: pointer;
   font-size: 14px;
   margin-left: 10px;
+  transition: background-color 0.3s ease;
+}
+
+button:hover:not([disabled]) {
+  background-color: #357ab8;
+}
+
+button[disabled] {
+  background-color: #ccc;
+  cursor: not-allowed;
 }
 
 .sketch-editor {
@@ -124,4 +128,8 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.sketch-button.active {
+  background-color: #2a6496;
 }

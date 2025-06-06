@@ -103,7 +103,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   // Sketch editor state
   const [editingSketchId, setEditingSketchId] = useState<string | null>(null);
   const [sketchColor, setSketchColor] = useState('#000000');
-  const [sketchWidth, setSketchWidth] = useState(3);
+  const sketchWidth = 3;
   const [currentStroke, setCurrentStroke] = useState<{
     id: string;
     points: Array<{ x: number; y: number }>;
@@ -979,12 +979,14 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
             <button
               className={`sketch-button ${currentMode === 'draw' ? 'active' : ''}`}
               onClick={() => setCurrentMode('draw')}
+              disabled={currentMode === 'draw'}
             >
               Draw
             </button>
             <button
               className={`sketch-button ${currentMode === 'move' ? 'active' : ''}`}
               onClick={() => setCurrentMode('move')}
+              disabled={currentMode === 'move'}
             >
               Move
             </button>
@@ -995,21 +997,11 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                 type="color"
                 value={sketchColor}
                 onChange={e => setSketchColor(e.target.value)}
+                style={{ marginLeft: '6px' }}
               />
             </label>
-            <label>
-              Brush Size:
-              <input
-                type="range"
-                min="1"
-                max="20"
-                value={sketchWidth}
-                onChange={e => setSketchWidth(parseInt(e.target.value))}
-              />
-              {sketchWidth}px
-            </label>
-            <button onClick={handleSaveSketch} className="sketch-button">Save Sketch</button>
-            <button onClick={handleCancelSketch} className="sketch-button cancel">Cancel</button>
+            <button onClick={handleSaveSketch}>Save Sketch</button>
+            <button onClick={handleCancelSketch}>Cancel</button>
           </div>
 
           <div className="sketch-container" style={{ position: 'relative', backgroundColor: 'white' }}>
@@ -1023,7 +1015,6 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
               onMouseLeave={endDrawing}
               style={{
                 position: 'relative',
-                border: '1px solid #000',
                 cursor: currentMode === 'draw' ? 'crosshair' : 'default',
                 backgroundColor: 'transparent',
                 pointerEvents: 'auto',
