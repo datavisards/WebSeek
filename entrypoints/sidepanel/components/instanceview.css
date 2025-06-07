@@ -148,7 +148,6 @@ button[disabled] {
 /* TRASH ICON */
 .trash-icon {
   position: absolute;
-  top: 10px;
   right: 10px;
   width: 36px;
   height: 36px;
@@ -189,13 +188,6 @@ button[disabled] {
 }
 
 /* TRASH VIEW */
-.trash-view {
-  padding: 15px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
 .trash-header {
   display: flex;
   justify-content: space-between;
@@ -280,4 +272,33 @@ button[disabled] {
 .sketch-preview {
   padding: 10px;
   text-align: center;
+}
+
+/* Added resizer handles for sketch editor */
+.embedded-instance .resizer {
+    z-index: 10;
+}
+
+.embedded-instance .resizer.top-left {
+    top: -4px;
+    left: -4px;
+    cursor: nwse-resize;
+}
+
+.embedded-instance .resizer.top-right {
+    top: -4px;
+    right: -4px;
+    cursor: nesw-resize;
+}
+
+.embedded-instance .resizer.bottom-right {
+    bottom: -4px;
+    right: -4px;
+    cursor: nwse-resize;
+}
+
+.embedded-instance .resizer.bottom-left {
+    bottom: -4px;
+    left: -4px;
+    cursor: nesw-resize;
 }

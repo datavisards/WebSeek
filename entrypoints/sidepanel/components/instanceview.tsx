@@ -19,6 +19,7 @@ type SketchItem =
   | {
     type: 'instance';
     id: string;
+    originalId?: string;
     instance: EmbeddedInstance;
     x: number;
     y: number;
@@ -65,13 +66,13 @@ interface InstanceViewProps {
 const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const [instances, setInstances] = useState<Instance[]>([]);
   const instancesRef = useRef<Instance[]>([]); // Update the latest instances (For callback)
-  useEffect(() => {
-    instancesRef.current = instances;
-  }, [instances]);
   // Counters for different instance types
   const [textCount, setTextCount] = useState(0);
+  const textCountRef = useRef(0);
   const [imageCount, setImageCount] = useState(0);
+  const imageCountRef = useRef(0);
   const [sketchCount, setSketchCount] = useState(0);
+  const sketchCountRef = useRef(0);
   const [isCaptureEnabled, setIsCaptureEnabled] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -95,9 +96,6 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     null
   );
   const selectedInstanceIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    selectedInstanceIdRef.current = selectedInstanceId;
-  }, [selectedInstanceId]);
   // Resizing state
   const [isResizing, setIsResizing] = useState(false);
   const [resizeDirection, setResizeDirection] = useState<string | null>(null);
@@ -133,10 +131,30 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const bgPort = useRef<Browser.runtime.Port | null>(null);
   const [deletedInstances, setDeletedInstances] = useState<Instance[]>([]);
   const deletedInstancesRef = useRef<Instance[]>([]);
-  useEffect(() => {
-    deletedInstancesRef.current = deletedInstances;
-  }, [deletedInstances]);
   const [showTrash, setShowTrash] = useState(false);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [editingTextContent, setEditingTextContent] = useState<string>('');
+  const [editingOriginalImageId, setEditingOriginalImageId] = useState<string | null>(null);
+  const [sketchResizingItemId, setSketchResizingItemId] = useState<string | null>(null);
+  const [sketchResizeDirection, setSketchResizeDirection] = useState<string | null>(null);
+  const sketchResizerStart = useRef<{
+    mouseX: number;
+    mouseY: number;
+    instanceWidth: number;
+    instanceHeight: number;
+    instanceX: number;
+    instanceY: number;
+  } | null>(null);
+
+  // Update the latest state values
+  useEffect(() => {
+    textCountRef.current = textCount;
+    imageCountRef.current = imageCount;
+    sketchCountRef.current = sketchCount;
+    instancesRef.current = instances;
+    selectedInstanceIdRef.current = selectedInstanceId;
+    deletedInstancesRef.current = deletedInstances;
+  }, [textCount, imageCount, sketchCount, instances, selectedInstanceId, deletedInstances]);
 
   // Helper function to generate unique IDs
   const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
@@ -224,9 +242,9 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     if (!handled) {
       const text = event.dataTransfer.getData('text/plain');
       if (text) {
-        const newId = `Text${textCount + 1}`;
+        const newId = `Text${textCountRef.current + 1}`;
         setTextCount(prev => prev + 1);
-        onOperation(`Created [${newId}](#instance-${newId})`);
+        onOperation(`Created [${text.length > 10 ? text.slice(0, 10) + '...' : text}](#instance-${newId})`);
         setInstances(prev => [...prev, {
           id: newId,
           type: 'text',
@@ -276,9 +294,9 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         }
       } else if (item.type === 'text/plain') {
         item.getAsString((text) => {
-          const newId = `Text${textCount + 1}`;
+          const newId = `Text${textCountRef.current + 1}`;
           setTextCount(prev => prev + 1);
-          onOperation(`Created [${newId}](#instance-${newId})`);
+          onOperation(`Created [${text.length > 10 ? text.slice(0, 10) + '...' : text}](#instance-${newId})`);
           setInstances(prev => [...prev, {
             id: newId,
             type: 'text',
@@ -463,6 +481,63 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         })
       );
     }
+
+    // Handle resizing embedded instances in sketch
+    if (sketchResizingItemId && sketchResizeDirection && sketchResizerStart.current) {
+      const { mouseX, mouseY, instanceWidth, instanceHeight, instanceX, instanceY } = sketchResizerStart.current;
+
+      const dx = event.clientX - mouseX;
+      const dy = event.clientY - mouseY;
+
+      let newX = instanceX;
+      let newY = instanceY;
+      let newWidth = instanceWidth;
+      let newHeight = instanceHeight;
+
+      switch (sketchResizeDirection) {
+        case 'top-left':
+          newX = instanceX + dx;
+          newY = instanceY + dy;
+          newWidth = Math.max(10, instanceWidth - dx);
+          newHeight = Math.max(10, instanceHeight - dy);
+          break;
+        case 'top-right':
+          newY = instanceY + dy;
+          newWidth = Math.max(10, instanceWidth + dx);
+          newHeight = Math.max(10, instanceHeight - dy);
+          break;
+        case 'bottom-right':
+          newWidth = Math.max(10, instanceWidth + dx);
+          newHeight = Math.max(10, instanceHeight + dy);
+          break;
+        case 'bottom-left':
+          newX = instanceX + dx;
+          newWidth = Math.max(10, instanceWidth - dx);
+          newHeight = Math.max(10, instanceHeight + dy);
+          break;
+      }
+
+      setInstances(prev =>
+        prev.map(sketchInst => {
+          if (sketchInst.type === 'sketch' && sketchInst.id === editingSketchId) {
+            const updatedContent = sketchInst.content.map(item => {
+              if (item.type === 'instance' && item.id === sketchResizingItemId) {
+                return {
+                  ...item,
+                  x: newX,
+                  y: newY,
+                  width: newWidth,
+                  height: newHeight
+                };
+              }
+              return item;
+            });
+            return { ...sketchInst, content: updatedContent };
+          }
+          return sketchInst;
+        })
+      );
+    }
   };
 
   // Handle touch move
@@ -496,6 +571,9 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     dragStartPos.current = null;
     setDraggingEmbeddedId(null);
     dragEmbeddedStart.current = null;
+    setSketchResizingItemId(null);
+    setSketchResizeDirection(null);
+    sketchResizerStart.current = null;
   };
 
   // Handle touch end
@@ -605,6 +683,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
           const newItem: SketchItem = {
             type: 'instance',
             id: generateId(),
+            originalId: instance.id,
             instance: embedded!,
             x: 50,
             y: 50,
@@ -660,9 +739,24 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       }
       // Draw embedded text items
       else if (item.type === 'instance' && item.instance.type === 'text') {
+        tempCtx.save();
         tempCtx.fillStyle = '#000';
         tempCtx.font = '12px sans-serif';
-        tempCtx.fillText(item.instance.content, item.x, item.y + 15);
+        const lines = wrapTextForThumbnail(
+          tempCtx,
+          item.instance.content,
+          item.width,
+          item.height
+        );
+
+        lines.forEach((line, i) => {
+          tempCtx.fillText(
+            line,
+            item.x,
+            item.y + 12 + (i * 15) // 12px baseline, 15px line height
+          );
+        });
+        tempCtx.restore();
       }
       // Queue image drawing (async)
       else if (item.type === 'instance' && item.instance.type === 'image') {
@@ -736,9 +830,23 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       })
     );
 
+    let str = sketch.content
+      .filter(item => item.type === 'instance')
+      .map(item => {
+        if (item.instance.type === 'text') {
+          let text = item.instance.content;
+          let display = text.length > 10 ? text.slice(0, 10) + '...' : text;
+          return `[${display}](#instance-${item.originalId || item.id})`;
+        } else if (item.instance.type === 'image') {
+          return `[${item.originalId || item.id}](#instance-${item.originalId || item.id})`;
+        }
+      })
+      .join(', ');
+
+    onOperation(`Created [${sketch.id}](#instance-${sketch.id})` + (str ? ` with ${str}` : ''));
+
     setCurrentStroke(null);
     setEditingSketchId(null);
-    onOperation(`Created [${sketch.id}](#instance-${sketch.id})`);
   };
 
   // Cancel sketch creation
@@ -747,8 +855,12 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     const sketch = instances.find(inst =>
       inst.id === editingSketchId && inst.type === 'sketch'
     ) as Extract<Instance, { type: 'sketch' }> | undefined;
-    if (sketch && sketch.content.length === 0) {
-      setInstances(prev => prev.filter(inst => inst.id !== editingSketchId)); // Remove empty sketch
+    if (editingOriginalImageId) {
+      setInstances(prev => prev.filter(inst => inst.id !== editingSketchId));
+      setEditingOriginalImageId(null); // Clear the flag
+    } else if (sketch && sketch.content.length === 0) {
+      // Only remove empty sketches for regular sketch creation
+      setInstances(prev => prev.filter(inst => inst.id !== editingSketchId));
     }
     setEditingSketchId(null);
   };
@@ -925,15 +1037,16 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     const y = rect ? rect.height / 2 : 0;
 
     if (message.type === 'text') {
-      const newId = `Text${textCount + 1}`;
+      const text = message.data;
+      const newId = `Text${textCountRef.current + 1}`;
       setTextCount(prev => prev + 1);
-      onOperation(`Created [${newId}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`);
+      onOperation(`Created [${text.length > 10 ? text.slice(0, 10) + '...' : text}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`);
       setInstances(prev => [
         ...prev,
         {
           id: newId,
           type: 'text',
-          content: message.data,
+          content: text,
           x,
           y,
           width: 100,
@@ -1020,6 +1133,109 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     };
   }, [isCaptureEnabled]);
 
+  const handleInstanceDoubleClick = (instance: Instance) => {
+    if (instance.type === 'text') {
+      setEditingTextId(instance.id);
+      setEditingTextContent(instance.content);
+    } else if (instance.type === 'image' || instance.type === 'sketch') {
+      const newSketchId = `Sketch${sketchCount + 1}`;
+      setSketchCount(prev => prev + 1);
+      let newSketch: Instance = {
+        id: newSketchId,
+        type: 'sketch',
+        x: instance.x,
+        y: instance.y,
+        width: instance.width,
+        height: instance.height,
+        content: [],
+        thumbnail: ''
+      };
+      if (instance.type === 'image') {
+        newSketch.content.push({
+          type: 'instance',
+          id: generateId(),
+          originalId: instance.id,
+          instance: {
+            type: 'image',
+            src: instance.src
+          },
+          x: 0,
+          y: 0,
+          width: instance.width,
+          height: instance.height
+        })
+        setEditingOriginalImageId(instance.id); // Store original image ID
+      } else if (instance.type === 'sketch') {
+        newSketch.content = instance.content.map(item => {
+          if (item.type === 'instance') {
+            return {
+              ...item,
+              id: generateId(),
+              originalId: item.originalId || item.id,
+            };
+          }
+          return item;
+        });
+      }
+      setInstances(prev => [...prev, newSketch]);
+      setEditingSketchId(newSketchId);
+      setAvailableInstances(prev => prev.filter(inst => inst.id !== instance.id));
+    }
+  }
+
+  const handleSaveText = () => {
+    const original = instances.find(inst => inst.id === editingTextId);
+    if (!original || original.type !== 'text') return;
+    const originalDisplay = original.content.length > 10 ? original.content.slice(0, 10) + '...' : original.content;
+
+    const newTextId = `Text${textCountRef.current + 1}`;
+    setTextCount(prev => prev + 1);
+    setInstances(prev => [
+      ...prev,
+      {
+        id: newTextId,
+        type: 'text',
+        content: editingTextContent,
+        x: original.x,
+        y: original.y,
+        width: original.width,
+        height: original.height
+      }
+    ]);
+    const newDisplay = editingTextContent.length > 10 ? editingTextContent.slice(0, 10) + '...' : editingTextContent;
+
+    onOperation(`Edited [${originalDisplay}](#instance-${original.id}) into [${newDisplay}](#instance-${newTextId})`);
+
+    setEditingTextId(null);
+  };
+
+  // Handle mouse down for resizing embedded instances
+  const handleEmbeddedResizerMouseDown = (e: React.MouseEvent, direction: string, itemId: string) => {
+    e.stopPropagation();
+    setSketchResizeDirection(direction);
+    setSketchResizingItemId(itemId);
+
+    const sketch = instances.find(inst =>
+      inst.id === editingSketchId && inst.type === 'sketch'
+    ) as Extract<Instance, { type: 'sketch' }> | undefined;
+    if (!sketch) return;
+
+    const embeddedItem = sketch.content.find(item =>
+      item.type === 'instance' && item.id === itemId
+    ) as Extract<SketchItem, { type: 'instance' }> | undefined;
+    if (!embeddedItem) return;
+
+    sketchResizerStart.current = {
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      instanceWidth: embeddedItem.width,
+      instanceHeight: embeddedItem.height,
+      instanceX: embeddedItem.x,
+      instanceY: embeddedItem.y
+    };
+  };
+
+
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
@@ -1054,6 +1270,58 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [pan, zoom]);
 
+  // Text wrapping function for thumbnails
+  const wrapTextForThumbnail = (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number,
+    maxHeight: number
+  ): string[] => {
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+    const lineHeight = 15; // Approximate line height
+
+    ctx.font = '12px sans-serif';
+
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      const metrics = ctx.measureText(testLine);
+
+      if (metrics.width <= maxWidth || currentLine === '') {
+        currentLine = testLine;
+      } else {
+        // Check if adding this line would exceed max height
+        if ((lines.length + 1) * lineHeight > maxHeight) {
+          // Truncate current line if too long
+          const widthWithEllipsis = ctx.measureText(currentLine + '...').width;
+          if (widthWithEllipsis > maxWidth) {
+            while (ctx.measureText(currentLine + '...').width > maxWidth) {
+              currentLine = currentLine.slice(0, -1);
+            }
+          }
+          currentLine += '...';
+          lines.push(currentLine);
+          return lines;
+        }
+
+        lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+
+    // Add last line if within height limit
+    if (currentLine) {
+      if ((lines.length + 1) * lineHeight <= maxHeight) {
+        lines.push(currentLine);
+      } else {
+        lines.push('...');
+      }
+    }
+
+    return lines;
+  };
+
   return (
     <div
       className="view-container instance-view"
@@ -1071,7 +1339,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       ref={containerRef}
       style={{ overflow: 'hidden', userSelect: isPanning || draggingInstanceId ? 'none' : 'auto' }}
     >
-      {/* TRASH BUTTON - NEW FEATURE */}
+      {/* Trash Button */}
       {!editingSketchId && !showTrash && (
         <div className="trash-icon" onClick={() => setShowTrash(true)}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
@@ -1084,6 +1352,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       )}
 
       {editingSketchId ? (
+        // Sketch Editor
         <div className="sketch-editor">
           <div className="sketch-tools">
             <button
@@ -1152,14 +1421,38 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                   onMouseDown={currentMode === 'move' ? (e) => handleEmbeddedMouseDown(e, item.id) : undefined}
                 >
                   {item.instance.type === 'text' ? (
-                    <p style={{ margin: 0, fontSize: '12px', userSelect: 'none' }}>{item.instance.content}</p>
+                    <p style={{ margin: 0, fontSize: '12px', userSelect: 'none', pointerEvents: 'none' }}>
+                      {item.instance.content}
+                    </p>
                   ) : (
                     <img
                       src={item.instance.src}
                       alt="embedded"
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none', userSelect: 'none' }}
                       draggable={false}
                     />
+                  )}
+
+                  {/* Add resizers for embedded instance */}
+                  {currentMode === 'move' && (
+                    <>
+                      <div
+                        className="resizer top-left"
+                        onMouseDown={e => handleEmbeddedResizerMouseDown(e, 'top-left', item.id)}
+                      />
+                      <div
+                        className="resizer top-right"
+                        onMouseDown={e => handleEmbeddedResizerMouseDown(e, 'top-right', item.id)}
+                      />
+                      <div
+                        className="resizer bottom-right"
+                        onMouseDown={e => handleEmbeddedResizerMouseDown(e, 'bottom-right', item.id)}
+                      />
+                      <div
+                        className="resizer bottom-left"
+                        onMouseDown={e => handleEmbeddedResizerMouseDown(e, 'bottom-left', item.id)}
+                      />
+                    </>
                   )}
                 </div>
               ))
@@ -1192,14 +1485,15 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
             </div>
           </div>
         </div>
-      ) : showTrash ? ( // TRASH VIEW - NEW FEATURE
-        <div className="trash-view">
-          <div className="trash-header">
-            <h3>Trash Bin ({deletedInstances.length})</h3>
-            <button onClick={() => setShowTrash(false)}>Back to Instances</button>
+      ) : showTrash ? (
+        // Trash View
+        <>
+          <div className="view-title-container">
+            <h3 style={{ margin: 0 }}>Trash Bin ({deletedInstances.length})</h3>
+            <button onClick={() => setShowTrash(false)}>Return</button>
           </div>
 
-          <div className="trash-content">
+          <div className="view-content">
             {deletedInstances.length === 0 ? (
               <p className="empty-trash">Trash is empty</p>
             ) : (
@@ -1239,8 +1533,25 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
               </div>
             )}
           </div>
-        </div>
+        </>
+      ) : editingTextId !== null ? (
+        // Text Editor View
+        <>
+          <div className="view-title-container">
+            <h3 style={{ margin: 0 }}>Edit Text</h3>
+            <button onClick={handleSaveText}>Save</button>
+            <button onClick={() => setEditingTextId(null)}>Cancel</button>
+          </div>
+          <div className="view-content">
+            <textarea
+              value={editingTextContent}
+              onChange={(e) => setEditingTextContent(e.target.value)}
+              style={{ width: '100%', height: '100%' }}
+            />
+          </div>
+        </>
       ) : (
+        // Default Instance View
         <>
           <div className="view-title-container">
             <h3 style={{ margin: 0 }}>Instances</h3>
@@ -1296,12 +1607,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                     padding: '4px'
                   }}
                   onMouseDown={e => handleInstanceMouseDown(e, instance.id)}
-                  onDoubleClick={() => {
-                    if (instance.type === 'sketch') {
-                      setEditingSketchId(instance.id);
-                      setAvailableInstances(instances.filter(i => i.id !== instance.id));
-                    }
-                  }}
+                  onDoubleClick={e => handleInstanceDoubleClick(instance)}
                 >
                   {instance.type === 'text' ? (
                     <p style={{ margin: 0, userSelect: 'none', overflow: 'hidden', height: '100%', width: '100%' }}>
