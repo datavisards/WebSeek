@@ -1856,7 +1856,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
           </div>
 
           <div className="available-instances">
-            <h4 style={{ margin: '10px 0' }}>Available Instances:</h4>
+            <h4 style={{ margin: '10px 0' }}>Add to Table:</h4>
             <div className="instance-thumbs">
               {availableInstances
                 .map(instance => (
