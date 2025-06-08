@@ -1,81 +1,8 @@
 import { browser, type Browser } from 'wxt/browser';
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Instance, EmbeddedInstance, SketchItem, TextInstance, ImageInstance, SketchInstance, TableInstance } from '../types';
+import TableGrid from './tablegrid';
 import './instanceview.css';
-
-// Define types for embedded instances and sketch items
-type EmbeddedInstance =
-  | { type: 'text'; content: string; id: string, originalId?: string }
-  | { type: 'image'; src: string; id: string, originalId?: string }
-  | { type: 'table'; id: string, originalId?: string }
-  | { type: 'sketch'; id: string, originalId?: string };
-
-type SketchItem =
-  | {
-    type: 'stroke';
-    id: string;
-    points: Array<{ x: number; y: number }>;
-    color: string;
-    width: number;
-  }
-  | {
-    type: 'instance';
-    id: string;
-    instance: EmbeddedInstance;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-
-type TextInstance = {
-  id: string;
-  type: 'text';
-  content: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-type ImageInstance = {
-  id: string;
-  type: 'image';
-  src: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-type SketchInstance = {
-  id: string;
-  type: 'sketch';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  content: SketchItem[];
-  thumbnail: string;
-}
-
-type TableInstance = {
-  id: string;
-  type: 'table';
-  rows: number;
-  cols: number;
-  cells: Array<{
-    row: number;
-    col: number;
-    content: EmbeddedInstance[];
-  }>;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-type Instance = TextInstance | ImageInstance | SketchInstance | TableInstance;
 
 // Props interface for the component
 interface InstanceViewProps {
@@ -1469,119 +1396,6 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     }));
   };
 
-  const TableGrid = useCallback(({ editingTableId }: {
-    editingTableId: string | null;
-  }) => {
-    const table = instances.find(inst =>
-      inst.id === editingTableId && inst.type === 'table'
-    ) as TableInstance | undefined;
-
-    if (!table) return null;
-
-    const cellWidth = Math.max(50, Math.min(200, table.width / table.cols));
-    const cellHeight = Math.max(50, Math.min(200, table.height / table.rows));
-
-    return (
-      <div className="table-grid-container">
-        <div
-          className="table-grid"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${table.cols}, ${cellWidth}px)`,
-            gridTemplateRows: `repeat(${table.rows}, ${cellHeight}px)`,
-            border: '1px solid #ccc',
-            width: 'fit-content'
-          }}
-        >
-          {table.cells.map(cell => {
-            const isDropTarget = draggingInstanceId !== null;
-
-            return (
-              <div
-                key={`${cell.row}-${cell.col}`}
-                className={`table-cell ${isDropTarget ? 'drop-zone' : ''}`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.dataTransfer.dropEffect = 'copy';
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-
-                  const instanceId = e.dataTransfer.getData('text/plain');
-                  const draggedInstance = instances.find(inst => inst.id === instanceId);
-
-                  if (draggedInstance) {
-                    handleAddToTable(draggedInstance, cell.row, cell.col);
-                  }
-                  setDraggingInstanceId(null);
-                }}
-                style={{
-                  border: '1px solid #ddd',
-                  backgroundColor: 'white',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  padding: '4px',
-                  cursor: 'pointer',
-                }}
-              >
-                {cell.content.map((embedded, idx) => (
-                  <div
-                    key={embedded.id || idx}
-                    className="embedded-instance"
-                    style={{ width: '100%', height: '100%' }}
-                  >
-                    {embedded.type === 'text' && (
-                      <p className="cell-text" style={{ margin: 0, fontSize: '12px' }}>
-                        {embedded.content}
-                      </p>
-                    )}
-                    {embedded.type === 'image' && (
-                      <img
-                        src={embedded.src}
-                        alt="thumbnail"
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'contain',
-                          pointerEvents: 'none',
-                        }}
-                      />
-                    )}
-                    {embedded.type === 'sketch' && (
-                      <div className="sketch-thumb-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16">
-                          <path d="M4 4h16v16h-16v-16zm1 2v12h14v-12h-14zm12 9h-4v-2h4v-6h-6v-2h10v8h-2z" />
-                        </svg>
-                      </div>
-                    )}
-                    {embedded.type === 'table' && (
-                      <div className="table-thumb-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16">
-                          <path d="M4 8h16v12h-16v-12zm1 2v2h4v-2h-4zm5 0v2h4v-2h-4zm5 0v2h4v-2h-4zm-10 4v2h4v-2h-4zm5 0v2h4v-2h-4zm5 0v2h4v-2h-4zm-11-12v4h14v-4h-14z" />
-                        </svg>
-                      </div>
-                    )}
-                    <button
-                      className="remove-cell-content"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeCellContent(cell.row, cell.col, idx);
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }, [instances, handleAddToTable]);
-
   const saveTable = () => {
     let newId = `Table${tableCount + 1}`;
     setTableCount(prev => prev + 1);
@@ -1752,23 +1566,23 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
             <h4 style={{ margin: 0 }}>Add to Sketch:</h4>
             <div className="instance-thumbs">
               {availableInstances.map(instance => (
-                  <div
-                    key={instance.id}
-                    className="instance-thumb"
-                    onClick={() => handleAddToSketch(instance)}
-                  >
-                    {instance.type === 'text' ? (
-                      <p className="thumb-text">{instance.content.slice(0, 20)}{instance.content.length > 20 ? '...' : ''}</p>
-                    ) : (
-                      <img
-                        src={(instance.type === 'image' ? instance.src : '')}
-                        alt="thumb"
-                        className="thumb-image"
-                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                      />
-                    )}
-                  </div>
-                ))}
+                <div
+                  key={instance.id}
+                  className="instance-thumb"
+                  onClick={() => handleAddToSketch(instance)}
+                >
+                  {instance.type === 'text' ? (
+                    <p className="thumb-text">{instance.content.slice(0, 20)}{instance.content.length > 20 ? '...' : ''}</p>
+                  ) : (
+                    <img
+                      src={(instance.type === 'image' ? instance.src : '')}
+                      alt="thumb"
+                      className="thumb-image"
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -1851,7 +1665,15 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
               <p>Or drag instances directly into cells</p>
             </div> */}
             {instances.find(inst => inst.id === editingTableId && inst.type === 'table') && (
-              <TableGrid editingTableId={editingTableId}/>
+              <TableGrid
+                table={instances.find(inst =>
+                  inst.id === editingTableId && inst.type === 'table'
+                ) as TableInstance}
+                instances={instances}
+                onAddToTable={handleAddToTable}
+                onRemoveCellContent={removeCellContent}
+                setDraggingInstanceId={setDraggingInstanceId}
+              />
             )}
           </div>
 
