@@ -1,0 +1,28 @@
+/* TableEditor.css */
+.available-instances {
+  padding: 10px;
+  background: #f9f9f9;
+  border-top: 1px solid #ddd;
+}
+
+.instance-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.instance-thumb {
+  width: 60px;
+  height: 60px;
+  border: 1px solid #ccc;
+  padding: 5px;
+  cursor: pointer;
+  background: white;
+}
+
+.instance-thumb p {
+  margin: 0;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

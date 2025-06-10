@@ -1,7 +1,10 @@
 import { browser, type Browser } from 'wxt/browser';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Instance, EmbeddedInstance, SketchItem, TextInstance, ImageInstance, SketchInstance, TableInstance } from '../types';
-import TableGrid from './tablegrid';
+import TextEditor from './texteditor';
+import SketchEditor from './sketcheditor';
+import TrashView from './trashview';
+import TableEditor from './tableeditor';
 import './instanceview.css';
 
 // Props interface for the component
@@ -81,12 +84,11 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const [showTrash, setShowTrash] = useState(false);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [editingTextContent, setEditingTextContent] = useState<string>('');
-  const [editingOriginalImageId, setEditingOriginalImageId] = useState<string | null>(null);
   const [sketchResizingItemId, setSketchResizingItemId] = useState<string | null>(null);
   const [sketchResizeDirection, setSketchResizeDirection] = useState<string | null>(null);
   const sketchResizerStart = useRef<{
-    mouseX: number;
-    mouseY: number;
+    clientX: number;
+    clientY: number;
     instanceWidth: number;
     instanceHeight: number;
     instanceX: number;
@@ -402,7 +404,9 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         }),
       );
     }
+  };
 
+  const handleEmbeddedMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
     if (draggingEmbeddedId && dragEmbeddedStart.current) {
       const rect = sketchCanvasRef.current?.getBoundingClientRect();
       if (!rect) return;
@@ -436,36 +440,37 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
 
     // Handle resizing embedded instances in sketch
     if (sketchResizingItemId && sketchResizeDirection && sketchResizerStart.current) {
-      const { mouseX, mouseY, instanceWidth, instanceHeight, instanceX, instanceY } = sketchResizerStart.current;
+      const rect = sketchCanvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
 
-      const dx = event.clientX - mouseX;
-      const dy = event.clientY - mouseY;
+      const dx = event.clientX - sketchResizerStart.current.clientX;
+      const dy = event.clientY - sketchResizerStart.current.clientY;
 
-      let newX = instanceX;
-      let newY = instanceY;
-      let newWidth = instanceWidth;
-      let newHeight = instanceHeight;
+      let newX = sketchResizerStart.current.instanceX;
+      let newY = sketchResizerStart.current.instanceY;
+      let newWidth = sketchResizerStart.current.instanceWidth;
+      let newHeight = sketchResizerStart.current.instanceHeight;
 
       switch (sketchResizeDirection) {
         case 'top-left':
-          newX = instanceX + dx;
-          newY = instanceY + dy;
-          newWidth = Math.max(10, instanceWidth - dx);
-          newHeight = Math.max(10, instanceHeight - dy);
+          newX += dx;
+          newY += dy;
+          newWidth = Math.max(10, newWidth - dx);
+          newHeight = Math.max(10, newHeight - dy);
           break;
         case 'top-right':
-          newY = instanceY + dy;
-          newWidth = Math.max(10, instanceWidth + dx);
-          newHeight = Math.max(10, instanceHeight - dy);
+          newY += dy;
+          newWidth = Math.max(10, newWidth + dx);
+          newHeight = Math.max(10, newHeight - dy);
           break;
         case 'bottom-right':
-          newWidth = Math.max(10, instanceWidth + dx);
-          newHeight = Math.max(10, instanceHeight + dy);
+          newWidth = Math.max(10, newWidth + dx);
+          newHeight = Math.max(10, newHeight + dy);
           break;
         case 'bottom-left':
-          newX = instanceX + dx;
-          newWidth = Math.max(10, instanceWidth - dx);
-          newHeight = Math.max(10, instanceHeight + dy);
+          newX += dx;
+          newWidth = Math.max(10, newWidth - dx);
+          newHeight = Math.max(10, newHeight + dy);
           break;
       }
 
@@ -490,7 +495,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         })
       );
     }
-  };
+  }
 
   // Handle touch move
   const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
@@ -521,12 +526,16 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     }
     setDraggingInstanceId(null);
     dragStartPos.current = null;
+  };
+
+  const handleEmbeddedMouseUp = (event: React.MouseEvent<HTMLDivElement>) => {
+    console.log("handleEmbeddedMouseUp called", event);
     setDraggingEmbeddedId(null);
     dragEmbeddedStart.current = null;
     setSketchResizingItemId(null);
     setSketchResizeDirection(null);
     sketchResizerStart.current = null;
-  };
+  }
 
   // Handle touch end
   const handleTouchEnd = () => {
@@ -614,7 +623,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       thumbnail: ''
     };
     setInstances(prev => [...prev, newSketch]);
-    setAvailableInstances(prev => [...prev]);
+    setAvailableInstances(prev => instances.filter(inst => inst.type !== 'sketch'));
     setEditingSketchId(newSketch.id);
   };
 
@@ -625,11 +634,30 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     let embedded: EmbeddedInstance | null = null;
 
     if (instance.type === 'text') {
-      embedded = { type: 'text', id: generateId(), content: instance.content };
+      embedded = { type: 'text', id: generateId(), originalId: instance.id, content: instance.content };
     } else if (instance.type === 'image') {
-      embedded = { type: 'image', id: generateId(), src: instance.src };
+      embedded = { type: 'image', id: generateId(), originalId: instance.id, src: instance.src };
     } else if (instance.type === 'table') {
-      embedded = { type: 'table', id: generateId(), originalId: instance.id };
+      // Create a full TableInstance with rows, cols, and cells
+      const tableInstance = instance as TableInstance;
+      embedded = {
+        type: 'table',
+        id: generateId(),
+        originalId: instance.id,
+        rows: tableInstance.rows,
+        cols: tableInstance.cols,
+        cells: tableInstance.cells.map(cell => ({
+          ...cell,
+          content: cell.content.map(content => ({
+            ...content,
+            id: generateId() // Assign new ID for embedded content
+          }))
+        })),
+        x: 50,
+        y: 50,
+        width: instance.width,
+        height: instance.height
+      };
     }
 
     if (embedded) {
@@ -720,6 +748,73 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
           tempCtx.drawImage(img, item.x, item.y, item.width, item.height);
         };
       }
+      else if (item.type === 'instance' && item.instance.type === 'table') {
+        const table = item.instance;
+        const cellWidth = item.width / table.cols;
+        const cellHeight = item.height / table.rows;
+
+        for (let r = 0; r < table.rows; r++) {
+          for (let c = 0; c < table.cols; c++) {
+            const cell = table.cells.find(cell => cell.row === r && cell.col === c);
+            if (!cell) continue;
+
+            // Draw cell border
+            tempCtx.strokeStyle = '#ccc';
+            tempCtx.lineWidth = 1;
+            tempCtx.strokeRect(
+              item.x + c * cellWidth,
+              item.y + r * cellHeight,
+              cellWidth,
+              cellHeight
+            );
+
+            // Draw content of the first item in the cell
+            if (cell.content.length > 0) {
+              const content = cell.content[0];
+              if (content.type === 'text') {
+                tempCtx.fillStyle = '#000';
+                tempCtx.font = '10px sans-serif';
+                const lines = wrapTextForThumbnail(
+                  tempCtx,
+                  content.content,
+                  cellWidth - 4,
+                  cellHeight - 4
+                );
+                lines.forEach((line, i) => {
+                  tempCtx.fillText(
+                    line,
+                    item.x + c * cellWidth + 2,
+                    item.y + r * cellHeight + 10 + (i * 12)
+                  );
+                });
+              } else if (content.type === 'image') {
+                // Draw a placeholder image icon
+                tempCtx.save();
+                tempCtx.fillStyle = '#eee';
+                tempCtx.fillRect(
+                  item.x + c * cellWidth + 1,
+                  item.y + r * cellHeight + 1,
+                  cellWidth - 2,
+                  cellHeight - 2
+                );
+                tempCtx.strokeStyle = '#999';
+                tempCtx.strokeRect(
+                  item.x + c * cellWidth + 5,
+                  item.y + r * cellHeight + 5,
+                  cellWidth - 10,
+                  cellHeight - 10
+                );
+                tempCtx.beginPath();
+                tempCtx.moveTo(item.x + c * cellWidth + 5, item.y + r * cellHeight + cellHeight - 5);
+                tempCtx.lineTo(item.x + c * cellWidth + cellWidth / 2, item.y + r * cellHeight + 5);
+                tempCtx.lineTo(item.x + c * cellWidth + cellWidth - 5, item.y + r * cellHeight + cellHeight - 5);
+                tempCtx.stroke();
+                tempCtx.restore();
+              }
+            }
+          }
+        }
+      }
     });
 
     // Add current stroke if still drawing
@@ -784,11 +879,6 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       })
     );
 
-    // Create new ID
-    const newSketchId = `Sketch${sketchCount + 1}`;
-    setSketchCount(prev => prev + 1);
-    sketch.id = newSketchId;
-
     // Log the operation
     let withstr = sketch.content
       .filter(item => item.type === 'instance')
@@ -797,7 +887,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
           let text = item.instance.content;
           let display = text.length > 10 ? text.slice(0, 10) + '...' : text;
           return `[${display}](#instance-${item.instance.originalId || item.id})`;
-        } else if (item.instance.type === 'image') {
+        } else {
           return `[${item.instance.originalId || item.id}](#instance-${item.instance.originalId || item.id})`;
         }
       })
@@ -812,16 +902,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   // Cancel sketch creation
   const handleCancelSketch = () => {
     if (!editingSketchId) return;
-    const sketch = instances.find(inst =>
-      inst.id === editingSketchId && inst.type === 'sketch'
-    ) as SketchInstance | undefined;
-    if (editingOriginalImageId) {
-      setInstances(prev => prev.filter(inst => inst.id !== editingSketchId));
-      setEditingOriginalImageId(null); // Clear the flag
-    } else if (sketch && sketch.content.length === 0) {
-      // Only remove empty sketches for regular sketch creation
-      setInstances(prev => prev.filter(inst => inst.id !== editingSketchId));
-    }
+    setInstances(prev => prev.filter(inst => inst.id !== editingSketchId));
     setEditingSketchId(null);
   };
 
@@ -1099,8 +1180,10 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       setEditingTextId(instance.id);
       setEditingTextContent(instance.content);
     } else if (instance.type === 'image' || instance.type === 'sketch') {
+      let newId = `Sketch${sketchCount + 1}`;
+      setSketchCount(prev => prev + 1);
       let newSketch: Instance = {
-        id: generateId(),
+        id: newId,
         type: 'sketch',
         x: instance.x,
         y: instance.y,
@@ -1124,7 +1207,6 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
           width: instance.width,
           height: instance.height
         })
-        setEditingOriginalImageId(instance.id); // Store original image ID
       } else if (instance.type === 'sketch') {
         newSketch.content = instance.content.map(item => {
           if (item.type === 'instance') {
@@ -1139,7 +1221,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       }
       setInstances(prev => [...prev, newSketch]);
       setEditingSketchId(newSketch.id);
-      setAvailableInstances(prev => prev.filter(inst => inst.id !== instance.id));
+      setAvailableInstances(prev => prev.filter(inst => inst.id !== instance.id && inst.type !== 'sketch'));
     } else if (instance.type === 'table') {
       let newTable = structuredClone(instance) as TableInstance;
       newTable.id = generateId();
@@ -1152,14 +1234,10 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         }))
       }));
       setInstances(prev => [...prev, newTable]);
-      setAvailableInstances(instances.filter(inst => inst.type !== 'table'));
+      setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
       setEditingTableId(newTable.id);
     }
   }
-
-  useEffect(() => {
-    console.log(availableInstances);
-  })
 
   const handleSaveText = () => {
     const original = instances.find(inst => inst.id === editingTextId);
@@ -1203,9 +1281,12 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     ) as Extract<SketchItem, { type: 'instance' }> | undefined;
     if (!embeddedItem) return;
 
+    const rect = sketchCanvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
     sketchResizerStart.current = {
-      mouseX: e.clientX,
-      mouseY: e.clientY,
+      clientX: e.clientX,
+      clientY: e.clientY,
       instanceWidth: embeddedItem.width,
       instanceHeight: embeddedItem.height,
       instanceX: embeddedItem.x,
@@ -1329,7 +1410,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
 
     setEditingTableId(newId);
     setInstances(prev => [...prev, newTable]);
-    setAvailableInstances(instances.filter(inst => inst.type !== 'table'));
+    setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
   };
 
   // Handle adding to table cell (for both click and drag-and-drop)
@@ -1343,9 +1424,13 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     } else if (instance.type === 'image') {
       embedded = { type: 'image', id: generateId(), originalId: instance.id, src: instance.src };
     } else if (instance.type === 'sketch') {
-      embedded = { type: 'sketch', id: generateId(), originalId: instance.id };
+      // embedded = { type: 'sketch', id: generateId(), originalId: instance.id };
+      console.error("Cannot embed a sketch inside a table");
+      return;
     } else if (instance.type === 'table') {
-      embedded = { type: 'table', id: generateId(), originalId: instance.id };
+      // embedded = { type: 'table', id: generateId(), originalId: instance.id };
+      console.error("Cannot embed a table inside another table");
+      return;
     }
 
     if (embedded) {
@@ -1456,284 +1541,54 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
 
       {editingSketchId ? (
         // Sketch Editor
-        <div className="sketch-editor">
-          <div className="sketch-tools">
-            <button
-              className={`sketch-button ${currentMode === 'draw' ? 'active' : ''}`}
-              onClick={() => setCurrentMode('draw')}
-              disabled={currentMode === 'draw'}
-            >
-              Draw
-            </button>
-            <button
-              className={`sketch-button ${currentMode === 'move' ? 'active' : ''}`}
-              onClick={() => setCurrentMode('move')}
-              disabled={currentMode === 'move'}
-            >
-              Move
-            </button>
-
-            <label>
-              Color:
-              <input
-                type="color"
-                value={sketchColor}
-                onChange={e => setSketchColor(e.target.value)}
-                style={{ marginLeft: '6px' }}
-              />
-            </label>
-            <button onClick={handleSaveSketch}>Save Sketch</button>
-            <button onClick={handleCancelSketch}>Cancel</button>
-          </div>
-
-          <div className="sketch-container" style={{ position: 'relative', backgroundColor: 'white' }}>
-            <canvas
-              ref={sketchCanvasRef}
-              width={800}
-              height={500}
-              onMouseDown={currentMode === 'draw' ? startDrawing : undefined}
-              onMouseMove={currentMode === 'draw' ? draw : undefined}
-              onMouseUp={endDrawing}
-              onMouseLeave={endDrawing}
-              style={{
-                position: 'relative',
-                cursor: currentMode === 'draw' ? 'crosshair' : 'default',
-                backgroundColor: 'transparent',
-                pointerEvents: 'auto',
-                zIndex: currentMode === 'draw' ? 20 : 10
-              }}
-            />
-
-            {(instances.find(inst => inst.id === editingSketchId && inst.type === 'sketch') as SketchInstance | undefined)
-              ?.content.filter((item): item is SketchItem & { type: 'instance' } => item.type === 'instance')
-              .map(item => (
-                <div
-                  key={item.id}
-                  className="embedded-instance"
-                  style={{
-                    position: 'absolute',
-                    left: item.x,
-                    top: item.y,
-                    width: item.width,
-                    height: item.height,
-                    border: '1px dashed #999',
-                    cursor: 'move',
-                    pointerEvents: currentMode === 'move' ? 'auto' : 'none',
-                    zIndex: currentMode === 'draw' ? 10 : 20
-                  }}
-                  onMouseDown={currentMode === 'move' ? (e) => handleEmbeddedMouseDown(e, item.id) : undefined}
-                >
-                  {item.instance.type === 'text' ? (
-                    <p style={{ margin: 0, fontSize: '12px', userSelect: 'none', pointerEvents: 'none' }}>
-                      {item.instance.content}
-                    </p>
-                  ) : item.instance.type === 'image' ? (
-                    <img
-                      src={item.instance.src}
-                      alt="embedded"
-                      style={{ width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none', userSelect: 'none' }}
-                      draggable={false}
-                    />
-                  ) : null}
-
-                  {/* Add resizers for embedded instance */}
-                  {currentMode === 'move' && (
-                    <>
-                      <div
-                        className="resizer top-left"
-                        onMouseDown={e => handleEmbeddedResizerMouseDown(e, 'top-left', item.id)}
-                      />
-                      <div
-                        className="resizer top-right"
-                        onMouseDown={e => handleEmbeddedResizerMouseDown(e, 'top-right', item.id)}
-                      />
-                      <div
-                        className="resizer bottom-right"
-                        onMouseDown={e => handleEmbeddedResizerMouseDown(e, 'bottom-right', item.id)}
-                      />
-                      <div
-                        className="resizer bottom-left"
-                        onMouseDown={e => handleEmbeddedResizerMouseDown(e, 'bottom-left', item.id)}
-                      />
-                    </>
-                  )}
-                </div>
-              ))
-            }
-          </div>
-
-          <div className="available-instances">
-            <h4 style={{ margin: 0 }}>Add to Sketch:</h4>
-            <div className="instance-thumbs">
-              {availableInstances.map(instance => (
-                <div
-                  key={instance.id}
-                  className="instance-thumb"
-                  onClick={() => handleAddToSketch(instance)}
-                >
-                  {instance.type === 'text' ? (
-                    <p className="thumb-text">{instance.content.slice(0, 20)}{instance.content.length > 20 ? '...' : ''}</p>
-                  ) : (
-                    <img
-                      src={(instance.type === 'image' ? instance.src : '')}
-                      alt="thumb"
-                      className="thumb-image"
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <SketchEditor
+          ref={sketchCanvasRef}
+          editingSketchId={editingSketchId}
+          instances={instances}
+          setInstances={setInstances}
+          sketchColor={sketchColor}
+          setSketchColor={setSketchColor}
+          currentMode={currentMode}
+          setCurrentMode={setCurrentMode}
+          currentStroke={currentStroke}
+          setCurrentStroke={setCurrentStroke}
+          onSaveSketch={handleSaveSketch}
+          onCancelSketch={handleCancelSketch}
+          onAddToSketch={handleAddToSketch}
+          availableInstances={availableInstances}
+          handleEmbeddedMouseDown={handleEmbeddedMouseDown}
+          handleEmbeddedResizerMouseDown={handleEmbeddedResizerMouseDown}
+          handleEmbeddedMouseMove={handleEmbeddedMouseMove}
+          handleEmbeddedMouseUp={handleEmbeddedMouseUp}
+          draggingEmbeddedId={draggingEmbeddedId}
+        />
       ) : showTrash ? (
         // Trash View
-        <>
-          <div className="view-title-container">
-            <h3 style={{ margin: 0 }}>Trash Bin ({deletedInstances.length})</h3>
-            <button onClick={() => setShowTrash(false)}>Return</button>
-          </div>
-
-          <div className="view-content">
-            {deletedInstances.length === 0 ? (
-              <p className="empty-trash">Trash is empty</p>
-            ) : (
-              <div className="trash-list">
-                {deletedInstances.map(instance => (
-                  <div key={instance.id} className="trash-item">
-                    <div className="trash-preview">
-                      {instance.type === 'text' ? (
-                        <p>{instance.content}</p>
-                      ) : instance.type === 'image' ? (
-                        <img
-                          src={instance.src}
-                          alt="deleted"
-                          style={{ maxWidth: '100px', maxHeight: '100px' }}
-                        />
-                      ) : instance.type === 'sketch' ? (
-                        <div className="sketch-preview">
-                          {instance.thumbnail ? (
-                            <img
-                              src={instance.thumbnail}
-                              alt="sketch preview"
-                              style={{ width: '100px', height: '80px' }}
-                            />
-                          ) : (
-                            <span>Sketch</span>
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="trash-actions">
-                      <button onClick={() => restoreInstance(instance.id)}>
-                        Restore
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </>
+        <TrashView
+          deletedInstances={deletedInstances}
+          onRestore={restoreInstance}
+          onClose={() => setShowTrash(false)}
+        />
       ) : editingTextId !== null ? (
         // Text Editor View
-        <>
-          <div className="view-title-container">
-            <h3 style={{ margin: 0 }}>Edit Text</h3>
-            <button onClick={handleSaveText}>Save</button>
-            <button onClick={() => setEditingTextId(null)}>Cancel</button>
-          </div>
-          <div className="view-content">
-            <textarea
-              value={editingTextContent}
-              onChange={(e) => setEditingTextContent(e.target.value)}
-              style={{ width: '100%', height: '100%' }}
-            />
-          </div>
-        </>
+        <TextEditor
+          editingTextContent={editingTextContent}
+          onSave={handleSaveText}
+          onCancel={() => setEditingTextId(null)}
+        />
       ) : editingTableId ? (
         // Table Editor View
-        <div className="view-container">
-          <div className="view-title-container">
-            <h3 style={{ margin: 0 }}>Edit Table</h3>
-            <button onClick={saveTable}>Save</button>
-            <button onClick={cancelTableEdit}>Cancel</button>
-          </div>
-          <div className="table-container" style={{ margin: '2px 0', padding: '10px', backgroundColor: '#f5f5f5' }}>
-            {/* <div style={{ marginBottom: '10px' }}>
-              <strong>Click on a cell to select it, then click an instance below to add it</strong>
-              <p>Or drag instances directly into cells</p>
-            </div> */}
-            {instances.find(inst => inst.id === editingTableId && inst.type === 'table') && (
-              <TableGrid
-                table={instances.find(inst =>
-                  inst.id === editingTableId && inst.type === 'table'
-                ) as TableInstance}
-                instances={instances}
-                onAddToTable={handleAddToTable}
-                onRemoveCellContent={removeCellContent}
-                setDraggingInstanceId={setDraggingInstanceId}
-              />
-            )}
-          </div>
-
-          <div className="available-instances">
-            <h4 style={{ margin: '10px 0' }}>Add to Table:</h4>
-            <div className="instance-thumbs">
-              {availableInstances
-                .map(instance => (
-                  <div
-                    key={instance.id}
-                    className="instance-thumb"
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('text/plain', instance.id);
-                      setDraggingInstanceId(instance.id);
-                    }}
-                  >
-                    {instance.type === 'text' ? (
-                      <p className="thumb-text">{instance.content.slice(0, 20)}{instance.content.length > 20 ? '...' : ''}</p>
-                    ) : instance.type === 'image' ? (
-                      <img
-                        src={instance.src}
-                        alt="thumb"
-                        className="thumb-image"
-                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                      />
-                    ) : instance.type === 'sketch' ? (
-                      <div className="sketch-thumbnail">
-                        {instance.thumbnail ? (
-                          <img
-                            src={instance.thumbnail}
-                            alt="sketch"
-                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                          />
-                        ) : (
-                          <div className="sketch-thumb-placeholder" style={{ background: '#e0e0e0', height: '100%' }}>
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-                              <path d="M4 4h16v16h-16v-16zm14 14l-3.5-7-3.5 7h7zm-13 0v-12h12v12h-12zm3-9c-.552 0-1-.448-1-1s.448-1 1-1 1 .448 1 1-.448 1-1 1z" />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                    ) : instance.type === 'table' ? (
-                      <div className="table-thumbnail" style={{ backgroundColor: '#eee', height: '100%', padding: '4px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                          {Array(2).fill(0).map((_, i) => (
-                            <div key={i} style={{ display: 'flex', flex: 1 }}>
-                              {Array(2).fill(0).map((_, j) => (
-                                <div key={`${i}-${j}`} style={{ flex: 1, border: '1px solid #ccc' }}></div>
-                              ))}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-            </div>
-          </div>
-        </div>
+        <TableEditor
+          tableId={editingTableId}
+          instances={instances}
+          onSaveTable={saveTable}
+          onCancel={cancelTableEdit}
+          onAddToTable={handleAddToTable}
+          onRemoveCellContent={removeCellContent}
+          draggingInstanceId={draggingInstanceId}
+          setDraggingInstanceId={setDraggingInstanceId}
+          availableInstances={availableInstances}
+        />
       ) : (
         // Default Instance View
         <>

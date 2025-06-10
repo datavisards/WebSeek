@@ -1,8 +1,32 @@
-export type EmbeddedInstance = 
-  | { type: 'text'; content: string; id: string; originalId?: string }
-  | { type: 'image'; src: string; id: string; originalId?: string }
-  | { type: 'sketch'; id: string; originalId?: string }
-  | { type: 'table'; id: string; originalId?: string };
+export interface EmbeddedTextInstance {
+  type: 'text';
+  content: string;
+  id: string;
+  originalId?: string;
+}
+
+export interface EmbeddedImageInstance {
+  type: 'image';
+  src: string;
+  id: string;
+  originalId?: string;
+}
+
+export interface EmbeddedSketchInstance {
+  type: 'sketch';
+  id: string;
+  originalId?: string;
+}
+
+export interface EmbeddedTableInstance extends TableInstance {
+  originalId?: string;
+}
+
+export type EmbeddedInstance =
+  | EmbeddedTextInstance
+  | EmbeddedImageInstance
+  | EmbeddedSketchInstance
+  | EmbeddedTableInstance;
 
 export type TextInstance = {
   id: string;

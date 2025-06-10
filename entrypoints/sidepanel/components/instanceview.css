@@ -1,52 +1,4 @@
-.resizer {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  background: #000;
-  opacity: 0.5;
-  z-index: 1001;
-  cursor: nwse-resize;
-  border-radius: 50%;
-}
-
-.resizer[data-direction="top-left"] {
-  left: -4px;
-  top: -4px;
-  cursor: nwse-resize;
-}
-
-.resizer[data-direction="top-right"] {
-  right: -4px;
-  top: -4px;
-  cursor: nesw-resize;
-}
-
-.resizer[data-direction="bottom-right"] {
-  right: -4px;
-  bottom: -4px;
-  cursor: nwse-resize;
-}
-
-.resizer[data-direction="bottom-left"] {
-  left: -4px;
-  bottom: -4px;
-  cursor: nesw-resize;
-}
-
-.instance-block {
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-}
-
-.instance-block p {
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-}
-
+/* InstanceView.css */
 button {
   background-color: #4a90e2;
   color: white;
@@ -67,71 +19,18 @@ button[disabled] {
   cursor: not-allowed;
 }
 
-.sketch-editor {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+.instance-block {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
-.sketch-tools {
-  padding: 10px;
-  background: #f0f0f0;
-  border-bottom: 1px solid #ddd;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.sketch-container {
-  position: relative;
-  flex: 1;
-  overflow: hidden;
-}
-
-.available-instances {
-  padding: 10px;
-  background: #f9f9f9;
-  border-top: 1px solid #ddd;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  max-height: 150px;
-  overflow-y: auto;
-}
-
-.instance-thumbs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.instance-thumb {
-  width: 60px;
-  height: 60px;
-  border: 1px solid #ccc;
-  padding: 5px;
-  cursor: pointer;
-  background: white;
-}
-
-.instance-thumb p {
-  margin: 0;
-  font-size: 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sketch-thumbnail {
-  width: 100%;
-  height: 100%;
-  background: #f8f8f8;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sketch-button.active {
-  background-color: #2a6496;
+.instance-block p {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 .instance-block.highlight {
@@ -187,194 +86,37 @@ button[disabled] {
   font-weight: bold;
 }
 
-/* TRASH VIEW */
-.trash-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 15px;
-  border-bottom: 1px solid #eee;
-  margin-bottom: 15px;
-}
-
-.trash-content {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.empty-trash {
-  text-align: center;
-  color: #757575;
-  padding: 20px;
-}
-
-.trash-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 15px;
-}
-
-.trash-item {
-  background: white;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  display: flex;
-  flex-direction: column;
-}
-
-.trash-preview {
-  padding: 10px;
-  text-align: center;
-  border-bottom: 1px solid #eee;
-  min-height: 120px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.trash-preview p {
-  margin: 0;
-  font-size: 0.9rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
-
-.trash-preview img {
-  max-height: 100px;
-  max-width: 100%;
-  object-fit: contain;
-}
-
-.trash-actions {
-  padding: 10px;
-  background: #f9f9f9;
-}
-
-.trash-actions button {
-  width: 100%;
-  padding: 8px;
-  background: #4caf50;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.trash-actions button:hover {
-  background: #388e3c;
-}
-
-.sketch-preview {
-  padding: 10px;
-  text-align: center;
-}
-
-/* Added resizer handles for sketch editor */
-.embedded-instance .resizer {
-    z-index: 10;
-}
-
-.embedded-instance .resizer.top-left {
-    top: -4px;
-    left: -4px;
-    cursor: nwse-resize;
-}
-
-.embedded-instance .resizer.top-right {
-    top: -4px;
-    right: -4px;
-    cursor: nesw-resize;
-}
-
-.embedded-instance .resizer.bottom-right {
-    bottom: -4px;
-    right: -4px;
-    cursor: nwse-resize;
-}
-
-.embedded-instance .resizer.bottom-left {
-    bottom: -4px;
-    left: -4px;
-    cursor: nesw-resize;
-}
-
-/* Table styles */
-.table-cell {
-  position: relative;
-  overflow: hidden;
-  padding: 4px;
-  cursor: pointer;
-  pointer-events: auto; /* Ensure interaction */
-}
-
-.table-cell.drop-zone {
-  border: 2px dashed #2196F3 !important;
-  background-color: #d4edff !important;
-  position: relative;
-}
-
-.table-grid-container {
-  overflow-x: auto;
-  overflow-y: auto;
-  padding: 10px;
-}
-
-.table-cell-preview {
-  flex: 1;
-  border: 1px solid #ccc;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-}
-
-.embedded-instance {
-  position: relative;
-  height: 100%;
-}
-
-.embedded-instance:hover .remove-cell-content {
-  display: block;
-}
-
-.remove-cell-content {
-  display: none;
+.resizer {
   position: absolute;
-  top: 0;
-  right: 0;
-  background: rgba(0,0,0,0.7);
-  color: white;
-  border: none;
-  border-radius: 0 0 0 4px;
-  cursor: pointer;
-  padding: 0 4px;
-  font-size: 12px;
-  line-height: 1;
+  width: 8px;
+  height: 8px;
+  background: #000;
+  opacity: 0.5;
+  z-index: 1001;
+  cursor: nwse-resize;
+  border-radius: 50%;
 }
 
-.sketch-preview-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding: 4px;
+.resizer[data-direction="top-left"] {
+  left: -4px;
+  top: -4px;
+  cursor: nwse-resize;
 }
 
-.sketch-preview-icon svg {
-  fill: #666;
+.resizer[data-direction="top-right"] {
+  right: -4px;
+  top: -4px;
+  cursor: nesw-resize;
 }
 
-.cell-text {
-  margin: 0;
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
+.resizer[data-direction="bottom-right"] {
+  right: -4px;
+  bottom: -4px;
+  cursor: nwse-resize;
+}
+
+.resizer[data-direction="bottom-left"] {
+  left: -4px;
+  bottom: -4px;
+  cursor: nesw-resize;
 }

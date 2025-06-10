@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { TableInstance, Instance, EmbeddedInstance } from '../types';
+import './tablegrid.css';
 
 interface TableGridProps {
   table: TableInstance;
@@ -7,6 +8,7 @@ interface TableGridProps {
   onAddToTable: (instance: Instance, row: number, col: number) => void;
   onRemoveCellContent: (row: number, col: number, contentIdx: number) => void;
   setDraggingInstanceId: React.Dispatch<React.SetStateAction<string | null>>;
+  isReadOnly?: boolean; // New prop
 }
 
 const TableGrid: React.FC<TableGridProps> = ({
@@ -14,7 +16,8 @@ const TableGrid: React.FC<TableGridProps> = ({
   instances,
   onAddToTable,
   onRemoveCellContent,
-  setDraggingInstanceId
+  setDraggingInstanceId,
+  isReadOnly = false
 }) => {
   const cellWidth = Math.max(50, Math.min(200, table.width / table.cols));
   const cellHeight = Math.max(50, Math.min(200, table.height / table.rows));
@@ -41,13 +44,13 @@ const TableGrid: React.FC<TableGridProps> = ({
             <div
               key={`${cell.row}-${cell.col}`}
               className={`table-cell ${isHovered ? 'drop-zone' : ''}`}
-              onDragOver={(e) => {
+              onDragOver={isReadOnly ? undefined : (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 setHoveredCell({row: cell.row, col: cell.col});
               }}
-              onDragLeave={() => setHoveredCell(null)}
-              onDrop={(e) => {
+              onDragLeave={isReadOnly ? undefined : () => setHoveredCell(null)}
+              onDrop={isReadOnly ? undefined : (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 const instanceId = e.dataTransfer.getData('text/plain');
@@ -56,6 +59,7 @@ const TableGrid: React.FC<TableGridProps> = ({
                   onAddToTable(draggedInstance, cell.row, cell.col);
                 }
                 setDraggingInstanceId(null);
+                setHoveredCell(null);
               }}
               style={{
                 border: '1px solid #ddd',
@@ -63,25 +67,27 @@ const TableGrid: React.FC<TableGridProps> = ({
                 position: 'relative',
                 overflow: 'hidden',
                 padding: '4px',
-                cursor: 'pointer',
+                cursor: isReadOnly ? 'default' : 'pointer',
               }}
             >
               {cell.content.map((embedded, idx) => (
                 <div
                   key={embedded.id || idx}
                   className="embedded-instance"
-                  style={{ width: '100%', height: '100%' }}
+                  style={{ width: '100%', height: '100%', userSelect: isReadOnly ? 'none' : undefined }}
                 >
                   {renderEmbeddedContent(embedded)}
-                  <button
-                    className="remove-cell-content"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveCellContent(cell.row, cell.col, idx);
-                    }}
-                  >
-                    ×
-                  </button>
+                  {!isReadOnly && (
+                    <button
+                      className="remove-cell-content"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveCellContent(cell.row, cell.col, idx);
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
