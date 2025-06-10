@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { TableInstance, Instance, EmbeddedInstance } from '../types';
 import './tablegrid.css';
 
@@ -6,9 +6,10 @@ interface TableGridProps {
   table: TableInstance;
   instances: Instance[];
   onAddToTable: (instance: Instance, row: number, col: number) => void;
-  onRemoveCellContent: (row: number, col: number, contentIdx: number) => void;
+  onRemoveCellContent: (row: number, col: number) => void;
+  onEditCellContent: (row: number, col: number, newValue: string) => void;
   setDraggingInstanceId: React.Dispatch<React.SetStateAction<string | null>>;
-  isReadOnly?: boolean; // New prop
+  isReadOnly?: boolean;
 }
 
 const TableGrid: React.FC<TableGridProps> = ({
@@ -16,12 +17,49 @@ const TableGrid: React.FC<TableGridProps> = ({
   instances,
   onAddToTable,
   onRemoveCellContent,
+  onEditCellContent,
   setDraggingInstanceId,
   isReadOnly = false
 }) => {
   const cellWidth = Math.max(50, Math.min(200, table.width / table.cols));
   const cellHeight = Math.max(50, Math.min(200, table.height / table.rows));
-  const [hoveredCell, setHoveredCell] = useState<{row: number, col: number} | null>(null);
+  const [hoveredCell, setHoveredCell] = useState<{ row: number, col: number } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{ row: number, col: number } | null>(null);
+  const [editingCell, setEditingCell] = useState<{ row: number, col: number } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    // Focus input when editing starts
+    if (editingCell !== null && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [editingCell]);
+
+  const handleCellClick = (row: number, col: number) => {
+    setSelectedCell({ row, col });
+    setEditingCell(null);
+  };
+
+  const handleContentClick = (e: React.MouseEvent, row: number, col: number) => {
+    e.stopPropagation();
+    setSelectedCell({ row, col });
+    setEditingCell({ row, col });
+  };
+
+  const handleBlur = (e: React.FocusEvent, row: number, col: number) => {
+    const newValue = e.currentTarget.textContent || '';
+    onEditCellContent(row, col, newValue);
+    setEditingCell(null);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, row: number, col: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const newValue = e.currentTarget.textContent || '';
+      onEditCellContent(row, col, newValue);
+      setEditingCell(null);
+    }
+  };
 
   return (
     <div className="table-grid-container">
@@ -36,18 +74,24 @@ const TableGrid: React.FC<TableGridProps> = ({
         }}
       >
         {table.cells.map(cell => {
-          const isHovered = hoveredCell && 
-                            hoveredCell.row === cell.row && 
-                            hoveredCell.col === cell.col;
+          const isHovered = hoveredCell &&
+            hoveredCell.row === cell.row &&
+            hoveredCell.col === cell.col;
+          const isSelected = selectedCell &&
+            selectedCell.row === cell.row &&
+            selectedCell.col === cell.col;
+          const isEditing = editingCell &&
+            editingCell.row === cell.row &&
+            editingCell.col === cell.col;
 
           return (
             <div
               key={`${cell.row}-${cell.col}`}
-              className={`table-cell ${isHovered ? 'drop-zone' : ''}`}
+              className={`table-cell ${isHovered ? 'drop-zone' : ''} ${isSelected ? 'selected' : ''} ${isEditing ? 'editing' : ''}`}
               onDragOver={isReadOnly ? undefined : (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                setHoveredCell({row: cell.row, col: cell.col});
+                setHoveredCell({ row: cell.row, col: cell.col });
               }}
               onDragLeave={isReadOnly ? undefined : () => setHoveredCell(null)}
               onDrop={isReadOnly ? undefined : (e) => {
@@ -61,35 +105,57 @@ const TableGrid: React.FC<TableGridProps> = ({
                 setDraggingInstanceId(null);
                 setHoveredCell(null);
               }}
+              onClick={isReadOnly ? undefined : () => handleCellClick(cell.row, cell.col)}
+              onDoubleClick={isReadOnly ? undefined : () => {
+                const isTextCell = !cell.content || (cell.content.type === 'text');
+                if (isTextCell) {
+                  setEditingCell({ row: cell.row, col: cell.col });
+                } else {
+                  alert('Non-textual content cannot be edited directly. Please remove it first.');
+                }
+              }}
               style={{
-                border: '1px solid #ddd',
-                backgroundColor: 'white',
-                position: 'relative',
-                overflow: 'hidden',
-                padding: '4px',
                 cursor: isReadOnly ? 'default' : 'pointer',
               }}
             >
-              {cell.content.map((embedded, idx) => (
+              {cell.content &&
                 <div
-                  key={embedded.id || idx}
-                  className="embedded-instance"
-                  style={{ width: '100%', height: '100%', userSelect: isReadOnly ? 'none' : undefined }}
+                  key={cell.content.id}
+                  className={`embedded-instance ${isEditing ? 'editing-content' : ''}`}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    userSelect: isReadOnly ? 'none' : undefined
+                  }}
+                  onClick={isReadOnly ? undefined : (e) => handleContentClick(e, cell.row, cell.col)}
                 >
-                  {renderEmbeddedContent(embedded)}
-                  {!isReadOnly && (
+                  {isEditing && cell.content.type === 'text' ? (
+                    <div
+                      contentEditable
+                      suppressContentEditableWarning
+                      className="editable-text"
+                      ref={inputRef}
+                      onBlur={isReadOnly ? undefined : (e) => handleBlur(e, cell.row, cell.col)}
+                      onKeyDown={isReadOnly ? undefined : (e) => handleKeyDown(e, cell.row, cell.col)}
+                    >
+                      {cell.content.content}
+                    </div>
+                  ) : (
+                    renderEmbeddedContent(cell.content)
+                  )}
+                  {!isReadOnly && !isEditing && (
                     <button
                       className="remove-cell-content"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onRemoveCellContent(cell.row, cell.col, idx);
+                        onRemoveCellContent(cell.row, cell.col);
                       }}
                     >
                       ×
                     </button>
                   )}
                 </div>
-              ))}
+              }
             </div>
           );
         })}
@@ -98,7 +164,7 @@ const TableGrid: React.FC<TableGridProps> = ({
   );
 };
 
-// Helper to render different embedded content types
+// Helper to render different embedded content types (unchanged)
 function renderEmbeddedContent(embedded: EmbeddedInstance) {
   switch (embedded.type) {
     case 'text':

@@ -648,10 +648,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         cols: tableInstance.cols,
         cells: tableInstance.cells.map(cell => ({
           ...cell,
-          content: cell.content.map(content => ({
-            ...content,
-            id: generateId() // Assign new ID for embedded content
-          }))
+          content: cell.content ? { ...cell.content, id: generateId() } : null
         })),
         x: 50,
         y: 50,
@@ -769,8 +766,8 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
             );
 
             // Draw content of the first item in the cell
-            if (cell.content.length > 0) {
-              const content = cell.content[0];
+            if (cell.content) {
+              const content = cell.content;
               if (content.type === 'text') {
                 tempCtx.fillStyle = '#000';
                 tempCtx.font = '10px sans-serif';
@@ -1225,13 +1222,13 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     } else if (instance.type === 'table') {
       let newTable = structuredClone(instance) as TableInstance;
       newTable.id = generateId();
-      newTable.cells = newTable.cells.map(row => ({
-        ...row,
-        content: row.content.map(cell => ({
-          ...cell,
+      newTable.cells = newTable.cells.map(cell => ({
+        ...cell,
+        content: cell.content ? {
+          ...cell.content,
           id: generateId(),
-          originalId: cell.originalId
-        }))
+          originalId: cell.content.originalId
+        } : null
       }));
       setInstances(prev => [...prev, newTable]);
       setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
@@ -1391,7 +1388,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     const cells = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        cells.push({ row: r, col: c, content: [] });
+        cells.push({ row: r, col: c, content: null });
       }
     }
 
@@ -1443,13 +1440,11 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
           if (cellIndex >= 0) {
             newCells[cellIndex] = {
               ...newCells[cellIndex],
-              content: [
-                ...newCells[cellIndex].content,
-                {
-                  ...embedded!,
-                  id: generateId()
-                }
-              ]
+              content: { // Note: the current cell content is replaced
+                ...embedded!,
+                id: generateId()
+              }
+
             };
           }
           return { ...inst, cells: newCells };
@@ -1460,25 +1455,8 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   }, [editingTableId, setInstances, instances]);
 
   // Remove content from table cell
-  const removeCellContent = (row: number, col: number, contentIdx: number) => {
-    setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
-        const newCells = inst.cells.map(cell => {
-          if (cell.row === row && cell.col === col) {
-            // Remove by index
-            const newContent = [...cell.content];
-            newContent.splice(contentIdx, 1);
-            return {
-              ...cell,
-              content: newContent
-            };
-          }
-          return cell;
-        });
-        return { ...inst, cells: newCells };
-      }
-      return inst;
-    }));
+  const removeCellContent = (row: number, col: number) => {
+
   };
 
   const saveTable = () => {
@@ -1490,22 +1468,21 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     setInstances(prev => prev.map(inst => inst.id === editingTableId ? table : inst));
     // Log the operation
     let withstr = "";
-    if (table.cells.some(cell => cell.content.length > 0)) {
+    if (table.cells.some(cell => cell.content != null)) {
       withstr = table.cells.map(cell => {
-        return cell.content.map(embedded => {
-          if (embedded.type === 'text') {
-            let text = embedded.content;
-            let display = text.length > 10 ? text.slice(0, 10) + '...' : text;
-            return `[${display}](#instance-${embedded.originalId || embedded.id})`;
-          } else if (embedded.type === 'image') {
-            return `[${embedded.originalId || embedded.id}](#instance-${embedded.originalId || embedded.id})`;
-          } else if (embedded.type === 'sketch') {
-            return `[${embedded.originalId || embedded.id}](#instance-${embedded.originalId || embedded.id})`;
-          } else if (embedded.type === 'table') {
-            return `[${embedded.originalId || embedded.id}](#instance-${embedded.originalId || embedded.id})`;
-          }
-          return '';
-        }).filter(item => item != '').join(', ');
+        let embedded = cell.content;
+        if (!embedded) return '';
+        if (embedded.type === 'text') {
+          let text = embedded.content;
+          let display = text.length > 10 ? text.slice(0, 10) + '...' : text;
+          return `[${display}](#instance-${embedded.originalId || embedded.id})`;
+        } else if (embedded.type === 'image') {
+          return `[${embedded.originalId || embedded.id}](#instance-${embedded.originalId || embedded.id})`;
+        } else if (embedded.type === 'sketch') {
+          return `[${embedded.originalId || embedded.id}](#instance-${embedded.originalId || embedded.id})`;
+        } else if (embedded.type === 'table') {
+          return `[${embedded.originalId || embedded.id}](#instance-${embedded.originalId || embedded.id})`;
+        }
       }).filter(item => item != '').join(', ');
     }
 
@@ -1730,30 +1707,42 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                             gap: '2px',
                           }}
                         >
-                          {cell.content.length > 0 ? (
-                            cell.content.map(embedded => {
-                              if (embedded.type === 'text') {
-                                return (
-                                  <p
-                                    key={embedded.id}
-                                    style={{
-                                      margin: 0,
-                                      fontSize: '10px',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    {embedded.content.length > 10
-                                      ? `${embedded.content.slice(0, 10)}...`
-                                      : embedded.content}
-                                  </p>
-                                );
-                              } else if (embedded.type === 'image') {
-                                return (
+                          {!cell.content ? (
+                            <div
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                background: '#f0f0f0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#aaa',
+                                fontSize: '8px',
+                              }}
+                            >
+                              Empty
+                            </div>) :
+                            cell.content.type === 'text' ? (
+                              <p
+                                key={cell.content.id}
+                                style={{
+                                  margin: 0,
+                                  fontSize: '10px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {cell.content.content.length > 10
+                                  ? `${cell.content.content.slice(0, 10)}...`
+                                  : cell.content.content}
+                              </p>
+                            )
+                              : cell.content.type === 'image' ?
+                                (
                                   <img
-                                    key={embedded.id}
-                                    src={embedded.src}
+                                    key={cell.content.id}
+                                    src={cell.content.src}
                                     alt="thumbnail"
                                     style={{
                                       maxWidth: '100%',
@@ -1762,11 +1751,10 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                                       pointerEvents: 'none',
                                     }}
                                   />
-                                );
-                              } else if (embedded.type === 'sketch') {
-                                return (
+                                )
+                                : cell.content.type === 'sketch' ? (
                                   <div
-                                    key={embedded.id}
+                                    key={cell.content.id}
                                     style={{
                                       width: '100%',
                                       height: '100%',
@@ -1785,11 +1773,9 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                                       <path d="M4 4h16v16h-16v-16zm1 2v12h14v-12h-14zm12 9h-4v-2h4v-6h-6v-2h10v8h-2z" />
                                     </svg>
                                   </div>
-                                );
-                              } else if (embedded.type === 'table') {
-                                return (
+                                ) : (cell.content.type === 'table') ? (
                                   <div
-                                    key={embedded.id}
+                                    key={cell.content.id}
                                     style={{
                                       width: '100%',
                                       height: '100%',
@@ -1808,26 +1794,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                                       <path d="M4 8h16v12h-16v-12zm1 2v2h4v-2h-4zm5 0v2h4v-2h-4zm5 0v2h4v-2h-4zm-10 4v2h4v-2h-4zm5 0v2h4v-2h-4zm5 0v2h4v-2h-4z" />
                                     </svg>
                                   </div>
-                                );
-                              }
-                              return null;
-                            })
-                          ) : (
-                            <div
-                              style={{
-                                width: '100%',
-                                height: '100%',
-                                background: '#f0f0f0',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#aaa',
-                                fontSize: '8px',
-                              }}
-                            >
-                              Empty
-                            </div>
-                          )}
+                                ) : null}
                         </div>
                       ))}
                     </div>

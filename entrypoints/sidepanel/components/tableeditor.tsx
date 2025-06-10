@@ -10,7 +10,7 @@ interface TableEditorProps {
   onSaveTable: () => void;
   onCancel: () => void;
   onAddToTable: (instance: Instance, row: number, col: number) => void;
-  onRemoveCellContent: (row: number, col: number, contentIdx: number) => void;
+  onRemoveCellContent: (row: number, col: number) => void;
   draggingInstanceId: string | null;
   setDraggingInstanceId: React.Dispatch<React.SetStateAction<string | null>>;
   availableInstances: Instance[];
@@ -29,7 +29,7 @@ const TableEditor: React.FC<TableEditorProps> = ({
 }) => {
   if (!tableId) return null;
 
-  const table = instances.find(inst => 
+  const table = instances.find(inst =>
     inst.id === tableId && inst.type === 'table'
   ) as TableInstance | undefined;
 
@@ -42,7 +42,7 @@ const TableEditor: React.FC<TableEditorProps> = ({
         <button onClick={onSaveTable}>Save</button>
         <button onClick={onCancel}>Cancel</button>
       </div>
-      
+
       <div className="table-container" style={{ margin: '2px 0', padding: '10px', backgroundColor: '#f5f5f5' }}>
         <TableGrid
           table={table}
@@ -50,6 +50,7 @@ const TableEditor: React.FC<TableEditorProps> = ({
           onAddToTable={onAddToTable}
           onRemoveCellContent={onRemoveCellContent}
           setDraggingInstanceId={setDraggingInstanceId}
+          onEditCellContent={(row: number, col: number, newValue: string) => {}}
         />
       </div>
 
@@ -68,43 +69,43 @@ const TableEditor: React.FC<TableEditorProps> = ({
                 }}
               >
                 {instance.type === 'text' ? (
-                      <p className="thumb-text">{instance.content.slice(0, 20)}{instance.content.length > 20 ? '...' : ''}</p>
-                    ) : instance.type === 'image' ? (
+                  <p className="thumb-text">{instance.content.slice(0, 20)}{instance.content.length > 20 ? '...' : ''}</p>
+                ) : instance.type === 'image' ? (
+                  <img
+                    src={instance.src}
+                    alt="thumb"
+                    className="thumb-image"
+                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                  />
+                ) : instance.type === 'sketch' ? (
+                  <div className="sketch-thumbnail">
+                    {instance.thumbnail ? (
                       <img
-                        src={instance.src}
-                        alt="thumb"
-                        className="thumb-image"
-                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                        src={instance.thumbnail}
+                        alt="sketch"
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                       />
-                    ) : instance.type === 'sketch' ? (
-                      <div className="sketch-thumbnail">
-                        {instance.thumbnail ? (
-                          <img
-                            src={instance.thumbnail}
-                            alt="sketch"
-                            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                          />
-                        ) : (
-                          <div className="sketch-thumb-placeholder" style={{ background: '#e0e0e0', height: '100%' }}>
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
-                              <path d="M4 4h16v16h-16v-16zm14 14l-3.5-7-3.5 7h7zm-13 0v-12h12v12h-12zm3-9c-.552 0-1-.448-1-1s.448-1 1-1 1 .448 1 1-.448 1-1 1z" />
-                            </svg>
-                          </div>
-                        )}
+                    ) : (
+                      <div className="sketch-thumb-placeholder" style={{ background: '#e0e0e0', height: '100%' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                          <path d="M4 4h16v16h-16v-16zm14 14l-3.5-7-3.5 7h7zm-13 0v-12h12v12h-12zm3-9c-.552 0-1-.448-1-1s.448-1 1-1 1 .448 1 1-.448 1-1 1z" />
+                        </svg>
                       </div>
-                    ) : instance.type === 'table' ? (
-                      <div className="table-thumbnail" style={{ backgroundColor: '#eee', height: '100%', padding: '4px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                          {Array(2).fill(0).map((_, i) => (
-                            <div key={i} style={{ display: 'flex', flex: 1 }}>
-                              {Array(2).fill(0).map((_, j) => (
-                                <div key={`${i}-${j}`} style={{ flex: 1, border: '1px solid #ccc' }}></div>
-                              ))}
-                            </div>
+                    )}
+                  </div>
+                ) : instance.type === 'table' ? (
+                  <div className="table-thumbnail" style={{ backgroundColor: '#eee', height: '100%', padding: '4px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                      {Array(2).fill(0).map((_, i) => (
+                        <div key={i} style={{ display: 'flex', flex: 1 }}>
+                          {Array(2).fill(0).map((_, j) => (
+                            <div key={`${i}-${j}`} style={{ flex: 1, border: '1px solid #ccc' }}></div>
                           ))}
                         </div>
-                      </div>
-                    ) : null}
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ))}
         </div>

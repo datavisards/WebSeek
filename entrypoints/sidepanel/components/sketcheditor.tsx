@@ -265,6 +265,9 @@ const SketchEditor: React.FC<SketchEditorProps> = forwardRef<HTMLCanvasElement, 
                     setDraggingInstanceId={() => {
                       // No-op for read-only view
                     }}
+                    onEditCellContent={() => {
+                      // No-op for read-only view
+                    }}
                     isReadOnly={true}
                   />
                 </div>
@@ -361,32 +364,26 @@ const SketchEditor: React.FC<SketchEditorProps> = forwardRef<HTMLCanvasElement, 
                             color: '#333'
                           }}
                         >
-                          {cell ? (
-                            cell.content.length > 0 ? (
-                              cell.content.map((content, i) => (
-                                <div key={i} style={{ textAlign: 'center' }}>
-                                  {content.type === 'text' ? (
-                                    <span title={content.content}>
-                                      {content.content.length > 4
-                                        ? `${content.content.slice(0, 4)}...`
-                                        : content.content}
-                                    </span>
-                                  ) : content.type === 'image' ? (
-                                    <img
-                                      src={content.src}
-                                      alt="cell"
-                                      style={{
-                                        width: '100%',
-                                        height: '100%',
-                                        objectFit: 'contain'
-                                      }}
-                                    />
-                                  ) : null}
-                                </div>
-                              ))
-                            ) : (
-                              <div>Empty</div>
-                            )
+                          {cell && cell.content ? (
+                            <div style={{ textAlign: 'center' }}>
+                              {cell.content.type === 'text' ? (
+                                <span title={cell.content.content}>
+                                  {cell.content.content.length > 4
+                                    ? `${cell.content.content.slice(0, 4)}...`
+                                    : cell.content.content}
+                                </span>
+                              ) : cell.content.type === 'image' ? (
+                                <img
+                                  src={cell.content.src}
+                                  alt="cell"
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'contain'
+                                  }}
+                                />
+                              ) : null}
+                            </div>
                           ) : (
                             <div>Empty</div>
                           )}

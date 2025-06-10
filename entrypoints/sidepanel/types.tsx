@@ -88,7 +88,7 @@ export type TableInstance = {
   cells: Array<{
     row: number;
     col: number;
-    content: EmbeddedInstance[];
+    content: EmbeddedInstance | null;
   }>;
   x: number;
   y: number;

@@ -2,7 +2,6 @@
 .table-grid-container {
   overflow-x: auto;
   overflow-y: auto;
-  padding: 10px;
 }
 
 .table-cell {
@@ -10,13 +9,25 @@
   overflow: hidden;
   padding: 4px;
   cursor: pointer;
-  pointer-events: auto; /* Ensure interaction */
+  pointer-events: auto;
+  border: 1px solid #ddd;
+  background-color: white;
 }
 
 .table-cell.drop-zone {
   border: 2px dashed #2196F3 !important;
   background-color: #d4edff !important;
   position: relative;
+}
+
+.table-cell.selected {
+  box-shadow: 0 0 0 1.5px #4a90e2;
+  z-index: 1;
+}
+
+.table-cell.editing {
+  box-shadow: 0 0 0 2.5px #4a90e2;
+  z-index: 1;
 }
 
 .embedded-instance {
@@ -33,7 +44,7 @@
   position: absolute;
   top: 0;
   right: 0;
-  background: rgba(0,0,0,0.7);
+  background: rgba(0, 0, 0, 0.7);
   color: white;
   border: none;
   border-radius: 0 0 0 4px;
