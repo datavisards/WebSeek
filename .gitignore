@@ -12,7 +12,6 @@ node_modules
 stats.html
 stats-*.json
 .wxt
-.env
 web-ext.config.ts
 
 # Editor directories and files
@@ -25,3 +24,6 @@ web-ext.config.ts
 *.njsproj
 *.sln
 *.sw?
+
+# Ignore .env file
+.env
