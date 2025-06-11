@@ -7,3 +7,38 @@
   font-family: monospace;
   font-size: 14px;
 }
+
+.operation-log.selected {
+  background-color: #d0ebff;
+}
+
+.parsed-summary {
+  margin-top: 5px;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+}
+
+.parsed-summary h4 {
+  margin-top: 0;
+}
+
+.collapse-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  margin: auto 8px;
+  
+}
+
+.parsed-summary-header {
+  margin: 0;
+  background-color: #f5f5f5;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}

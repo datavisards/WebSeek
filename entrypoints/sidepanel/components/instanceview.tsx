@@ -1,6 +1,7 @@
 import { browser, type Browser } from 'wxt/browser';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Instance, EmbeddedInstance, SketchItem, TextInstance, ImageInstance, SketchInstance, TableInstance } from '../types';
+import { cleanHTML } from '../utils';
 import TextEditor from './texteditor';
 import SketchEditor from './sketcheditor';
 import TrashView from './trashview';
@@ -10,9 +11,10 @@ import './instanceview.css';
 // Props interface for the component
 interface InstanceViewProps {
   onOperation: (message: string) => void;
+  updateHTMLContext: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }
 
-const InstanceView = ({ onOperation }: InstanceViewProps) => {
+const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => {
   const [instances, setInstances] = useState<Instance[]>([]);
   const instancesRef = useRef<Instance[]>([]); // Update the latest instances (For callback)
   // Counters for different instance types
@@ -198,7 +200,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       if (text) {
         const newId = `Text${textCountRef.current + 1}`;
         setTextCount(prev => prev + 1);
-        onOperation(`Created [${text.length > 10 ? text.slice(0, 10) + '...' : text}](#instance-${newId})`);
+        onOperation(`Created [${text}](#instance-${newId})`);
         setInstances(prev => [...prev, {
           id: newId,
           type: 'text',
@@ -250,7 +252,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         item.getAsString((text) => {
           const newId = `Text${textCountRef.current + 1}`;
           setTextCount(prev => prev + 1);
-          onOperation(`Created [${text.length > 10 ? text.slice(0, 10) + '...' : text}](#instance-${newId})`);
+          onOperation(`Created [${text}](#instance-${newId})`);
           setInstances(prev => [...prev, {
             id: newId,
             type: 'text',
@@ -882,8 +884,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       .map(item => {
         if (item.instance.type === 'text') {
           let text = item.instance.content;
-          let display = text.length > 10 ? text.slice(0, 10) + '...' : text;
-          return `[${display}](#instance-${item.instance.originalId || item.id})`;
+          return `[${text}](#instance-${item.instance.originalId || item.id})`;
         } else {
           return `[${item.instance.originalId || item.id}](#instance-${item.instance.originalId || item.id})`;
         }
@@ -1055,6 +1056,14 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       console.log("UI received FROM BACKGROUND:", msg);
       // Handle messages (msg.action, etc.)
       if (msg.action === 'element_selected') {
+        if (msg.pageURL && msg.outerHTML) {
+          msg.outerHTML = cleanHTML(msg.outerHTML);
+          updateHTMLContext(prev => ({
+            ...prev,
+            [msg.pageURL]: msg.outerHTML
+          }));
+        }
+        console.log("HTML cleaned:", msg.outerHTML);
         handleElementSelected(msg);
       } else if (msg.action === 'selection_canceled') {
         console.log("Element selection canceled");
@@ -1078,7 +1087,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
       const text = message.data;
       const newId = `Text${textCountRef.current + 1}`;
       setTextCount(prev => prev + 1);
-      onOperation(`Created [${text.length > 10 ? text.slice(0, 10) + '...' : text}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`);
+      onOperation(`Created [${text}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`);
       setInstances(prev => [
         ...prev,
         {
@@ -1239,7 +1248,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   const handleSaveText = () => {
     const original = instances.find(inst => inst.id === editingTextId);
     if (!original || original.type !== 'text') return;
-    const originalDisplay = original.content.length > 10 ? original.content.slice(0, 10) + '...' : original.content;
+    const originalDisplay = original.content;
 
     const newTextId = `Text${textCountRef.current + 1}`;
     setTextCount(prev => prev + 1);
@@ -1255,7 +1264,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         height: original.height
       }
     ]);
-    const newDisplay = editingTextContent.length > 10 ? editingTextContent.slice(0, 10) + '...' : editingTextContent;
+    const newDisplay = editingTextContent;
 
     onOperation(`Edited [${originalDisplay}](#instance-${original.id}) into [${newDisplay}](#instance-${newTextId})`);
 
@@ -1474,9 +1483,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
         let embedded = cell.content;
         if (!embedded || embedded.id.startsWith('_')) return '';
         if (embedded.type === 'text') {
-          let text = embedded.content;
-          let display = text.length > 10 ? text.slice(0, 10) + '...' : text;
-          return `[${display}](#instance-${embedded.originalId || embedded.id})`;
+          return `[${embedded.content}](#instance-${embedded.originalId || embedded.id})`;
         } else if (embedded.type === 'image') {
           return `[${embedded.originalId || embedded.id}](#instance-${embedded.originalId || embedded.id})`;
         } else if (embedded.type === 'sketch') {

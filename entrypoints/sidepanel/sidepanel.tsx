@@ -6,6 +6,7 @@ import './sidepanel.css';
 
 const SidePanel = () => {
   const [logs, setLogs] = useState<string[]>([]);
+  const [htmlContexts, setHtmlContexts] = useState<Record<string, string>>({});
 
   const addLog = (message: string) => {
     setLogs(prev => [...prev, message]);
@@ -13,8 +14,8 @@ const SidePanel = () => {
 
   return (
     <div className="side-panel">
-      <OperationView logs={logs} />
-      <InstanceView onOperation={addLog} />
+      <OperationView logs={logs} htmlContexts={htmlContexts}/>
+      <InstanceView onOperation={addLog} updateHTMLContext={setHtmlContexts}/>
     </div>
   );
 };

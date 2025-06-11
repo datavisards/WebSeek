@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TableInstance, Instance, EmbeddedInstance } from '../types';
+import { indexToLetters } from '../utils';
 import './tablegrid.css';
 
 interface TableGridProps {
@@ -134,16 +135,6 @@ const TableGrid: React.FC<TableGridProps> = ({
     setSelectedRows(allRows);
     setSelectedColumns(allColumns);
     setSelectedCell(null);
-  };
-
-  // Convert column index to Excel-style letters (0 -> A, 1-> B, etc.)
-  const indexToLetters = (index: number): string => {
-    let letters = '';
-    do {
-      letters = String.fromCharCode(65 + (index % 26)) + letters;
-      index = Math.floor(index / 26) - 1;
-    } while (index >= 0);
-    return letters;
   };
 
   // Check if a cell should be highlighted based on row/column selection

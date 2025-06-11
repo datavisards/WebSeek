@@ -77,11 +77,13 @@ function startElementSelection() {
       clickEvent.stopPropagation();
 
       const data = target.innerText.trim() || (target instanceof HTMLImageElement ? target.src : null);
+      const htmlContent = document.documentElement.outerHTML;
       if (data) {
         browser.runtime.sendMessage({
           action: 'element_selected',
           type: target instanceof HTMLImageElement ? 'image' : 'text',
           data,
+          outerHTML: htmlContent
         });
       }
 
