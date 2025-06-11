@@ -75,3 +75,25 @@
 .editable-text:focus {
   outline: 2px solid #1976D2;
 }
+
+.grid-header {
+  background-color: #f0f0f0;
+  border: 1px solid #ccc;
+  font-weight: bold;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.corner-header {
+  background-color: #e0e0e0;
+}
+
+.selected-header {
+  background-color: #d0e3f0 !important;
+}
+
+.header-selected {
+  background-color: rgba(0, 120, 215, 0.1) !important;
+}

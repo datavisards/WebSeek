@@ -24,12 +24,15 @@ const TableGrid: React.FC<TableGridProps> = ({
   const cellWidth = Math.max(50, Math.min(200, table.width / table.cols));
   const cellHeight = Math.max(50, Math.min(200, table.height / table.rows));
   const [hoveredCell, setHoveredCell] = useState<{ row: number, col: number } | null>(null);
-  const [selectedCell, setSelectedCell] = useState<{ row: number, col: number } | null>(null);
   const [editingCell, setEditingCell] = useState<{ row: number, col: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  
+  // Multi-selection states
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  const [selectedColumns, setSelectedColumns] = useState<Set<number>>(new Set());
+  const [selectedCell, setSelectedCell] = useState<{ row: number, col: number } | null>(null);
 
   useEffect(() => {
-    // Focus input when editing starts
     if (editingCell !== null && inputRef.current) {
       inputRef.current.focus();
     }
@@ -37,12 +40,16 @@ const TableGrid: React.FC<TableGridProps> = ({
 
   const handleCellClick = (row: number, col: number) => {
     setSelectedCell({ row, col });
+    setSelectedRows(new Set());
+    setSelectedColumns(new Set());
     setEditingCell(null);
   };
 
   const handleContentClick = (e: React.MouseEvent, row: number, col: number) => {
     e.stopPropagation();
     setSelectedCell({ row, col });
+    setSelectedRows(new Set());
+    setSelectedColumns(new Set());
     setEditingCell({ row, col });
   };
 
@@ -61,33 +68,174 @@ const TableGrid: React.FC<TableGridProps> = ({
     }
   };
 
+  // Row selection handlers
+  const handleRowHeaderClick = (rowIndex: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isReadOnly) return;
+
+    if (e.ctrlKey || e.metaKey) {
+      // Toggle selection with Ctrl/Cmd
+      setSelectedRows(prev => {
+        const newSet = new Set(prev);
+        newSet.has(rowIndex) ? newSet.delete(rowIndex) : newSet.add(rowIndex);
+        return newSet;
+      });
+    } else if (e.shiftKey && selectedRows.size > 0) {
+      // Range selection with Shift
+      const min = Math.min(...selectedRows, rowIndex);
+      const max = Math.max(...selectedRows, rowIndex);
+      const newSet = new Set<number>();
+      for (let i = min; i <= max; i++) newSet.add(i);
+      setSelectedRows(newSet);
+    } else {
+      // Single selection
+      setSelectedRows(new Set([rowIndex]));
+    }
+    setSelectedColumns(new Set());
+    setSelectedCell(null);
+  };
+
+  // Column selection handlers
+  const handleColumnHeaderClick = (colIndex: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isReadOnly) return;
+
+    if (e.ctrlKey || e.metaKey) {
+      // Toggle selection with Ctrl/Cmd
+      setSelectedColumns(prev => {
+        const newSet = new Set(prev);
+        newSet.has(colIndex) ? newSet.delete(colIndex) : newSet.add(colIndex);
+        return newSet;
+      });
+    } else if (e.shiftKey && selectedColumns.size > 0) {
+      // Range selection with Shift
+      const min = Math.min(...selectedColumns, colIndex);
+      const max = Math.max(...selectedColumns, colIndex);
+      const newSet = new Set<number>();
+      for (let i = min; i <= max; i++) newSet.add(i);
+      setSelectedColumns(newSet);
+    } else {
+      // Single selection
+      setSelectedColumns(new Set([colIndex]));
+    }
+    setSelectedRows(new Set());
+    setSelectedCell(null);
+  };
+
+  // Corner header handler (selects everything)
+  const handleCornerClick = () => {
+    if (isReadOnly) return;
+    
+    const allRows = new Set<number>();
+    const allColumns = new Set<number>();
+    for (let i = 0; i < table.rows; i++) allRows.add(i);
+    for (let i = 0; i < table.cols; i++) allColumns.add(i);
+    
+    setSelectedRows(allRows);
+    setSelectedColumns(allColumns);
+    setSelectedCell(null);
+  };
+
+  // Convert column index to Excel-style letters (0 -> A, 1-> B, etc.)
+  const indexToLetters = (index: number): string => {
+    let letters = '';
+    do {
+      letters = String.fromCharCode(65 + (index % 26)) + letters;
+      index = Math.floor(index / 26) - 1;
+    } while (index >= 0);
+    return letters;
+  };
+
+  // Check if a cell should be highlighted based on row/column selection
+  const isSelectedViaHeader = (row: number, col: number) => {
+    return selectedRows.has(row) || selectedColumns.has(col);
+  };
+
   return (
     <div className="table-grid-container">
       <div
         className="table-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: `repeat(${table.cols}, ${cellWidth}px)`,
-          gridTemplateRows: `repeat(${table.rows}, ${cellHeight}px)`,
+          gridTemplateColumns: `50px repeat(${table.cols}, ${cellWidth}px)`,
+          gridTemplateRows: `30px repeat(${table.rows}, ${cellHeight}px)`,
           border: '1px solid #ccc',
           width: 'fit-content'
         }}
       >
+        {/* Corner Header */}
+        <div
+          className="grid-header corner-header"
+          onClick={handleCornerClick}
+          style={{
+            gridRow: 1,
+            gridColumn: 1,
+            cursor: isReadOnly ? 'default' : 'pointer',
+            border: '1px solid #ccc',
+          }}
+        />
+
+        {/* Column Headers */}
+        {Array.from({ length: table.cols }, (_, colIndex) => (
+          <div
+            key={`col-${colIndex}`}
+            className={`grid-header column-header ${selectedColumns.has(colIndex) ? 'selected-header' : ''}`}
+            onClick={(e) => handleColumnHeaderClick(colIndex, e)}
+            style={{
+              gridRow: 1,
+              gridColumn: colIndex + 2,
+              cursor: isReadOnly ? 'default' : 'pointer',
+              userSelect: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid #ccc',
+              backgroundColor: '#f0f0f0',
+              fontWeight: 'bold',
+            }}
+          >
+            {indexToLetters(colIndex)}
+          </div>
+        ))}
+
+        {/* Row Headers */}
+        {Array.from({ length: table.rows }, (_, rowIndex) => (
+          <div
+            key={`row-${rowIndex}`}
+            className={`grid-header row-header ${selectedRows.has(rowIndex) ? 'selected-header' : ''}`}
+            onClick={(e) => handleRowHeaderClick(rowIndex, e)}
+            style={{
+              gridRow: rowIndex + 2,
+              gridColumn: 1,
+              cursor: isReadOnly ? 'default' : 'pointer',
+              userSelect: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid #ccc',
+              backgroundColor: '#f0f0f0',
+              fontWeight: 'bold',
+            }}
+          >
+            {rowIndex + 1}
+          </div>
+        ))}
+
+        {/* Content Cells */}
         {table.cells.map(cell => {
-          const isHovered = hoveredCell &&
-            hoveredCell.row === cell.row &&
-            hoveredCell.col === cell.col;
-          const isSelected = selectedCell &&
-            selectedCell.row === cell.row &&
-            selectedCell.col === cell.col;
-          const isEditing = editingCell &&
-            editingCell.row === cell.row &&
-            editingCell.col === cell.col;
+          const isHovered = hoveredCell?.row === cell.row && hoveredCell?.col === cell.col;
+          const isCellSelected = selectedCell?.row === cell.row && selectedCell?.col === cell.col;
+          const isEditing = editingCell?.row === cell.row && editingCell?.col === cell.col;
+          const isHeaderSelected = isSelectedViaHeader(cell.row, cell.col);
 
           return (
             <div
               key={`${cell.row}-${cell.col}`}
-              className={`table-cell ${isHovered ? 'drop-zone' : ''} ${isSelected ? 'selected' : ''} ${isEditing ? 'editing' : ''}`}
+              className={`table-cell 
+                ${isHovered ? 'drop-zone' : ''} 
+                ${isCellSelected ? 'selected' : ''}
+                ${isHeaderSelected ? 'header-selected' : ''}
+                ${isEditing ? 'editing' : ''}`}
               onDragOver={isReadOnly ? undefined : (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -115,6 +263,8 @@ const TableGrid: React.FC<TableGridProps> = ({
                 }
               }}
               style={{
+                gridRow: cell.row + 2,
+                gridColumn: cell.col + 2,
                 cursor: isReadOnly ? 'default' : 'pointer',
               }}
             >
@@ -163,6 +313,8 @@ const TableGrid: React.FC<TableGridProps> = ({
     </div>
   );
 };
+
+// (Render embedded content function remains unchanged)
 
 // Helper to render different embedded content types (unchanged)
 function renderEmbeddedContent(embedded: EmbeddedInstance) {
