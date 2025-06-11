@@ -1413,6 +1413,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
   // Handle adding to table cell (for both click and drag-and-drop)
   const handleAddToTable = useCallback((instance: Instance, row: number, col: number) => {
     if (!editingTableId) return;
+    console.log("Adding to table cell", instance, row, col);
 
     let embedded: EmbeddedInstance | null = null;
 
@@ -1471,7 +1472,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
     if (table.cells.some(cell => cell.content != null)) {
       withstr = table.cells.map(cell => {
         let embedded = cell.content;
-        if (!embedded) return '';
+        if (!embedded || embedded.id.startsWith('_')) return '';
         if (embedded.type === 'text') {
           let text = embedded.content;
           let display = text.length > 10 ? text.slice(0, 10) + '...' : text;
@@ -1562,6 +1563,7 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
           onCancel={cancelTableEdit}
           onAddToTable={handleAddToTable}
           onRemoveCellContent={removeCellContent}
+          onEditCellContent={(row: number, col: number, value: string) => { value.length > 0 ? handleAddToTable({ type: 'text', id: generateId(), content: value } as TextInstance, row, col) : removeCellContent(row, col) }}
           draggingInstanceId={draggingInstanceId}
           setDraggingInstanceId={setDraggingInstanceId}
           availableInstances={availableInstances}
@@ -1751,49 +1753,6 @@ const InstanceView = ({ onOperation }: InstanceViewProps) => {
                                       pointerEvents: 'none',
                                     }}
                                   />
-                                )
-                                : cell.content.type === 'sketch' ? (
-                                  <div
-                                    key={cell.content.id}
-                                    style={{
-                                      width: '100%',
-                                      height: '100%',
-                                      background: '#eee',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                    }}
-                                  >
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      viewBox="0 0 24 24"
-                                      width="16"
-                                      height="16"
-                                    >
-                                      <path d="M4 4h16v16h-16v-16zm1 2v12h14v-12h-14zm12 9h-4v-2h4v-6h-6v-2h10v8h-2z" />
-                                    </svg>
-                                  </div>
-                                ) : (cell.content.type === 'table') ? (
-                                  <div
-                                    key={cell.content.id}
-                                    style={{
-                                      width: '100%',
-                                      height: '100%',
-                                      background: '#eee',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'center',
-                                    }}
-                                  >
-                                    <svg
-                                      xmlns="http://www.w3.org/2000/svg"
-                                      viewBox="0 0 24 24"
-                                      width="16"
-                                      height="16"
-                                    >
-                                      <path d="M4 8h16v12h-16v-12zm1 2v2h4v-2h-4zm5 0v2h4v-2h-4zm5 0v2h4v-2h-4zm-10 4v2h4v-2h-4zm5 0v2h4v-2h-4zm5 0v2h4v-2h-4z" />
-                                    </svg>
-                                  </div>
                                 ) : null}
                         </div>
                       ))}

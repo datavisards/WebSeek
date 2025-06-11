@@ -11,6 +11,7 @@ interface TableEditorProps {
   onCancel: () => void;
   onAddToTable: (instance: Instance, row: number, col: number) => void;
   onRemoveCellContent: (row: number, col: number) => void;
+  onEditCellContent: (row: number, col: number, newValue: string) => void;
   draggingInstanceId: string | null;
   setDraggingInstanceId: React.Dispatch<React.SetStateAction<string | null>>;
   availableInstances: Instance[];
@@ -23,6 +24,7 @@ const TableEditor: React.FC<TableEditorProps> = ({
   onCancel,
   onAddToTable,
   onRemoveCellContent,
+  onEditCellContent,
   draggingInstanceId,
   setDraggingInstanceId,
   availableInstances,
@@ -50,7 +52,7 @@ const TableEditor: React.FC<TableEditorProps> = ({
           onAddToTable={onAddToTable}
           onRemoveCellContent={onRemoveCellContent}
           setDraggingInstanceId={setDraggingInstanceId}
-          onEditCellContent={(row: number, col: number, newValue: string) => {}}
+          onEditCellContent={onEditCellContent}
         />
       </div>
 

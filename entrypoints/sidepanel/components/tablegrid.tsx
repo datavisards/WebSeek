@@ -118,7 +118,18 @@ const TableGrid: React.FC<TableGridProps> = ({
                 cursor: isReadOnly ? 'default' : 'pointer',
               }}
             >
-              {cell.content &&
+              {isEditing ? (
+                <div
+                  contentEditable
+                  suppressContentEditableWarning
+                  className="editable-text"
+                  ref={inputRef}
+                  onBlur={isReadOnly ? undefined : (e) => handleBlur(e, cell.row, cell.col)}
+                  onKeyDown={isReadOnly ? undefined : (e) => handleKeyDown(e, cell.row, cell.col)}
+                >
+                  {cell.content && cell.content.type === 'text' ? cell.content.content : ''}
+                </div>
+              ) : cell.content ?
                 <div
                   key={cell.content.id}
                   className={`embedded-instance ${isEditing ? 'editing-content' : ''}`}
@@ -129,20 +140,9 @@ const TableGrid: React.FC<TableGridProps> = ({
                   }}
                   onClick={isReadOnly ? undefined : (e) => handleContentClick(e, cell.row, cell.col)}
                 >
-                  {isEditing && cell.content.type === 'text' ? (
-                    <div
-                      contentEditable
-                      suppressContentEditableWarning
-                      className="editable-text"
-                      ref={inputRef}
-                      onBlur={isReadOnly ? undefined : (e) => handleBlur(e, cell.row, cell.col)}
-                      onKeyDown={isReadOnly ? undefined : (e) => handleKeyDown(e, cell.row, cell.col)}
-                    >
-                      {cell.content.content}
-                    </div>
-                  ) : (
+                  {
                     renderEmbeddedContent(cell.content)
-                  )}
+                  }
                   {!isReadOnly && !isEditing && (
                     <button
                       className="remove-cell-content"
@@ -154,7 +154,7 @@ const TableGrid: React.FC<TableGridProps> = ({
                       ×
                     </button>
                   )}
-                </div>
+                </div> : null
               }
             </div>
           );
