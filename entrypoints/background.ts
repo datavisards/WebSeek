@@ -18,6 +18,10 @@ export default defineBackground(() => {
           if (selectedTabId !== null) {
             browser.tabs.sendMessage(selectedTabId, { action: 'start_element_selection' });
           }
+        } else if (msg.action === 'start_screenshot_capture') {
+          if (selectedTabId !== null) {
+            browser.tabs.sendMessage(selectedTabId, { action: 'start_screenshot_capture' });
+          }
         } else if (msg.action === 'exit_selection') {
           if (selectedTabId !== null) {
             browser.tabs.sendMessage(selectedTabId, { action: 'exit_selection' });
@@ -34,7 +38,7 @@ export default defineBackground(() => {
 
   browser.runtime.onMessage.addListener((message, sender) => {
     console.log('Received message:', message, 'from', sender);
-    if (message.action === 'element_selected') {
+    if (message.action === 'element_selected' || message.action === 'screenshot_finished') {
       if (sidePanelPort) {
         const tabId = selectedTabId;
         if (tabId !== null) {

@@ -1054,17 +1054,21 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
     bgPort.current = port;
     port.onMessage.addListener((msg) => {
       console.log("UI received FROM BACKGROUND:", msg);
+      // Handle HTML cleaning
+      if (msg.pageURL && msg.outerHTML) {
+        msg.outerHTML = cleanHTML(msg.outerHTML);
+        updateHTMLContext(prev => ({
+          ...prev,
+          [msg.pageURL]: msg.outerHTML
+        }));
+      }
+      console.log("HTML cleaned:", msg.outerHTML);
+
       // Handle messages (msg.action, etc.)
       if (msg.action === 'element_selected') {
-        if (msg.pageURL && msg.outerHTML) {
-          msg.outerHTML = cleanHTML(msg.outerHTML);
-          updateHTMLContext(prev => ({
-            ...prev,
-            [msg.pageURL]: msg.outerHTML
-          }));
-        }
-        console.log("HTML cleaned:", msg.outerHTML);
         handleElementSelected(msg);
+      } else if (msg.action === 'screenshot_finished') {
+        handleScreenshotFinished(msg);
       } else if (msg.action === 'selection_canceled') {
         console.log("Element selection canceled");
         setIsCaptureEnabled(true);
@@ -1122,6 +1126,26 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
     setIsCaptureEnabled(true);
   };
 
+  const handleScreenshotFinished = (message: any) => {
+    const newId = `Image${imageCountRef.current + 1}`;
+    setImageCount(prev => prev + 1);
+    onOperation(`Created [${newId}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`);
+    setInstances(prev => [
+      ...prev,
+      {
+        id: newId,
+        type: 'image',
+        src: message.data,
+        x: 0,
+        y: 0,
+        width: message.dimensions.width,
+        height: message.dimensions.height,
+        sourcePageId: message.pageId,
+      }
+    ]);
+    setIsCaptureEnabled(true);
+  }
+
   // Delete selected instance
   const deleteSelectedInstance = useCallback(() => {
     const instanceId = selectedInstanceIdRef.current;
@@ -1146,7 +1170,7 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
     setInstances(prev => [...prev, instanceToRestore]);
   }, []);
 
-  const handleCaptureElement = () => {
+  const handleCaptureStart = () => {
     // send message via the background port
     if (bgPort.current) {
       console.log("Sending message to start element selection", bgPort.current);
@@ -1154,6 +1178,14 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
       setIsCaptureEnabled(false);
     }
   };
+
+  const handleScreenshotStart = () => {
+    if (bgPort.current) {
+      console.log("Sending message to start screenshot capture", bgPort.current);
+      bgPort.current.postMessage({ action: 'start_screenshot_capture' });
+      setIsCaptureEnabled(false);
+    }
+  }
 
   // Add keyboard escape handler
   useEffect(() => {
@@ -1580,8 +1612,11 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
         <>
           <div className="view-title-container">
             <h3 style={{ margin: 0 }}>Instances</h3>
-            <button onClick={handleCaptureElement} disabled={!isCaptureEnabled}>
+            <button onClick={handleCaptureStart} disabled={!isCaptureEnabled}>
               Capture
+            </button>
+            <button onClick={handleScreenshotStart} disabled={!isCaptureEnabled}>
+              Screenshot
             </button>
             <button onClick={handleCreateSketch}>
               Sketch
