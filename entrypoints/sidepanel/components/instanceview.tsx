@@ -170,7 +170,7 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
       if (item.kind === 'file' && item.type.startsWith('image/')) {
         const file = item.getAsFile();
         if (file) {
-          const newId = `Image${imageCount + 1}`;
+          const newId = `Image${imageCountRef.current + 1}`;
           setImageCount(prev => prev + 1);
           onOperation(`Created [${newId}](#instance-${newId})`);
           const reader = new FileReader();
@@ -227,7 +227,7 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
       if (item.type.startsWith('image/')) {
         const file = item.getAsFile();
         if (file) {
-          const newId = `Image${imageCount + 1}`;
+          const newId = `Image${imageCountRef.current + 1}`;
           setImageCount(prev => prev + 1);
           onOperation(`Created [${newId}](#instance-${newId})`);
           const reader = new FileReader();
@@ -1102,7 +1102,7 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
         }
       ]);
     } else if (message.type === 'image') {
-      const newId = `Image${imageCount + 1}`;
+      const newId = `Image${imageCountRef.current + 1}`;
       setImageCount(prev => prev + 1);
       onOperation(`Created [${newId}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`);
       setInstances(prev => [
@@ -1580,11 +1580,11 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
         <>
           <div className="view-title-container">
             <h3 style={{ margin: 0 }}>Instances</h3>
-            <button onClick={handleCreateSketch}>
-              Sketch
-            </button>
             <button onClick={handleCaptureElement} disabled={!isCaptureEnabled}>
               Capture
+            </button>
+            <button onClick={handleCreateSketch}>
+              Sketch
             </button>
             <button onClick={handleCreateTable}>
               Table

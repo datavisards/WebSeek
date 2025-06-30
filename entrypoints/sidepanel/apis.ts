@@ -1,4 +1,13 @@
 import OpenAI from 'openai';
+import {
+  Instance,
+  EmbeddedInstance,
+  EmbeddedTextInstance,
+  EmbeddedImageInstance,
+  EmbeddedSketchInstance,
+  EmbeddedTableInstance
+} from './types';
+
 const openai = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1",
     apiKey: import.meta.env.WXT_OPENROUTER_KEY,
