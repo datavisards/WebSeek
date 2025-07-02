@@ -2,7 +2,13 @@
   "manifest_version": 3,
   "name": "My Side Panel Extension",
   "version": "1.0",
-  "permissions": ["storage", "sidePanel", "scripting", "activeTab", "tabs"],
+  "permissions": [
+    "storage",
+    "sidePanel",
+    "scripting",
+    "activeTab",
+    "tabs"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -15,9 +21,23 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "/pyodide/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }

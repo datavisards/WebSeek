@@ -12,6 +12,8 @@ import { parseLogWithAgent } from '../apis';
 
 // Props interface for the component
 interface InstanceViewProps {
+  instances: Instance[];
+  setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
   logs: string[];
   htmlContexts: Record<string, string>;
   onOperation: (message: string) => void;
@@ -20,9 +22,8 @@ interface InstanceViewProps {
   setAgentLoading: (loading: boolean) => void;
 }
 
-const InstanceView = ({ logs, htmlContexts, onOperation, updateHTMLContext, addMessage, setAgentLoading }: InstanceViewProps) => {
-  const [instances, setInstances] = useState<Instance[]>([]);
-  const instancesRef = useRef<Instance[]>([]); // Update the latest instances (For callback)
+const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation, updateHTMLContext, addMessage, setAgentLoading }: InstanceViewProps) => {
+  const instancesRef = useRef<Instance[]>([]);
   // Counters for different instance types
   const [textCount, setTextCount] = useState(0);
   const textCountRef = useRef(0);

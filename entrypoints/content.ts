@@ -217,7 +217,7 @@ function startScreenshot(): void {
 }
 
 // 监听来自 background 的消息
-browser.runtime.onMessage.addListener((message) => {
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('Content script received message:', message);
   if (message.action === 'start_element_selection') {
     startElementSelection();
