@@ -1,11 +1,11 @@
 import OpenAI from 'openai';
 import {
-  Instance,
-  EmbeddedInstance,
-  EmbeddedTextInstance,
-  EmbeddedImageInstance,
-  EmbeddedSketchInstance,
-  EmbeddedTableInstance
+    Instance,
+    EmbeddedInstance,
+    EmbeddedTextInstance,
+    EmbeddedImageInstance,
+    EmbeddedSketchInstance,
+    EmbeddedTableInstance
 } from './types';
 
 const openai = new OpenAI({
@@ -15,11 +15,14 @@ const openai = new OpenAI({
 });
 export async function parseLogWithAgent(
     selectedLogs: string[],
+    instanceContexts: string,
+    imageContexts: any[],
     htmlContexts: Record<string, string>,
-    previousCodeContexts: string[]
+    currentInstanceId: string | null = null,
+    previousCodeContexts: string[] = [],
 ): Promise<{
     summary: string;
-    code: string;
+    results: any[];
 }> {
     try {
         console.log(htmlContexts)
@@ -43,29 +46,130 @@ export async function parseLogWithAgent(
 
         // Join logs and previous contexts into strings
         const logsText = selectedLogs.join('\n');
-        const previousCodeText = previousCodeContexts.length
-            ? previousCodeContexts.join('\n\n')
-            : 'None';
+        // const previousCodeText = previousCodeContexts.length
+        //     ? previousCodeContexts.join('\n\n')
+        //     : 'None';
 
         // Construct prompt with HTML and code context
         const prompt = `
-You are an AI assistant tasked with analyzing operation logs from the user, and generating both a concise summary of the inferred user's intent and a corresponding Python implementation. The operation logs serve as example demonstrations of the user's desired tasks.
+You are an AI assistant tasked with analyzing the intent behind the instance with ID '${currentInstanceId}' created by the user. Each instance serves as an example demonstration of the user's desired tasks, i.e., an initial artifact. Your goal is to generate both a concise summary of the inferred user's intent and produce the complete output wanted by the user in structured formats (detailed below). 
 
-Your task:
-1. Analyze the following operation logs and extract the main intent or pattern.
-2. Use the provided HTML contexts for any URLs mentioned in the logs.
-3. Refer to previous code contexts to maintain consistency and avoid duplication. 
-4. Generate a Python script that programmatically represents the logic described in the logs.
+The operation logs provided below contain the user's actions and interactions for building the example instance, which are only meant to help you induct the user's intent.
 
+### Your Task:
+1. Analyze the instance with ID '${currentInstanceId}' and extract the primary intent or pattern based on the user's interaction logs.
+2. If needed, use the provided HTML contexts for any URLs mentioned in the logs to assist your analysis.
+3. Execute the tasks based on the inferred intent and provide the results.
+
+### Expected Response Format:
 Return your response strictly as a JSON object in the following format:
 {
-  "summary": "The user's intent behind the demonstrated operations inferred by you.",
-  "code": "Corresponding Python implementation."
+  "summary": "A concise summary of the user's intent inferred from the provided logs.",
+  "results": Instance[]
 }
 
-Do NOT escape single quotes (') in strings.
-Use double backslashes (\\\\) for special regex characters like \\s or \\d.
-Do NOT include any additional text, explanations, or markdown formatting.
+The type of "results" is Instance[], which is defined as follows:
+interface EmbeddedTextInstance {
+  type: 'text';
+  content: string;
+  id: string;
+}
+
+interface EmbeddedImageInstance {
+  type: 'image';
+  src: string;
+  id: string;
+}
+
+interface EmbeddedSketchInstance {
+  type: 'sketch';
+  id: string;
+}
+
+interface EmbeddedTableInstance = TableInstance
+
+type EmbeddedInstance =
+  | EmbeddedTextInstance
+  | EmbeddedImageInstance
+  | EmbeddedSketchInstance
+  | EmbeddedTableInstance;
+
+type TextInstance = {
+  id: string;
+  type: 'text';
+  content: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  sourcePageId?: string;
+};
+
+type ImageInstance = {
+  id: string;
+  type: 'image';
+  src: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  sourcePageId?: string;
+};
+
+type SketchItem =
+  | {
+    type: 'stroke';
+    id: string;
+    points: Array<{ x: number; y: number }>;
+    color: string;
+    width: number;
+  }
+  | {
+    type: 'instance';
+    id: string;
+    instance: EmbeddedInstance;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+  };
+
+type SketchInstance = {
+  id: string;
+  type: 'sketch';
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  content: SketchItem[];
+  thumbnail: string;
+  sourcePageId?: string;
+};
+
+type TableInstance = {
+  id: string;
+  type: 'table';
+  rows: number;
+  cols: number;
+  cells: Array<{
+    row: number;
+    col: number;
+    content: EmbeddedInstance | null;
+  }>;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  sourcePageId?: string;
+};
+
+type Instance = TextInstance | ImageInstance | SketchInstance | TableInstance;
+
+Note:
+- Do NOT escape single quotes (').
+- Use double backslashes (\\\\) for special regex characters like \\s or \\d.
+- Do NOT include any additional text, explanations, or markdown formatting.
+- Do not leave any non-optional fields empty for each result instance.
 
 ---
 
@@ -76,54 +180,409 @@ ${logsText}
 
 ### HTML Contexts (for URLs referenced above):
 ${Object.entries(uniqueHtmlContexts).map(([url, html]) =>
-            `URL: ${url}\nHTML:\n\`\`\`html\n${html.slice(0, 500)}\n\`\`\``).join('\n\n')}
+            `URL: ${url}\nHTML:\n\`\`\`html\n${html}\n\`\`\``).join('\n\n')}
 
 ---
 
-### Previous Code Contexts:
-${previousCodeText}
+### Instance Context:
+${instanceContexts}
 
 ---
 
-### Example Input:
-Operation Logs:
-"Visited https://example.com"
-"Clicked on 'Submit' button"
-"Filled form with name 'John Doe'"
+### Example:
+The user captures a text instance "John Doe" (Text1) from a table on a webpage (page1). You should find the HTML of page1 from the HTML context and locate the table:
 
-HTML Contexts:
-URL: https://example.com
-HTML:
-\`\`\`html
-<form id="myForm">
-  <input type="text" name="name" />
-  <button type="submit">Submit</button>
-</form>
-\`\`\`
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Age</th>
+            <th>Occupation</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>John Doe</td>
+            <td>35</td>
+            <td>Engineer</td>
+        </tr>
+        <tr>
+            <td>Jane Smith</td>
+            <td>28</td>
+            <td>Data Scientist</td>
+        </tr>
+        <tr>
+            <td>Alice Brown</td>
+            <td>42</td>
+            <td>Teacher</td>
+        </tr>
+    </tbody>
+</table>
 
-Previous Code Contexts:
-None
+Inference: The user's intent is to scrape all names from the table.
 
-Expected Output:
+Response for this example:
 {
-  "summary": "Automate form submission on https://example.com with name 'John Doe'.",
-  "code": "from selenium import webdriver\n\n# Initialize browser\nbrowser = webdriver.Chrome()\n\n# Visit page\nbrowser.get('https://example.com')\n\n# Fill form\nname_field = browser.find_element_by_name('name')\nname_field.send_keys('John Doe')\n\n# Submit form\nsubmit_button = browser.find_element_by_tag_name('button')\nsubmit_button.click()"
+  "summary": "The user intends to scrape all names from the table in the webpage.",
+  "results": [
+    {
+      "type": "table",
+      "table": {
+        "rols": 10,
+        "cols": 1,
+        "cells": [
+          {
+            "row": 0,
+            "col": 0,
+            "content": {
+              "type": "text",
+              "content": "John Doe",
+              "originalId": "Text1"
+            }
+          }, {
+            "row": 1,
+            "col": 0,
+            "content": {
+              "type": "text",
+              "content": "Jane Smith",
+              "originalId": null
+            }
+          }, {
+            "row": 2,
+            "col": 0,
+            "content": {
+              "type": "text",
+              "content": "Alice Brown",
+              "originalId": null
+            }
+          }
+        ]
+      }
+    }
+  ]
 }
----
 
-Now, analyze the given logs and return the JSON response.
+Now, analyze the provided logs and return the JSON response.
 `.trim();
 
         console.log('Constructed prompt for LLM:', prompt);
+        // return { summary: 'Processing...', results: [] };
+        // return {
+        //     "summary": "The user wants to extract a list of products from the Amazon search results page, getting the image and title for each product, and organize them in a two-column table.",
+        //     "results": [
+        //         {
+        //             "type": "table",
+        //             "content": {
+        //                 "rows": 18,
+        //                 "cols": 2,
+        //                 "cells": [
+        //                     {
+        //                         "row": 0,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/611M64fQfJL._AC_UY218_.jpg",
+        //                             "originalId": "Image1"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 0,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "Blink Outdoor 4 (newest model), Wireless smart security camera, two-year battery, 1080p HD day and infrared night live view, two-way talk – 3 camera system",
+        //                             "originalId": "Text1"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 1,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/71whGfcSbeL._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 1,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "Digital Camera, FHD 1080P Camera, Digital Point and Shoot Camera with 16X Zoom Anti Shake, Compact Small Camera for Boys Girls Kids"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 2,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/61Y-FhF223L._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 2,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "Fujifilm S9700 / S9750 16.2MP Digital Camera With 50x Optical Zoom, Black (Renewed)"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 3,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/610CDb2u5GL._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 3,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "REOLINK Smart 5MP 8CH Home Security Camera System, 4pcs Wired PoE IP Cameras Outdoor with Person/Pet/Vehicle Detection, 4K 8CH NVR with 2TB HDD for 24-7 Recording, RLK8-520D4-5MP"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 4,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/51rP-l+s8xL._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 4,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "Kasa Indoor Pan/Tilt Smart Security Camera, 1080p HD Dog-Camera,2.4GHz with Night Vision,Motion Detection for Baby and Pet Monitor, Cloud & SD Card Storage, Works with Alexa& Google Home (EC70), White"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 5,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/51L8D2UqocL._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 5,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "Ring Indoor Cam (newest model) — Home or business security in 1080p HD video, White"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 6,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/410x1S1-xGL._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 6,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "TP-Link Tapo 1080P Indoor Security Camera for Baby Monitor, Dog Camera w/Motion Detection, 2-Way Audio Siren, Night Vision, Cloud & SD Card Storage, Works w/Alexa & Google Home (Tapo C100)"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 7,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/718E29NlV5L._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 7,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "4K Retro Vintage Digital Camera, 64MP Retro 3” IPS Screen Camera with 6X Optical Zoom, WiFi Transfer Autofocus Rechargeable Retro Camera for Travel Vlogging and Gifts"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 8,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/71-3m+Tq2HL._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 8,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "4K Digital Camera for Photography, 64MP Vlogging Camera for YouTube with 3\" 180° Flip Screen, 18X Digital Zoom Point and Shoot Camara with 32GB Micro SD Card for Beginner (Black)"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 9,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/713J1LS3MRL._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 9,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "REDTIGER Dash Cam Front Rear, 4K/2.5K Full HD Dash Camera for Cars, Included 32GB Card, Built-in Wi-Fi GPS, APP Control, 3.18\" IPS Screen, Night Vision, Wide Angle, WDR, 24H Parking Mode(F7NP)"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 10,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/51n8J-pX2ZL._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 10,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "Blink Mini 2 (Newest Model) — Home Security & Pet Camera(s) with HD video, color night view, motion detection, two-way audio, and built-in spotlight — 1 camera (White)"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 11,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/41D8O354aWL._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 11,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "TP-Link Tapo Pan/Tilt Security Camera for Baby Monitor, Pet Camera w/Motion Detection, 1080P, 2-Way Audio, Night Vision, Cloud & SD Card Storage, Works with Alexa & Google Home (Tapo C200)"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 12,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/714w+sQ3wHL._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 12,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "4K Digital Camera for Photography- 48MP Autofocus Vlogging Camera with 2.8\" 180° Flip Screen, 16X Digital Zoom- Compact Point and Shoot Camera with 64GB SD for YouTube, Travel, Beginners"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 13,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/718y6JvHnHL._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 13,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "4K Digital Camera for Photography Autofocus, 2024 Latest 48MP Vlogging Camera for YouTube with SD Card, 2 Batteries, 3\" 180°Flip Screen Compact Travel Camera for Teens with 16X Zoom, Anti-Shake,Black"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 14,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/61i+lPUYqjL._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 14,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "Blink Mini - Compact indoor plug-in smart security camera, 1080p HD video, night vision, motion detection, two-way audio, easy set up, Works with Alexa – 2 cameras (White)"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 15,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/71Yy+JNLZNL._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 15,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "4K Digital Camera for Photography, UHD Autofocus 48MP 180° Flip Screen 16X Zoom Compact Point Shoot Vlogging Camera for YouTube with 2 Batteries, 32GB Card (Black)"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 16,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/715Jv7t2A6L._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 16,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "Digital Camera,Autofocus 4K Vlogging Camera for Photography with 32GB Card,48MP Portable Compact Point and Shoot Digital Camera for Teens Adult Beginner with 16X Zoom,Anti-Shake,2 Batteries(White)"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 17,
+        //                         "col": 0,
+        //                         "content": {
+        //                             "type": "image",
+        //                             "src": "https://m.media-amazon.com/images/I/6182I7B7tML._AC_UY218_.jpg"
+        //                         }
+        //                     },
+        //                     {
+        //                         "row": 17,
+        //                         "col": 1,
+        //                         "content": {
+        //                             "type": "text",
+        //                             "text": "TP-Link 𝗧𝗮𝗽𝗼 MagCam, 2024 PCMag Editors’ Choice & Wirecutter Recommended Outdoor Security Camera, 2K, Battery, Magnetic Mount Wireless Camera, 150° FOV, SD/Cloud Storage, Person/Vehicle Detection"
+        //                         }
+        //                     }
+        //                 ]
+        //             }
+        //         }
+        //     ]
+        // }
 
         // Call the LLM
         const completion = await openai.chat.completions.create({
-            model: "qwen/qwen-turbo",
+            model: "anthropic/claude-sonnet-4",
             messages: [
                 {
                     role: "user",
-                    content: prompt
-                }
+                    content: [{
+                        type: "text",
+                        text: prompt
+                    }, ...imageContexts]
+                },
             ]
         });
 
@@ -146,20 +605,20 @@ Now, analyze the given logs and return the JSON response.
             console.error('Failed to parse LLM response:', sanitizedContent);
             return {
                 summary: 'Error: Invalid JSON response.',
-                code: '# Error: Failed to parse response'
+                results: []
             };
         }
 
         // Return structured result
         return {
             summary: parsed.summary || 'Summary not provided by LLM.',
-            code: parsed.code || '# Code not provided by LLM.'
+            results: parsed.results || []
         };
     } catch (error) {
         console.error('Error calling LLM:', error);
         return {
             summary: 'Error: Failed to communicate with the LLM.',
-            code: '# Error: Communication failed'
+            results: []
         };
     }
 }

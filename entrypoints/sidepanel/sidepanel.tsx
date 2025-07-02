@@ -2,20 +2,29 @@
 import React, { useState } from 'react';
 import OperationView from './components/operationview.tsx';
 import InstanceView from './components/instanceview.tsx';
+import ChatView from './components/chatview.tsx';
 import './sidepanel.css';
+import { Message } from './types.tsx';
 
 const SidePanel = () => {
   const [logs, setLogs] = useState<string[]>([]);
   const [htmlContexts, setHtmlContexts] = useState<Record<string, string>>({});
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [agentLoading, setAgentLoading] = useState(false);
 
   const addLog = (message: string) => {
     setLogs(prev => [...prev, message]);
   };
 
+  const addMessage = (message: Message) => {
+    setMessages(prev => [...prev, message]);
+  };
+
   return (
     <div className="side-panel">
-      <OperationView logs={logs} htmlContexts={htmlContexts}/>
-      <InstanceView onOperation={addLog} updateHTMLContext={setHtmlContexts}/>
+      {/* <OperationView logs={logs} htmlContexts={htmlContexts}/> */}
+      <InstanceView logs={logs} htmlContexts={htmlContexts} onOperation={addLog} updateHTMLContext={setHtmlContexts} addMessage={addMessage} setAgentLoading={setAgentLoading}/>
+      <ChatView logs={logs} htmlContexts={htmlContexts} messages={messages} addMessage={addMessage} setMessages={setMessages} agentLoading={agentLoading} setAgentLoading={setAgentLoading}></ChatView>
     </div>
   );
 };

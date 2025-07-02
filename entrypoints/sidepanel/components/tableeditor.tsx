@@ -45,7 +45,7 @@ const TableEditor: React.FC<TableEditorProps> = ({
         <button onClick={onCancel}>Cancel</button>
       </div>
 
-      <div className="table-container" style={{ margin: '2px 0', padding: '10px', backgroundColor: '#f5f5f5' }}>
+      <div className="table-container">
         <TableGrid
           table={table}
           instances={instances}

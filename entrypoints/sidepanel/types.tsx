@@ -98,3 +98,8 @@ export type TableInstance = {
 };
 
 export type Instance = TextInstance | ImageInstance | SketchInstance | TableInstance;
+
+export interface Message {
+  role: string;
+  message: string;
+}

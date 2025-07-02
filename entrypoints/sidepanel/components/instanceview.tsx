@@ -1,20 +1,25 @@
 import { browser, type Browser } from 'wxt/browser';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Instance, EmbeddedInstance, SketchItem, TextInstance, ImageInstance, SketchInstance, TableInstance } from '../types';
-import { cleanHTML } from '../utils';
+import { Instance, EmbeddedInstance, SketchItem, TextInstance, ImageInstance, SketchInstance, TableInstance, Message } from '../types';
+import { cleanHTML, generateInstanceContext, generateId, parseInstance } from '../utils';
 import TextEditor from './texteditor';
 import SketchEditor from './sketcheditor';
 import TrashView from './trashview';
 import TableEditor from './tableeditor';
 import './instanceview.css';
+import { parseLogWithAgent } from '../apis';
 
 // Props interface for the component
 interface InstanceViewProps {
+  logs: string[];
+  htmlContexts: Record<string, string>;
   onOperation: (message: string) => void;
   updateHTMLContext: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  addMessage: (message: Message) => void;
+  setAgentLoading: (loading: boolean) => void;
 }
 
-const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => {
+const InstanceView = ({ logs, htmlContexts, onOperation, updateHTMLContext, addMessage, setAgentLoading }: InstanceViewProps) => {
   const [instances, setInstances] = useState<Instance[]>([]);
   const instancesRef = useRef<Instance[]>([]); // Update the latest instances (For callback)
   // Counters for different instance types
@@ -60,6 +65,12 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
     initialCanvasX: number;
     initialCanvasY: number;
   } | null>(null);
+  // Instance context menu state
+  const [contextMenu, setContextMenu] = useState({
+    visible: false,
+    instanceId: null,
+    position: { x: 0, y: 0 }
+  });
   // General editor state
   const [originalInstanceId, setOriginalInstanceId] = useState<string | null>(null);
   // Sketch editor state
@@ -111,9 +122,6 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
     selectedInstanceIdRef.current = selectedInstanceId;
     deletedInstancesRef.current = deletedInstances;
   }, [textCount, imageCount, sketchCount, tableCount, instances, selectedInstanceId, deletedInstances]);
-
-  // Helper function to generate unique IDs
-  const generateId = () => '_' + Math.random().toString(36).substr(2, 9);
 
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = (screenX: number, screenY: number) => {
@@ -904,59 +912,6 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
     setEditingSketchId(null);
   };
 
-  // Start drawing on the sketch canvas
-  const startDrawing = (e: React.MouseEvent) => {
-    if (!editingSketchId) return;
-
-    const rect = sketchCanvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const newStroke = {
-      id: generateId(),
-      points: [{ x, y }]
-    };
-
-    setCurrentStroke(newStroke);
-  };
-
-  // Continue drawing
-  const draw = (e: React.MouseEvent) => {
-    if (!currentStroke || !editingSketchId || !sketchCanvasRef.current) return;
-
-    const rect = sketchCanvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    setCurrentStroke(prev => ({
-      ...prev!,
-      points: [...prev!.points, { x, y }]
-    }));
-  };
-
-  // End drawing and save stroke
-  const endDrawing = () => {
-    if (!currentStroke || !editingSketchId) return;
-
-    setInstances(prev => prev.map(inst => {
-      if (inst.id === editingSketchId && inst.type === 'sketch') {
-        const newItem: SketchItem = {
-          type: 'stroke',
-          id: currentStroke.id,
-          points: currentStroke.points,
-          color: sketchColor,
-          width: sketchWidth
-        };
-        return { ...inst, content: [...inst.content, newItem] };
-      }
-      return inst;
-    }));
-
-    setCurrentStroke(null);
-  };
-
   // Render sketch to canvas
   useEffect(() => {
     if (!editingSketchId || !sketchCanvasRef.current) return;
@@ -1498,7 +1453,24 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
 
   // Remove content from table cell
   const removeCellContent = (row: number, col: number) => {
-
+    console.log(row, col, "Removing cell content");
+    if (!editingTableId) return;
+    setInstances(prev => prev.map(inst => {
+      if (inst.id === editingTableId && inst.type === 'table') {
+        const newCells = [...inst.cells];
+        const cellIndex = newCells.findIndex(
+          c => c.row === row && c.col === col
+        );
+        if (cellIndex >= 0) {
+          newCells[cellIndex] = {
+            ...newCells[cellIndex],
+            content: null // Clear the content
+          };
+        }
+        return { ...inst, cells: newCells };
+      }
+      return inst;
+    }));
   };
 
   const saveTable = () => {
@@ -1539,6 +1511,47 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
     setInstances(prev => prev.filter(inst => inst.id !== editingTableId));
     setEditingTableId(null);
   };
+
+  const handleInstanceContextMenu = (e: React.MouseEvent, instanceId: any) => {
+    e.preventDefault();
+    setContextMenu({
+      visible: true,
+      instanceId,
+      position: { x: e.clientX, y: e.clientY }
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu({ ...contextMenu, visible: false });
+  };
+
+  const handleAnalyze = async (instance: Instance) => {
+    console.log(`Analyzing instance ${instance.id}`);
+    let { imageContext, textContext } = generateInstanceContext(instances);
+    addMessage({
+      "role": "user",
+      "message": `Analyze the instance ${instance.id}.`
+    });
+    setAgentLoading(true);
+    try {
+      let { summary, results } = await parseLogWithAgent(logs, textContext, imageContext, htmlContexts, instance.id);
+      addMessage({
+        "role": "agent",
+        "message": summary
+      });
+      let parsedResults: Instance[] = results
+        .map((result) => parseInstance(result))
+        .filter((inst): inst is Instance =>
+          inst && typeof inst === 'object' &&
+          'id' in inst && 'type' in inst && 'x' in inst && 'y' in inst && 'width' in inst && 'height' in inst
+        );
+      setInstances(prev => [...prev, ...parsedResults]);
+    } finally {
+      setAgentLoading(false);
+    }
+    closeContextMenu();
+  };
+
 
   return (
     <div
@@ -1625,6 +1638,32 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
               Table
             </button>
           </div>
+          {contextMenu.visible && (
+            <div
+              style={{
+                position: 'fixed',
+                top: contextMenu.position.y,
+                left: contextMenu.position.x,
+                background: 'white',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                zIndex: 2000,
+                minWidth: '120px',
+              }}
+              onClick={closeContextMenu}
+            >
+              <div
+                className="contextmenuoption"
+                onClick={() => {
+                  const instance = instances.find(i => i.id === contextMenu.instanceId);
+                  if (instance) handleAnalyze(instance);
+                }}
+              >
+                Analyze
+              </div>
+            </div>
+          )}
           <div
             className="view-content"
             style={{
@@ -1681,7 +1720,24 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
                   }}
                   onMouseDown={e => handleInstanceMouseDown(e, instance.id)}
                   onDoubleClick={e => handleInstanceDoubleClick(instance)}
+                  onContextMenu={e => handleInstanceContextMenu(e, instance.id)}
                 >
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '-18px', // 显示在实例上方
+                      left: '-5px',
+                      color: '#bbb',
+                      fontSize: '11px',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      zIndex: 1001, // 确保显示在最上层
+                      pointerEvents: 'none', // 防止阻挡鼠标事件
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {instance.id}
+                  </div>
                   {instance.type === 'text' ? (
                     <p style={{ margin: 0, userSelect: 'none', overflow: 'hidden', height: '100%', width: '100%' }}>
                       {instance.content}
@@ -1737,36 +1793,43 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
                         gap: '1px',
                         border: '1px solid #ccc',
                         boxSizing: 'border-box',
+                        overflow: 'hidden'
                       }}
                     >
-                      {instance.cells.map(cell => (
-                        <div
-                          key={`${cell.row}-${cell.col}`}
-                          style={{
-                            border: '1px solid #ddd',
-                            padding: '2px',
-                            boxSizing: 'border-box',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '2px',
-                          }}
-                        >
-                          {!cell.content ? (
-                            <div
-                              style={{
-                                width: '100%',
-                                height: '100%',
-                                background: '#f0f0f0',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#aaa',
-                                fontSize: '8px',
-                              }}
-                            >
-                              Empty
-                            </div>) :
-                            cell.content.type === 'text' ? (
+                      {Array.from({ length: instance.rows * instance.cols }).map((_, index) => {
+                        const row = Math.floor(index / instance.cols);
+                        const col = index % instance.cols;
+                        const cell = instance.cells.find(c => c.row === row && c.col === col);
+                        const key = `${row}-${col}`;
+
+                        return (
+                          <div
+                            key={key}
+                            style={{
+                              border: '1px solid #ddd',
+                              padding: '2px',
+                              boxSizing: 'border-box',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '2px',
+                            }}
+                          >
+                            {!cell || !cell.content ? (
+                              <div
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  background: '#f0f0f0',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: '#aaa',
+                                  fontSize: '8px',
+                                }}
+                              >
+                                Empty
+                              </div>
+                            ) : cell.content.type === 'text' ? (
                               <p
                                 key={cell.content.id}
                                 style={{
@@ -1781,23 +1844,22 @@ const InstanceView = ({ onOperation, updateHTMLContext }: InstanceViewProps) => 
                                   ? `${cell.content.content.slice(0, 10)}...`
                                   : cell.content.content}
                               </p>
-                            )
-                              : cell.content.type === 'image' ?
-                                (
-                                  <img
-                                    key={cell.content.id}
-                                    src={cell.content.src}
-                                    alt="thumbnail"
-                                    style={{
-                                      maxWidth: '100%',
-                                      maxHeight: '100%',
-                                      objectFit: 'contain',
-                                      pointerEvents: 'none',
-                                    }}
-                                  />
-                                ) : null}
-                        </div>
-                      ))}
+                            ) : cell.content.type === 'image' ? (
+                              <img
+                                key={cell.content.id}
+                                src={cell.content.src}
+                                alt="thumbnail"
+                                style={{
+                                  maxWidth: '100%',
+                                  maxHeight: '100%',
+                                  objectFit: 'contain',
+                                  pointerEvents: 'none',
+                                }}
+                              />
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : null}
                   {selectedInstanceId === instance.id && (

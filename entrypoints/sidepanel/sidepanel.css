@@ -26,6 +26,10 @@
   flex: 4;
 }
 
+.chat-view {
+  flex: 3;
+}
+
 .view-title-container {
   padding: 12px;
   margin: 0;
