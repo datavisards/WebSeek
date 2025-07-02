@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Message } from '../types.tsx';
-import './chatview.css';
+import './toolview.css';
 
-interface ChatViewProps {
+interface ToolViewProps {
     logs: string[];
     htmlContexts: Record<string, string>;
     messages: Message[];
@@ -12,7 +12,7 @@ interface ChatViewProps {
     setAgentLoading: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-const ChatView: React.FC<ChatViewProps> = ({ logs, htmlContexts, messages, addMessage, setMessages, agentLoading, setAgentLoading }) => {
+const ToolView: React.FC<ToolViewProps> = ({ logs, htmlContexts, messages, addMessage, setMessages, agentLoading, setAgentLoading }) => {
     const [inputValue, setInputValue] = useState('');
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
 
@@ -95,4 +95,4 @@ const ChatView: React.FC<ChatViewProps> = ({ logs, htmlContexts, messages, addMe
     );
 };
 
-export default ChatView;
+export default ToolView;

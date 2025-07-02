@@ -2,9 +2,9 @@
 import React, { useState } from 'react';
 import OperationView from './components/operationview.tsx';
 import InstanceView from './components/instanceview.tsx';
-import ChatView from './components/chatview.tsx';
 import './sidepanel.css';
 import { Message } from './types.tsx';
+import ToolView from './components/toolview.tsx';
 
 const SidePanel = () => {
   const [logs, setLogs] = useState<string[]>([]);
@@ -24,7 +24,7 @@ const SidePanel = () => {
     <div className="side-panel">
       {/* <OperationView logs={logs} htmlContexts={htmlContexts}/> */}
       <InstanceView logs={logs} htmlContexts={htmlContexts} onOperation={addLog} updateHTMLContext={setHtmlContexts} addMessage={addMessage} setAgentLoading={setAgentLoading}/>
-      <ChatView logs={logs} htmlContexts={htmlContexts} messages={messages} addMessage={addMessage} setMessages={setMessages} agentLoading={agentLoading} setAgentLoading={setAgentLoading}></ChatView>
+      <ToolView logs={logs} htmlContexts={htmlContexts} messages={messages} addMessage={addMessage} setMessages={setMessages} agentLoading={agentLoading} setAgentLoading={setAgentLoading}></ToolView>
     </div>
   );
 };
