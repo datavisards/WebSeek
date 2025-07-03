@@ -43,9 +43,14 @@ const CodeTab: React.FC<CodeTabProps> = ({ instances }) => {
             setIsPyodideLoading(true);
             try {
                 const loadedPyodide = await loadPyodide({
-                    indexURL: chrome.runtime.getURL('pyodide'),
+                    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.23.4/full/",
                 });
+                // Load numpy first as pandas depends on it
+                await loadedPyodide.loadPackage('numpy');
+                // Then load pandas
                 await loadedPyodide.loadPackage('pandas');
+                // Verify pandas is loaded
+                await loadedPyodide.runPythonAsync('import pandas as pd; print("Pandas version:", pd.__version__)');
                 pyodide.current = loadedPyodide;
             } catch (error) {
                 console.error('Failed to load Pyodide:', error);
