@@ -1151,17 +1151,31 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     const handleKeyDown = (e: KeyboardEvent) => {
       console.log("Key pressed:", e.key);
       if (e.key === 'Escape') {
-        e.preventDefault();
-        if (!isCaptureEnabled && bgPort.current) {
-          bgPort.current.postMessage({ action: 'exit_selection' });
+        if (!isCaptureEnabled || selectedInstanceIdRef.current || editingSketchId) {
+          e.preventDefault();
+          if (!isCaptureEnabled && bgPort.current) {
+            bgPort.current.postMessage({ action: 'exit_selection' });
+          }
+          setSelectedInstanceId(null);
+          setDraggingInstanceId(null);
+          setDraggingEmbeddedId(null);
+          setIsCaptureEnabled(true);
         }
-        setSelectedInstanceId(null);
-        setDraggingInstanceId(null);
-        setDraggingEmbeddedId(null);
-        setIsCaptureEnabled(true);
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault();
-        deleteSelectedInstance();
+        // Check if we're focused on an input field
+        const focused = document.activeElement;
+        console.log(focused)
+        const isInputFocused = focused && (
+          focused.tagName === 'INPUT' ||
+          focused.tagName === 'TEXTAREA' ||
+          (focused as HTMLElement).isContentEditable
+        );
+
+        // Only handle if not focused on input and we have a selection
+        if (!isInputFocused && selectedInstanceIdRef.current) {
+          e.preventDefault();
+          deleteSelectedInstance();
+        }
       }
     };
 
