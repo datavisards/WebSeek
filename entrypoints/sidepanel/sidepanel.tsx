@@ -22,15 +22,11 @@ const SidePanel = () => {
     setMessages(prev => [...prev, message]);
   };
 
-  const getInstanceById = (id: string): Instance | undefined => {
-    return instances.find(instance => instance.id === id);
-  };
-
   return (
     <div className="side-panel">
       {/* <OperationView logs={logs} htmlContexts={htmlContexts}/> */}
       <InstanceView instances={instances} setInstances={setInstances} logs={logs} htmlContexts={htmlContexts} onOperation={addLog} updateHTMLContext={setHtmlContexts} addMessage={addMessage} setAgentLoading={setAgentLoading}/>
-      <ToolView logs={logs} htmlContexts={htmlContexts} messages={messages} addMessage={addMessage} setMessages={setMessages} agentLoading={agentLoading} setAgentLoading={setAgentLoading} getInstanceById={getInstanceById}></ToolView>
+      <ToolView logs={logs} htmlContexts={htmlContexts} messages={messages} addMessage={addMessage} setMessages={setMessages} agentLoading={agentLoading} setAgentLoading={setAgentLoading} instances={instances}></ToolView>
     </div>
   );
 };

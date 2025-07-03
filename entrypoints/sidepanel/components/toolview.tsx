@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Message, Instance } from '../types.tsx';
 import './toolview.css';
 import CodeMirror from '@uiw/react-codemirror';
+import { autocompletion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import { python } from '@codemirror/lang-python';
 import { loadPyodide } from 'pyodide';
 
@@ -13,7 +14,7 @@ interface ToolViewProps {
     setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
     agentLoading: boolean;
     setAgentLoading: React.Dispatch<React.SetStateAction<boolean>>;
-    getInstanceById: (id: string) => Instance | undefined;
+    instances: Instance[];
 }
 
 interface CodeCell {
@@ -29,12 +30,14 @@ interface CodeOutput {
     timestamp: Date;
 }
 
-const ToolView: React.FC<ToolViewProps> = ({ logs, htmlContexts, messages, addMessage, setMessages, agentLoading, setAgentLoading, getInstanceById }) => {
+const ToolView: React.FC<ToolViewProps> = ({ logs, htmlContexts, messages, addMessage, setMessages, agentLoading, setAgentLoading, instances }) => {
     const [inputValue, setInputValue] = useState('');
     const [activeTab, setActiveTab] = useState<'chat' | 'code'>('chat');
     const [codeOutputs, setCodeOutputs] = useState<CodeOutput[]>([]);
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
     const outputsEndRef = useRef<null | HTMLDivElement>(null);
+    const [prevInstanceIds, setPrevInstanceIds] = useState<string[]>([]);
+    const [instanceIds, setInstanceIds] = useState<string[]>([]);
     const [cells, setCells] = useState<CodeCell[]>([
         {
             id: 0,
@@ -57,6 +60,10 @@ const ToolView: React.FC<ToolViewProps> = ({ logs, htmlContexts, messages, addMe
                 const loadedPyodide = await loadPyodide({
                     indexURL: chrome.runtime.getURL('pyodide'),
                 });
+
+                // LOAD PANDAS PACKAGE
+                await loadedPyodide.loadPackage('pandas');
+                console.log('Pyodide and pandas loaded successfully!');
                 pyodide.current = loadedPyodide;
                 console.log('Pyodide loaded successfully!');
             } catch (error) {
@@ -82,6 +89,70 @@ const ToolView: React.FC<ToolViewProps> = ({ logs, htmlContexts, messages, addMe
     useEffect(() => {
         outputsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [codeOutputs]);
+
+    // Update global environment with current instances
+    const updateGlobalEnvironment = () => {
+        if (!pyodide.current) return;
+
+        const allInstances = instances.reduce<Record<string, Instance>>((acc, instance) => {
+            acc[instance.id] = instance;
+            return acc;
+        }, {});
+        const currentIds = Object.keys(allInstances);
+        setInstanceIds(currentIds);
+
+        // Remove instances that no longer exist
+        prevInstanceIds.forEach(id => {
+            if (!allInstances[id] && pyodide.current.globals.has(id)) {
+                pyodide.current.globals.delete(id);
+            }
+        });
+
+        // Add/update current instances
+        Object.entries(allInstances).forEach(([id, instance]) => {
+            pyodide.current.globals.set(id, pyodide.current.toPy(instance));
+        });
+
+        // Store current IDs for next comparison
+        setPrevInstanceIds(currentIds);
+    };
+
+    // Custom autocompletion for instance IDs
+    const instanceCompletions = useMemo(() => {
+        return (context: CompletionContext): CompletionResult | null => {
+            const word = context.matchBefore(/\w*/);
+            if (!word || (word.from === word.to && !context.explicit)) {
+                return null;
+            }
+
+            return {
+                from: word.from,
+                options: instanceIds.map(id => ({
+                    label: id,
+                    type: "variable",
+                    info: "Instance variable",
+                    boost: 1.0
+                }))
+            };
+        };
+    }, [instanceIds]);
+
+    // Combine Python completions with our instance completions
+    const customCompletions = useMemo(() => {
+        return [
+            python(),
+            autocompletion({
+                override: [instanceCompletions]
+            })
+        ];
+    }, [instanceCompletions]);
+
+    // Update environment when tab changes to code
+    useEffect(() => {
+        if (activeTab === 'code') {
+            updateGlobalEnvironment();
+        }
+    }, [activeTab]);
 
     const executeCell = async (cellId: number) => {
         setCells((prevCells) =>
@@ -127,9 +198,8 @@ const ToolView: React.FC<ToolViewProps> = ({ logs, htmlContexts, messages, addMe
                 },
             });
 
-            // 2. Expose our custom getData function to Python (details in Part 2)
-            window.getData = getDataFromExtension;
-            pyodide.current.globals.set('getData', window.getData);
+            // 2. SETUP GLOBAL ENVIRONMENT
+            updateGlobalEnvironment();
 
 
             // 3. Execute the Python code
@@ -184,26 +254,6 @@ const ToolView: React.FC<ToolViewProps> = ({ logs, htmlContexts, messages, addMe
 
     const removeCell = (cellId: number) => {
         setCells((prevCells) => prevCells.filter((cell) => cell.id !== cellId));
-    };
-
-    const getDataFromExtension = (dataName: string): any => {
-        console.log(`Python code is requesting data for: "${dataName}"`);
-        try {
-            const data = getInstanceById(dataName);
-
-            // If data is found, convert it from a JS object to a native Python object (dict, list, etc.)
-            // before returning it to the Python environment.
-            if (data !== undefined && pyodide.current) {
-                return pyodide.current.toPy(data);
-            }
-
-            // Return the original value if it's undefined or Pyodide isn't ready
-            return data;
-        } catch (error) {
-            console.error("Error getting data from extension:", error);
-            // We can return a specific error string to the Python environment
-            return `Error: ${(error as Error).message}`;
-        }
     };
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -293,7 +343,7 @@ const ToolView: React.FC<ToolViewProps> = ({ logs, htmlContexts, messages, addMe
                                 <CodeMirror
                                     value={cell.content}
                                     height="auto"
-                                    extensions={[python()]}
+                                    extensions={customCompletions}
                                     onChange={(value) =>
                                         setCells((prevCells) =>
                                             prevCells.map((c) =>

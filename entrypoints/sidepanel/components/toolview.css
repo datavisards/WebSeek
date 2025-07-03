@@ -100,7 +100,7 @@
 
 .code-editor-container {
   flex: 1;
-  overflow: hidden;
+  overflow: scroll;
 }
 
 .code-output-container {

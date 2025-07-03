@@ -1529,12 +1529,12 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     setContextMenu({ ...contextMenu, visible: false });
   };
 
-  const handleAnalyze = async (instance: Instance) => {
+  const handleInfer = async (instance: Instance) => {
     console.log(`Analyzing instance ${instance.id}`);
     let { imageContext, textContext } = generateInstanceContext(instances);
     addMessage({
       "role": "user",
-      "message": `Analyze the instance ${instance.id}.`
+      "message": `Infer my intent based on the instance ${instance.id} and finish the task.`
     });
     setAgentLoading(true);
     try {
@@ -1776,10 +1776,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                   className="contextmenuoption"
                   onClick={() => {
                     const instance = instances.find(i => i.id === contextMenu.instanceId);
-                    if (instance) handleAnalyze(instance);
+                    if (instance) handleInfer(instance);
                   }}
                 >
-                  Analyze
+                  Infer
                 </div>
               </div>
             )}

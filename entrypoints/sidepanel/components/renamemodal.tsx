@@ -31,6 +31,27 @@ const RenameModal = ({ instance, instances, onConfirm, onCancel }: RenameModalPr
       setRenameError("Name cannot be empty");
       return false;
     }
+
+    // Validate Python variable name format
+    const isValidPythonVar = /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(newInstanceName);
+    if (!isValidPythonVar) {
+      setRenameError("Name must start with a letter/underscore and contain only letters, numbers, and underscores");
+      return false;
+    }
+
+    // Check for Python reserved words
+    const pythonReservedWords = [
+      'False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 
+      'break', 'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 
+      'finally', 'for', 'from', 'global', 'if', 'import', 'in', 'is', 
+      'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try', 
+      'while', 'with', 'yield'
+    ];
+    
+    if (pythonReservedWords.includes(newInstanceName)) {
+      setRenameError("Name is a Python reserved word and cannot be used");
+      return false;
+    }
     
     // Check for duplicates across all instances and embedded instances
     const isDuplicate = instances.some(inst => {
