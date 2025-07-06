@@ -12,6 +12,10 @@ interface TableGridProps {
   setDraggingInstanceId: React.Dispatch<React.SetStateAction<string | null>>;
   isReadOnly?: boolean;
   onCellSelectionChange?: (selectedCell: { row: number, col: number } | null) => void;
+  onAddRow?: (position: 'before' | 'after', rowIndex: number) => void;
+  onRemoveRow?: (rowIndex: number) => void;
+  onAddColumn?: (position: 'before' | 'after', colIndex: number) => void;
+  onRemoveColumn?: (colIndex: number) => void;
 }
 
 const TableGrid: React.FC<TableGridProps> = ({
@@ -22,7 +26,11 @@ const TableGrid: React.FC<TableGridProps> = ({
   onEditCellContent,
   setDraggingInstanceId,
   isReadOnly = false,
-  onCellSelectionChange
+  onCellSelectionChange,
+  onAddRow,
+  onRemoveRow,
+  onAddColumn,
+  onRemoveColumn
 }) => {
   const cellWidth = Math.max(50, Math.min(200, table.width / table.cols));
   const cellHeight = Math.max(50, Math.min(200, table.height / table.rows));
@@ -34,6 +42,12 @@ const TableGrid: React.FC<TableGridProps> = ({
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [selectedColumns, setSelectedColumns] = useState<Set<number>>(new Set());
   const [selectedCell, setSelectedCell] = useState<{ row: number, col: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    type: 'row' | 'column';
+    index: number;
+    position: { x: number; y: number };
+  } | null>(null);
 
   useEffect(() => {
     if (editingCell !== null && inputRef.current) {
@@ -47,6 +61,20 @@ const TableGrid: React.FC<TableGridProps> = ({
       onCellSelectionChange(selectedCell);
     }
   }, [selectedCell, onCellSelectionChange]);
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (contextMenu) {
+        closeContextMenu();
+      }
+    };
+
+    if (contextMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [contextMenu]);
 
   const handleCellClick = (row: number, col: number) => {
     setSelectedCell({ row, col });
@@ -217,6 +245,69 @@ const TableGrid: React.FC<TableGridProps> = ({
     return !cell.content || cell.content.type === 'text';
   };
 
+  // Context menu handlers
+  const handleRowContextMenu = (e: React.MouseEvent, rowIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isReadOnly) return;
+    
+    setContextMenu({
+      visible: true,
+      type: 'row',
+      index: rowIndex,
+      position: { x: e.clientX, y: e.clientY }
+    });
+  };
+
+  const handleColumnContextMenu = (e: React.MouseEvent, colIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isReadOnly) return;
+    
+    setContextMenu({
+      visible: true,
+      type: 'column',
+      index: colIndex,
+      position: { x: e.clientX, y: e.clientY }
+    });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu(null);
+  };
+
+  const handleContextMenuAction = (action: string) => {
+    if (!contextMenu) return;
+    
+    const { type, index } = contextMenu;
+    
+    switch (action) {
+      case 'add-before':
+        if (type === 'row' && onAddRow) {
+          onAddRow('before', index);
+        } else if (type === 'column' && onAddColumn) {
+          onAddColumn('before', index);
+        }
+        break;
+      case 'add-after':
+        if (type === 'row' && onAddRow) {
+          onAddRow('after', index);
+        } else if (type === 'column' && onAddColumn) {
+          onAddColumn('after', index);
+        }
+        break;
+      case 'remove':
+        if (type === 'row' && onRemoveRow) {
+          onRemoveRow(index);
+        } else if (type === 'column' && onRemoveColumn) {
+          onRemoveColumn(index);
+        }
+        break;
+    }
+    
+    closeContextMenu();
+  };
+
   return (
     <div
       className="table-grid"
@@ -249,6 +340,7 @@ const TableGrid: React.FC<TableGridProps> = ({
           key={`col-${colIndex}`}
           className={`grid-header column-header ${selectedColumns.has(colIndex) ? 'selected-header' : ''}`}
           onClick={(e) => handleColumnHeaderClick(colIndex, e)}
+          onContextMenu={(e) => handleColumnContextMenu(e, colIndex)}
           style={{
             gridRow: 1,
             gridColumn: colIndex + 2,
@@ -272,6 +364,7 @@ const TableGrid: React.FC<TableGridProps> = ({
           key={`row-${rowIndex}`}
           className={`grid-header row-header ${selectedRows.has(rowIndex) ? 'selected-header' : ''}`}
           onClick={(e) => handleRowHeaderClick(rowIndex, e)}
+          onContextMenu={(e) => handleRowContextMenu(e, rowIndex)}
           style={{
             gridRow: rowIndex + 2,
             gridColumn: 1,
@@ -383,6 +476,44 @@ const TableGrid: React.FC<TableGridProps> = ({
           </div>
         );
       })}
+      
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            top: contextMenu.position.y,
+            left: contextMenu.position.x,
+            background: 'white',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+            zIndex: 2000,
+            minWidth: '150px',
+          }}
+          onClick={closeContextMenu}
+        >
+          <div
+            className="contextmenuoption"
+            onClick={() => handleContextMenuAction('add-before')}
+          >
+            Add {contextMenu.type === 'row' ? 'Row' : 'Column'} Before
+          </div>
+          <div
+            className="contextmenuoption"
+            onClick={() => handleContextMenuAction('add-after')}
+          >
+            Add {contextMenu.type === 'row' ? 'Row' : 'Column'} After
+          </div>
+          <div
+            className="contextmenuoption"
+            onClick={() => handleContextMenuAction('remove')}
+            style={{ color: '#d32f2f' }}
+          >
+            Remove {contextMenu.type === 'row' ? 'Row' : 'Column'}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

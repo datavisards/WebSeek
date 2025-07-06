@@ -91,6 +91,23 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+}
+
+.grid-header:hover {
+  background-color: #e0e0e0;
+}
+
+.grid-header::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 4px;
+  height: 4px;
+  background-color: #999;
+  border-radius: 50%;
+  opacity: 0.5;
 }
 
 .corner-header {
@@ -108,4 +125,20 @@
 .table-grid:focus {
   outline: 2px solid #4a90e2;
   outline-offset: 2px;
+}
+
+.contextmenuoption {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  border-bottom: 1px solid #eee;
+  transition: background-color 0.2s;
+}
+
+.contextmenuoption:hover {
+  background-color: #f5f5f5;
+}
+
+.contextmenuoption:last-child {
+  border-bottom: none;
 }

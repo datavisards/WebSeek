@@ -17,6 +17,10 @@ interface TableEditorProps {
   availableInstances: Instance[];
   onCaptureToCell?: (row: number, col: number) => void;
   isCaptureEnabled?: boolean;
+  onAddRow?: (position: 'before' | 'after', rowIndex: number) => void;
+  onRemoveRow?: (rowIndex: number) => void;
+  onAddColumn?: (position: 'before' | 'after', colIndex: number) => void;
+  onRemoveColumn?: (colIndex: number) => void;
 }
 
 const TableEditor: React.FC<TableEditorProps> = ({
@@ -32,6 +36,10 @@ const TableEditor: React.FC<TableEditorProps> = ({
   availableInstances,
   onCaptureToCell,
   isCaptureEnabled = true,
+  onAddRow,
+  onRemoveRow,
+  onAddColumn,
+  onRemoveColumn,
 }) => {
   const [selectedCell, setSelectedCell] = useState<{ row: number, col: number } | null>(null);
   if (!tableId) return null;
@@ -68,6 +76,10 @@ const TableEditor: React.FC<TableEditorProps> = ({
           setDraggingInstanceId={setDraggingInstanceId}
           onEditCellContent={onEditCellContent}
           onCellSelectionChange={setSelectedCell}
+          onAddRow={onAddRow}
+          onRemoveRow={onRemoveRow}
+          onAddColumn={onAddColumn}
+          onRemoveColumn={onRemoveColumn}
         />
       </div>
 

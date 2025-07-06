@@ -1654,6 +1654,128 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     }
   };
 
+  // Handle adding a row to the table
+  const handleAddRow = (position: 'before' | 'after', rowIndex: number) => {
+    if (!editingTableId) return;
+    
+    setInstances(prev => prev.map(inst => {
+      if (inst.id === editingTableId && inst.type === 'table') {
+        const newRowIndex = position === 'after' ? rowIndex + 1 : rowIndex;
+        const newRows = inst.rows + 1;
+        
+        // First, update row numbers for existing cells that need to be shifted
+        const updatedCells = inst.cells.map(cell => ({
+          ...cell,
+          row: cell.row >= newRowIndex ? cell.row + 1 : cell.row
+        }));
+        
+        // Then add new cells for the new row
+        const newCells = [...updatedCells];
+        for (let col = 0; col < inst.cols; col++) {
+          newCells.push({
+            row: newRowIndex,
+            col: col,
+            content: null
+          });
+        }
+        
+        return {
+          ...inst,
+          rows: newRows,
+          cells: newCells
+        };
+      }
+      return inst;
+    }));
+  };
+
+  // Handle removing a row from the table
+  const handleRemoveRow = (rowIndex: number) => {
+    if (!editingTableId) return;
+    
+    setInstances(prev => prev.map(inst => {
+      if (inst.id === editingTableId && inst.type === 'table') {
+        const newRows = inst.rows - 1;
+        
+        // Remove cells in the specified row and update row numbers
+        const newCells = inst.cells
+          .filter(cell => cell.row !== rowIndex)
+          .map(cell => ({
+            ...cell,
+            row: cell.row > rowIndex ? cell.row - 1 : cell.row
+          }));
+        
+        return {
+          ...inst,
+          rows: newRows,
+          cells: newCells
+        };
+      }
+      return inst;
+    }));
+  };
+
+  // Handle adding a column to the table
+  const handleAddColumn = (position: 'before' | 'after', colIndex: number) => {
+    if (!editingTableId) return;
+    
+    setInstances(prev => prev.map(inst => {
+      if (inst.id === editingTableId && inst.type === 'table') {
+        const newColIndex = position === 'after' ? colIndex + 1 : colIndex;
+        const newCols = inst.cols + 1;
+        
+        // First, update column numbers for existing cells that need to be shifted
+        const updatedCells = inst.cells.map(cell => ({
+          ...cell,
+          col: cell.col >= newColIndex ? cell.col + 1 : cell.col
+        }));
+        
+        // Then add new cells for the new column
+        const newCells = [...updatedCells];
+        for (let row = 0; row < inst.rows; row++) {
+          newCells.push({
+            row: row,
+            col: newColIndex,
+            content: null
+          });
+        }
+        
+        return {
+          ...inst,
+          cols: newCols,
+          cells: newCells
+        };
+      }
+      return inst;
+    }));
+  };
+
+  // Handle removing a column from the table
+  const handleRemoveColumn = (colIndex: number) => {
+    if (!editingTableId) return;
+    
+    setInstances(prev => prev.map(inst => {
+      if (inst.id === editingTableId && inst.type === 'table') {
+        const newCols = inst.cols - 1;
+        
+        // Remove cells in the specified column and update column numbers
+        const newCells = inst.cells
+          .filter(cell => cell.col !== colIndex)
+          .map(cell => ({
+            ...cell,
+            col: cell.col > colIndex ? cell.col - 1 : cell.col
+          }));
+        
+        return {
+          ...inst,
+          cols: newCols,
+          cells: newCells
+        };
+      }
+      return inst;
+    }));
+  };
+
   const handleInstanceContextMenu = (e: React.MouseEvent, instanceId: any) => {
     e.preventDefault();
     setContextMenu({
@@ -1869,6 +1991,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             availableInstances={availableInstances}
             onCaptureToCell={handleCaptureToTableCell}
             isCaptureEnabled={isCaptureEnabled}
+            onAddRow={handleAddRow}
+            onRemoveRow={handleRemoveRow}
+            onAddColumn={handleAddColumn}
+            onRemoveColumn={handleRemoveColumn}
           />
         ) : (
           // Default Instance View
