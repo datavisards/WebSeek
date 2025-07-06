@@ -114,6 +114,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   const [editingTableId, setEditingTableId] = useState<string | null>(null);
   const [tableCount, setTableCount] = useState(0);
   const tableCountRef = useRef(0);
+  const [captureTarget, setCaptureTarget] = useState<{ tableId: string, row: number, col: number } | null>(null);
+  const captureTargetRef = useRef<{ tableId: string, row: number, col: number } | null>(null);
 
   // Update the latest state values
   useEffect(() => {
@@ -124,7 +126,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     instancesRef.current = instances;
     selectedInstanceIdRef.current = selectedInstanceId;
     deletedInstancesRef.current = deletedInstances;
-  }, [textCount, imageCount, sketchCount, tableCount, instances, selectedInstanceId, deletedInstances]);
+    captureTargetRef.current = captureTarget;
+  }, [textCount, imageCount, sketchCount, tableCount, instances, selectedInstanceId, deletedInstances, captureTarget]);
 
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = (screenX: number, screenY: number) => {
@@ -1030,11 +1033,13 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         handleScreenshotFinished(msg);
       } else if (msg.action === 'selection_canceled') {
         console.log("Element selection canceled");
+        setCaptureTarget(null);
         setIsCaptureEnabled(true);
       } else if (msg.action === 'exit_selection') {
         setSelectedInstanceId(null);
         setDraggingInstanceId(null);
         setDraggingEmbeddedId(null);
+        setCaptureTarget(null);
       }
     });
 
@@ -1042,6 +1047,13 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   }, []);
 
   const handleElementSelected = (message: any) => {
+    console.log("Element selected:", message, captureTargetRef.current);
+    // Check if this is a table cell capture
+    if (captureTargetRef.current) {
+      handleTableCellCapture(message);
+      return;
+    }
+
     const rect = containerRef.current?.getBoundingClientRect();
     const x = rect ? rect.width / 2 : 0;
     const y = rect ? rect.height / 2 : 0;
@@ -1082,6 +1094,100 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         }
       ]);
     }
+    setIsCaptureEnabled(true);
+  };
+
+  // Handle captured content for table cells
+  const handleTableCellCapture = (message: any) => {
+    if (!captureTargetRef.current) return;
+
+    const { tableId, row, col } = captureTargetRef.current;
+    console.log("Table ID:", tableId, "Row:", row, "Col:", col, "Instances:", instancesRef.current);
+    const table = instancesRef.current.find(inst => inst.id === tableId && inst.type === 'table') as TableInstance | undefined;
+    
+    if (!table) {
+      console.error('Table not found for capture target');
+      setCaptureTarget(null);
+      setIsCaptureEnabled(true);
+      return;
+    }
+
+    // Find the current cell content
+    const cellIndex = table.cells.findIndex(c => c.row === row && c.col === col);
+    if (cellIndex === -1) {
+      console.error('Cell not found');
+      setCaptureTarget(null);
+      setIsCaptureEnabled(true);
+      return;
+    }
+
+    const currentCell = table.cells[cellIndex];
+    const currentContent = currentCell.content;
+
+    // Handle different content types
+    if (message.type === 'text') {
+      const newText = message.data;
+      
+      // If cell is empty or contains text, append the new text
+      if (!currentContent || currentContent.type === 'text') {
+        const combinedText = currentContent 
+          ? `${currentContent.content} ${newText}`
+          : newText;
+        
+        // Create embedded text instance
+        const embeddedText: EmbeddedInstance = {
+          type: 'text',
+          id: generateId(),
+          content: combinedText
+        };
+
+        // Update the table
+        setInstances(prev => prev.map(inst => {
+          if (inst.id === tableId && inst.type === 'table') {
+            const newCells = [...inst.cells];
+            newCells[cellIndex] = {
+              ...newCells[cellIndex],
+              content: embeddedText
+            };
+            return { ...inst, cells: newCells };
+          }
+          return inst;
+        }));
+
+        onOperation(`Appended text to cell (${row + 1}, ${String.fromCharCode(65 + col)}) from [${message.pageId}](${message.pageURL})`);
+      } else {
+        alert('Cannot append text to a cell containing non-text content. Please remove the existing content first.');
+      }
+    } else if (message.type === 'image') {
+      // Only allow images in empty cells
+      if (!currentContent) {
+        const embeddedImage: EmbeddedInstance = {
+          type: 'image',
+          id: generateId(),
+          src: message.data
+        };
+
+        // Update the table
+        setInstances(prev => prev.map(inst => {
+          if (inst.id === tableId && inst.type === 'table') {
+            const newCells = [...inst.cells];
+            newCells[cellIndex] = {
+              ...newCells[cellIndex],
+              content: embeddedImage
+            };
+            return { ...inst, cells: newCells };
+          }
+          return inst;
+        }));
+
+        onOperation(`Added image to cell (${row + 1}, ${String.fromCharCode(65 + col)}) from [${message.pageId}](${message.pageURL})`);
+      } else {
+        alert('Cannot add image to a cell that already contains content. Please remove the existing content first.');
+      }
+    }
+
+    // Clear capture target and re-enable capture
+    setCaptureTarget(null);
     setIsCaptureEnabled(true);
   };
 
@@ -1159,6 +1265,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           setSelectedInstanceId(null);
           setDraggingInstanceId(null);
           setDraggingEmbeddedId(null);
+          setCaptureTarget(null);
           setIsCaptureEnabled(true);
         }
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -1530,6 +1637,23 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     setEditingTableId(null);
   };
 
+  // Handle capture to specific table cell
+  const handleCaptureToTableCell = (row: number, col: number) => {
+    if (!editingTableId) return;
+    
+    // Store the target cell information for when capture completes
+    setCaptureTarget({ tableId: editingTableId, row, col });
+    
+    // Start capture process
+    if (bgPort.current) {
+      console.log("Sending message to start element selection for table cell", bgPort.current);
+      bgPort.current.postMessage({ 
+        action: 'start_element_selection'
+      });
+      setIsCaptureEnabled(false);
+    }
+  };
+
   const handleInstanceContextMenu = (e: React.MouseEvent, instanceId: any) => {
     e.preventDefault();
     setContextMenu({
@@ -1743,6 +1867,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             draggingInstanceId={draggingInstanceId}
             setDraggingInstanceId={setDraggingInstanceId}
             availableInstances={availableInstances}
+            onCaptureToCell={handleCaptureToTableCell}
+            isCaptureEnabled={isCaptureEnabled}
           />
         ) : (
           // Default Instance View

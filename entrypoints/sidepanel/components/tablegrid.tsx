@@ -11,6 +11,7 @@ interface TableGridProps {
   onEditCellContent: (row: number, col: number, newValue: string) => void;
   setDraggingInstanceId: React.Dispatch<React.SetStateAction<string | null>>;
   isReadOnly?: boolean;
+  onCellSelectionChange?: (selectedCell: { row: number, col: number } | null) => void;
 }
 
 const TableGrid: React.FC<TableGridProps> = ({
@@ -20,7 +21,8 @@ const TableGrid: React.FC<TableGridProps> = ({
   onRemoveCellContent,
   onEditCellContent,
   setDraggingInstanceId,
-  isReadOnly = false
+  isReadOnly = false,
+  onCellSelectionChange
 }) => {
   const cellWidth = Math.max(50, Math.min(200, table.width / table.cols));
   const cellHeight = Math.max(50, Math.min(200, table.height / table.rows));
@@ -39,6 +41,13 @@ const TableGrid: React.FC<TableGridProps> = ({
     }
   }, [editingCell]);
 
+  // Notify parent when selected cell changes
+  useEffect(() => {
+    if (onCellSelectionChange) {
+      onCellSelectionChange(selectedCell);
+    }
+  }, [selectedCell, onCellSelectionChange]);
+
   const handleCellClick = (row: number, col: number) => {
     setSelectedCell({ row, col });
     setSelectedRows(new Set());
@@ -51,10 +60,19 @@ const TableGrid: React.FC<TableGridProps> = ({
     setSelectedCell({ row, col });
     setSelectedRows(new Set());
     setSelectedColumns(new Set());
-    setEditingCell({ row, col });
+    // Don't enter edit mode on single click - only select the cell
   };
 
   const handleBlur = (e: React.FocusEvent, row: number, col: number) => {
+    // Only blur if the new focus target is outside the cell
+    const cellElement = e.currentTarget.closest('.table-cell');
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    
+    // If the new focus target is still within the same cell, don't blur
+    if (cellElement && relatedTarget && cellElement.contains(relatedTarget)) {
+      return;
+    }
+    
     const newValue = e.currentTarget.textContent || '';
     onEditCellContent(row, col, newValue);
     setEditingCell(null);
@@ -66,6 +84,58 @@ const TableGrid: React.FC<TableGridProps> = ({
       const newValue = e.currentTarget.textContent || '';
       onEditCellContent(row, col, newValue);
       setEditingCell(null);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      setEditingCell(null);
+    }
+  };
+
+  // Handle keyboard events for the entire grid (for F2 and Enter to edit)
+  const handleGridKeyDown = (e: React.KeyboardEvent) => {
+    // Don't handle keyboard events when editing a cell
+    if (editingCell) return;
+    
+    if (isReadOnly || !selectedCell) return;
+
+    const cell = table.cells.find(c => c.row === selectedCell.row && c.col === selectedCell.col);
+    if (!cell) return;
+
+    if (e.key === 'F2' || e.key === 'Enter') {
+      e.preventDefault();
+      if (canEditCell(cell)) {
+        setEditingCell(selectedCell);
+      } else if (cell.content?.type === 'image') {
+        alert('Image cells cannot be edited directly. Please remove the image first.');
+      } else {
+        alert('This type of content cannot be edited directly. Please remove it first.');
+      }
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      let newRow = selectedCell.row;
+      let newCol = selectedCell.col;
+
+      switch (e.key) {
+        case 'ArrowUp':
+          newRow = Math.max(0, selectedCell.row - 1);
+          break;
+        case 'ArrowDown':
+          newRow = Math.min(table.rows - 1, selectedCell.row + 1);
+          break;
+        case 'ArrowLeft':
+          newCol = Math.max(0, selectedCell.col - 1);
+          break;
+        case 'ArrowRight':
+          newCol = Math.min(table.cols - 1, selectedCell.col + 1);
+          break;
+      }
+
+      if (newRow !== selectedCell.row || newCol !== selectedCell.col) {
+        setSelectedCell({ row: newRow, col: newCol });
+        setSelectedRows(new Set());
+        setSelectedColumns(new Set());
+        setEditingCell(null);
+      }
     }
   };
 
@@ -142,6 +212,11 @@ const TableGrid: React.FC<TableGridProps> = ({
     return selectedRows.has(row) || selectedColumns.has(col);
   };
 
+  // Check if a cell can be edited (only text cells or empty cells)
+  const canEditCell = (cell: { content: EmbeddedInstance | null }) => {
+    return !cell.content || cell.content.type === 'text';
+  };
+
   return (
     <div
       className="table-grid"
@@ -153,6 +228,8 @@ const TableGrid: React.FC<TableGridProps> = ({
         width: 'fit-content',
         flex: '1 1 auto',
       }}
+      onKeyDown={handleGridKeyDown}
+      tabIndex={0}
     >
       {/* Corner Header */}
       <div
@@ -244,13 +321,14 @@ const TableGrid: React.FC<TableGridProps> = ({
               setDraggingInstanceId(null);
               setHoveredCell(null);
             }}
-            onClick={isReadOnly ? undefined : () => handleCellClick(cell.row, cell.col)}
-            onDoubleClick={isReadOnly ? undefined : () => {
-              const isTextCell = !cell.content || (cell.content.type === 'text');
-              if (isTextCell) {
+            onClick={isReadOnly || isEditing ? undefined : () => handleCellClick(cell.row, cell.col)}
+            onDoubleClick={isReadOnly || isEditing ? undefined : () => {
+              if (canEditCell(cell)) {
                 setEditingCell({ row: cell.row, col: cell.col });
+              } else if (cell.content?.type === 'image') {
+                alert('Image cells cannot be edited directly. Please remove the image first.');
               } else {
-                alert('Non-textual content cannot be edited directly. Please remove it first.');
+                alert('This type of content cannot be edited directly. Please remove it first.');
               }
             }}
             style={{
@@ -267,6 +345,11 @@ const TableGrid: React.FC<TableGridProps> = ({
                 ref={inputRef}
                 onBlur={isReadOnly ? undefined : (e) => handleBlur(e, cell.row, cell.col)}
                 onKeyDown={isReadOnly ? undefined : (e) => handleKeyDown(e, cell.row, cell.col)}
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onMouseUp={(e) => e.stopPropagation()}
+                onSelect={(e) => e.stopPropagation()}
+                onFocus={(e) => e.stopPropagation()}
               >
                 {cell.content && cell.content.type === 'text' ? cell.content.content : ''}
               </div>

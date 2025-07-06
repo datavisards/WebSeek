@@ -23,6 +23,7 @@
 .table-cell.selected {
   box-shadow: 0 0 0 1.5px #4a90e2;
   z-index: 1;
+  background-color: rgba(74, 144, 226, 0.1);
 }
 
 .table-cell.editing {
@@ -70,10 +71,16 @@
   background-color: white;
   height: calc(100% - 8px);
   overflow: auto;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
 }
 
 .editable-text:focus {
   outline: 2px solid #1976D2;
+  background-color: #fafafa;
 }
 
 .grid-header {
@@ -96,4 +103,9 @@
 
 .header-selected {
   background-color: rgba(0, 120, 215, 0.1) !important;
+}
+
+.table-grid:focus {
+  outline: 2px solid #4a90e2;
+  outline-offset: 2px;
 }

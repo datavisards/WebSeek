@@ -15,6 +15,8 @@ interface TableEditorProps {
   draggingInstanceId: string | null;
   setDraggingInstanceId: React.Dispatch<React.SetStateAction<string | null>>;
   availableInstances: Instance[];
+  onCaptureToCell?: (row: number, col: number) => void;
+  isCaptureEnabled?: boolean;
 }
 
 const TableEditor: React.FC<TableEditorProps> = ({
@@ -28,7 +30,10 @@ const TableEditor: React.FC<TableEditorProps> = ({
   draggingInstanceId,
   setDraggingInstanceId,
   availableInstances,
+  onCaptureToCell,
+  isCaptureEnabled = true,
 }) => {
+  const [selectedCell, setSelectedCell] = useState<{ row: number, col: number } | null>(null);
   if (!tableId) return null;
 
   const table = instances.find(inst =>
@@ -43,6 +48,15 @@ const TableEditor: React.FC<TableEditorProps> = ({
         <h3 style={{ margin: 0 }}>Edit Table</h3>
         <button onClick={onSaveTable}>Save</button>
         <button onClick={onCancel}>Cancel</button>
+        {selectedCell && onCaptureToCell && (
+          <button 
+            onClick={() => onCaptureToCell(selectedCell.row, selectedCell.col)}
+            disabled={!isCaptureEnabled}
+            style={{ marginLeft: '10px' }}
+          >
+            Capture to Cell ({selectedCell.row + 1}, {String.fromCharCode(65 + selectedCell.col)})
+          </button>
+        )}
       </div>
 
       <div className="table-container">
@@ -53,6 +67,7 @@ const TableEditor: React.FC<TableEditorProps> = ({
           onRemoveCellContent={onRemoveCellContent}
           setDraggingInstanceId={setDraggingInstanceId}
           onEditCellContent={onEditCellContent}
+          onCellSelectionChange={setSelectedCell}
         />
       </div>
 
