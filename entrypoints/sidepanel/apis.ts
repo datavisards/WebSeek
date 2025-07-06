@@ -5,7 +5,8 @@ import {
     EmbeddedTextInstance,
     EmbeddedImageInstance,
     EmbeddedSketchInstance,
-    EmbeddedTableInstance
+    EmbeddedTableInstance,
+    Message
 } from './types';
 
 const openai = new OpenAI({
@@ -168,7 +169,7 @@ type Instance = TextInstance | ImageInstance | SketchInstance | TableInstance;
 Note:
 - Do NOT escape single quotes (').
 - Use double backslashes (\\\\) for special regex characters like \\s or \\d.
-- Do NOT include any additional text, explanations, or markdown formatting.
+- You may use markdown formatting in the summary for better readability (e.g., **bold**, *italic*, \`code\`, lists).
 - Do not leave any non-optional fields empty for each result instance.
 
 ---
@@ -403,7 +404,7 @@ Now, analyze the provided logs and return the JSON response.
         //                         "col": 1,
         //                         "content": {
         //                             "type": "text",
-        //                             "text": "4K Retro Vintage Digital Camera, 64MP Retro 3” IPS Screen Camera with 6X Optical Zoom, WiFi Transfer Autofocus Rechargeable Retro Camera for Travel Vlogging and Gifts"
+        //                             "text": "4K Retro Vintage Digital Camera, 64MP Retro 3" IPS Screen Camera with 6X Optical Zoom, WiFi Transfer Autofocus Rechargeable Retro Camera for Travel Vlogging and Gifts"
         //                         }
         //                     },
         //                     {
@@ -419,7 +420,7 @@ Now, analyze the provided logs and return the JSON response.
         //                         "col": 1,
         //                         "content": {
         //                             "type": "text",
-        //                             "text": "4K Digital Camera for Photography, 64MP Vlogging Camera for YouTube with 3\" 180° Flip Screen, 18X Digital Zoom Point and Shoot Camara with 32GB Micro SD Card for Beginner (Black)"
+        //                             "text": "4K Digital Camera for Photography, 64MP Vlogging Camera for YouTube with 3" 180° Flip Screen, 18X Digital Zoom Point and Shoot Camara with 32GB Micro SD Card for Beginner (Black)"
         //                         }
         //                     },
         //                     {
@@ -435,7 +436,7 @@ Now, analyze the provided logs and return the JSON response.
         //                         "col": 1,
         //                         "content": {
         //                             "type": "text",
-        //                             "text": "REDTIGER Dash Cam Front Rear, 4K/2.5K Full HD Dash Camera for Cars, Included 32GB Card, Built-in Wi-Fi GPS, APP Control, 3.18\" IPS Screen, Night Vision, Wide Angle, WDR, 24H Parking Mode(F7NP)"
+        //                             "text": "REDTIGER Dash Cam Front Rear, 4K/2.5K Full HD Dash Camera for Cars, Included 32GB Card, Built-in Wi-Fi GPS, APP Control, 3.18" IPS Screen, Night Vision, Wide Angle, WDR, 24H Parking Mode(F7NP)"
         //                         }
         //                     },
         //                     {
@@ -483,7 +484,7 @@ Now, analyze the provided logs and return the JSON response.
         //                         "col": 1,
         //                         "content": {
         //                             "type": "text",
-        //                             "text": "4K Digital Camera for Photography- 48MP Autofocus Vlogging Camera with 2.8\" 180° Flip Screen, 16X Digital Zoom- Compact Point and Shoot Camera with 64GB SD for YouTube, Travel, Beginners"
+        //                             "text": "4K Digital Camera for Photography- 48MP Autofocus Vlogging Camera with 2.8" 180° Flip Screen, 16X Digital Zoom- Compact Point and Shoot Camera with 64GB SD for YouTube, Travel, Beginners"
         //                         }
         //                     },
         //                     {
@@ -499,7 +500,7 @@ Now, analyze the provided logs and return the JSON response.
         //                         "col": 1,
         //                         "content": {
         //                             "type": "text",
-        //                             "text": "4K Digital Camera for Photography Autofocus, 2024 Latest 48MP Vlogging Camera for YouTube with SD Card, 2 Batteries, 3\" 180°Flip Screen Compact Travel Camera for Teens with 16X Zoom, Anti-Shake,Black"
+        //                             "text": "4K Digital Camera for Photography Autofocus, 2024 Latest 48MP Vlogging Camera for YouTube with SD Card, 2 Batteries, 3" 180°Flip Screen Compact Travel Camera for Teens with 16X Zoom, Anti-Shake,Black"
         //                         }
         //                     },
         //                     {
@@ -563,7 +564,7 @@ Now, analyze the provided logs and return the JSON response.
         //                         "col": 1,
         //                         "content": {
         //                             "type": "text",
-        //                             "text": "TP-Link 𝗧𝗮𝗽𝗼 MagCam, 2024 PCMag Editors’ Choice & Wirecutter Recommended Outdoor Security Camera, 2K, Battery, Magnetic Mount Wireless Camera, 150° FOV, SD/Cloud Storage, Person/Vehicle Detection"
+        //                             "text": "TP-Link 𝗧𝗮𝗽𝗼 MagCam, 2024 PCMag Editors' Choice & Wirecutter Recommended Outdoor Security Camera, 2K, Battery, Magnetic Mount Wireless Camera, 150° FOV, SD/Cloud Storage, Person/Vehicle Detection"
         //                         }
         //                     }
         //                 ]
@@ -631,4 +632,177 @@ function sanitizeJSONString(jsonString: string): string {
     sanitized = sanitized.replace(/\\s/g, ' ');
 
     return sanitized;
+}
+
+export async function chatWithAgent(
+    userMessage: string,
+    conversationHistory: Message[],
+    instanceContexts: string,
+    imageContexts: any[],
+    htmlContexts: Record<string, string>,
+    logs: string[],
+): Promise<{
+    response: string;
+    results?: any[];
+}> {
+    try {
+        // Extract all unique URLs from logs and conversation history
+        const urlRegex = /\bhttps?:\/\/[^\s'"<>]+\b/gi;
+        const seenUrls = new Set<string>();
+        const uniqueHtmlContexts: { [url: string]: string } = {};
+
+        // Check logs for URLs
+        logs.forEach(log => {
+            const urls = log.match(urlRegex) || [];
+            urls.forEach(url => {
+                if (!seenUrls.has(url)) {
+                    seenUrls.add(url);
+                    const html = htmlContexts[url];
+                    if (html) {
+                        uniqueHtmlContexts[url] = html;
+                    }
+                }
+            });
+        });
+
+        // Check conversation history for URLs
+        conversationHistory.forEach(msg => {
+            const urls = msg.message.match(urlRegex) || [];
+            urls.forEach(url => {
+                if (!seenUrls.has(url)) {
+                    seenUrls.add(url);
+                    const html = htmlContexts[url];
+                    if (html) {
+                        uniqueHtmlContexts[url] = html;
+                    }
+                }
+            });
+        });
+
+        // Format conversation history
+        const conversationText = conversationHistory
+            .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.message}`)
+            .join('\n');
+
+        // Construct chat prompt
+        const prompt = 
+`You are an AI assistant that helps users with web automation and data extraction tasks. You can analyze web content, understand user intentions, and generate structured data in various formats.
+
+### Your Capabilities:
+1. **Text Analysis**: Extract and process text content from web pages
+2. **Image Processing**: Work with images and visual content
+3. **Table Creation**: Generate structured tables from data
+4. **Sketch Generation**: Create visual representations
+5. **Web Content Understanding**: Analyze HTML and extract relevant information
+
+### Available Data Types:
+- **Text**: Plain text content
+- **Image**: Image URLs and visual content
+- **Table**: Structured tabular data with rows and columns
+- **Sketch**: Visual drawings and diagrams
+
+### Response Format:
+You can respond in two ways:
+
+1. **Text Response**: Provide helpful explanations, suggestions, or answers to questions
+2. **Structured Response**: When the user asks for specific data extraction or creation, respond with JSON:
+
+\`\`\`json
+{
+  "response": "A helpful text response explaining what you're doing",
+  "results": [
+    {
+      "type": "text|image|table|sketch",
+      // ... other properties based on type
+    }
+  ]
+}
+\`\`\`
+
+### Instance Types for Results:
+- **TextInstance**: { "type": "text", "id": "string", "content": "string", "x": number, "y": number, "width": number, "height": number }
+- **ImageInstance**: { "type": "image", "id": "string", "src": "string", "x": number, "y": number, "width": number, "height": number }
+- **TableInstance**: { "type": "table", "id": "string", "rows": number, "cols": number, "cells": [...], "x": number, "y": number, "width": number, "height": number }
+- **SketchInstance**: { "type": "sketch", "id": "string", "content": [...], "thumbnail": "string", "x": number, "y": number, "width": number, "height": number }
+
+### Context Information:
+
+**Current Instances:**
+${instanceContexts}
+
+**Operation Logs:**
+${logs.join('\n')}
+
+**HTML Contexts (for URLs mentioned):**
+${Object.entries(uniqueHtmlContexts).map(([url, html]) =>
+    `URL: ${url}\nHTML:\n\`\`\`html\n${html}\n\`\`\``).join('\n\n')}
+
+**Conversation History:**
+${conversationText}
+
+**Current User Message:**
+${userMessage}
+
+### Instructions:
+- If the user is asking for information or help, provide a helpful text response with markdown formatting when appropriate
+- Use markdown formatting to improve readability: **bold** for emphasis, *italic* for subtle emphasis, \`code\` for technical terms, and lists for step-by-step instructions
+- If the user wants to extract data or create structured content, provide both a text response and structured results
+- Use the HTML contexts when URLs are mentioned to understand web content
+- Reference existing instances when relevant using their IDs
+- Be conversational and helpful while maintaining focus on web automation tasks
+
+Now, respond to the user's message appropriately.`.trim();
+
+        console.log('Constructed chat prompt for LLM:', prompt);
+
+        // Call the LLM
+        const completion = await openai.chat.completions.create({
+            model: "anthropic/claude-sonnet-4",
+            messages: [
+                {
+                    role: "user",
+                    content: [{
+                        type: "text",
+                        text: prompt
+                    }, ...imageContexts]
+                },
+            ]
+        });
+
+        // Extract content from response
+        const content = completion.choices[0]?.message?.content || '';
+        console.log('LLM chat response content:', content);
+
+        // Check if response contains structured data
+        const jsonMatch = content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+        
+        if (jsonMatch) {
+            // Parse structured response
+            try {
+                const parsed = JSON.parse(jsonMatch[1]);
+                return {
+                    response: parsed.response || content,
+                    results: parsed.results || []
+                };
+            } catch (e) {
+                console.error('Failed to parse structured response:', e);
+                return {
+                    response: content,
+                    results: []
+                };
+            }
+        } else {
+            // Return text-only response
+            return {
+                response: content,
+                results: []
+            };
+        }
+    } catch (error) {
+        console.error('Error in chat with agent:', error);
+        return {
+            response: 'Sorry, I encountered an error while processing your request. Please try again.',
+            results: []
+        };
+    }
 }

@@ -1,7 +1,7 @@
 import { browser, type Browser } from 'wxt/browser';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Instance, EmbeddedInstance, SketchItem, TextInstance, ImageInstance, SketchInstance, TableInstance, Message } from '../types';
-import { cleanHTML, generateInstanceContext, generateId, parseInstance } from '../utils';
+import { cleanHTML, generateInstanceContext, generateId, parseInstance, detectMarkdown, renderMarkdown } from '../utils';
 import TextEditor from './texteditor';
 import SketchEditor from './sketcheditor';
 import TrashView from './trashview';

@@ -417,4 +417,83 @@ function hasGeometricProperties(obj: any): boolean {
     );
 }
 
+// Markdown detection and rendering utilities
+export const detectMarkdown = (text: string): boolean => {
+    // Common markdown patterns
+    const markdownPatterns = [
+        /^#{1,6}\s+/m,                    // Headers (# ## ### etc.)
+        /\*\*.*?\*\*/,                    // Bold (**text**)
+        /\*.*?\*/,                        // Italic (*text*)
+        /`.*?`/,                          // Inline code (`code`)
+        /```[\s\S]*?```/,                 // Code blocks (```code```)
+        /\[.*?\]\(.*?\)/,                 // Links ([text](url))
+        /^\s*[-*+]\s+/m,                  // Unordered lists (- * +)
+        /^\s*\d+\.\s+/m,                  // Ordered lists (1. 2. etc.)
+        /^\s*>\s+/m,                      // Blockquotes (> text)
+        /^\s*\|.*\|.*\|/m,                // Tables (| col1 | col2 |)
+        /~~.*?~~/,                        // Strikethrough (~~text~~)
+        /^---+$/m,                        // Horizontal rules (---)
+        /^===+$/m,                        // Horizontal rules (===)
+    ];
+    
+    return markdownPatterns.some(pattern => pattern.test(text));
+};
+
+export const renderMarkdown = (text: string): string => {
+    if (!detectMarkdown(text)) {
+        return text;
+    }
+
+    let html = text;
+
+    // Escape HTML characters first
+    html = html
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    // Headers
+    html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+    html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+    html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+    // Bold
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Italic
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+    // Inline code
+    html = html.replace(/`(.*?)`/g, '<code>$1</code>');
+
+    // Code blocks
+    html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+
+    // Links
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+
+    // Unordered lists
+    html = html.replace(/^\s*[-*+]\s+(.*$)/gim, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+
+    // Ordered lists
+    html = html.replace(/^\s*\d+\.\s+(.*$)/gim, '<li>$1</li>');
+    html = html.replace(/(<li>.*<\/li>)/s, '<ol>$1</ol>');
+
+    // Blockquotes
+    html = html.replace(/^\s*>\s+(.*$)/gim, '<blockquote>$1</blockquote>');
+
+    // Strikethrough
+    html = html.replace(/~~(.*?)~~/g, '<del>$1</del>');
+
+    // Horizontal rules
+    html = html.replace(/^---+$/gim, '<hr>');
+    html = html.replace(/^===+$/gim, '<hr>');
+
+    // Line breaks
+    html = html.replace(/\n/g, '<br>');
+
+    return html;
+};
+
 export default { indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance };

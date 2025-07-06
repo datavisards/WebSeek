@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Message, Instance } from '../types';
+import { chatWithAgent } from '../apis';
+import { generateInstanceContext, parseInstance, detectMarkdown, renderMarkdown } from '../utils';
 import './chattab.css';
 
 interface ChatTabProps {
@@ -9,6 +11,9 @@ interface ChatTabProps {
     agentLoading: boolean;
     setAgentLoading: React.Dispatch<React.SetStateAction<boolean>>;
     instances: Instance[];
+    logs: string[];
+    htmlContexts: Record<string, string>;
+    setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
 }
 
 const ChatTab: React.FC<ChatTabProps> = ({
@@ -18,6 +23,9 @@ const ChatTab: React.FC<ChatTabProps> = ({
     agentLoading,
     setAgentLoading,
     instances,
+    logs,
+    htmlContexts,
+    setInstances
 }) => {
     const [inputValue, setInputValue] = useState('');
     const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -127,17 +135,73 @@ const ChatTab: React.FC<ChatTabProps> = ({
         }
     };
 
-    const sendMsg = () => {
-        if (!inputValue.trim()) return;
+    const sendMsg = async () => {
+        if (!inputValue.trim() || agentLoading) return;
         
-        addMessage({ role: 'user', message: inputValue });
+        const userMessage = inputValue.trim();
         setInputValue('');
+        
+        // Add user message to chat
+        addMessage({ role: 'user', message: userMessage });
         setAgentLoading(true);
+        
+        try {
+            // Generate instance context
+            const { imageContext, textContext } = generateInstanceContext(instances);
+            
+            // Call the chat agent
+            const { response, results } = await chatWithAgent(
+                userMessage,
+                messages,
+                textContext,
+                imageContext,
+                htmlContexts,
+                logs
+            );
+            
+            // Add agent response to chat
+            addMessage({ role: 'agent', message: response });
+            
+            // If there are structured results, add them to instances
+            if (results && results.length > 0) {
+                const parsedResults: Instance[] = results
+                    .map((result) => parseInstance(result))
+                    .filter((inst): inst is Instance =>
+                        inst && typeof inst === 'object' &&
+                        'id' in inst && 'type' in inst && 'x' in inst && 'y' in inst && 'width' in inst && 'height' in inst
+                    );
+                
+                if (parsedResults.length > 0) {
+                    setInstances(prev => [...prev, ...parsedResults]);
+                }
+            }
+        } catch (error) {
+            console.error('Error in chat:', error);
+            addMessage({ 
+                role: 'agent', 
+                message: 'Sorry, I encountered an error while processing your request. Please try again.' 
+            });
+        } finally {
+            setAgentLoading(false);
+        }
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         sendMsg();
+    };
+
+    const renderMessage = (message: string, role: string) => {
+        // Only apply markdown rendering to agent messages
+        if (role === 'agent' && detectMarkdown(message)) {
+            return (
+                <div 
+                    className="markdown-content"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(message) }}
+                />
+            );
+        }
+        return message;
     };
 
     return (
@@ -151,7 +215,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
                             key={index}
                             className={`message-bubble ${msg.role === 'user' ? 'user' : 'agent'}`}
                         >
-                            {msg.message}
+                            {renderMessage(msg.message, msg.role)}
                         </div>
                     ))
                 )}
@@ -174,6 +238,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
                         onKeyDown={handleKeyDown}
                         placeholder="Type your message..."
                         className="message-input"
+                        disabled={agentLoading}
                     />
                     {showAutocomplete && autoCompleteList.length > 0 && (
                         <div className="autocomplete-container">
@@ -189,7 +254,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
                         </div>
                     )}
                 </div>
-                <button type="submit" className="send-button">
+                <button type="submit" className="send-button" disabled={agentLoading || !inputValue.trim()}>
                     Send
                 </button>
             </form>

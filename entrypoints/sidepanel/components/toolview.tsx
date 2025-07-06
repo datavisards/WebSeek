@@ -13,6 +13,7 @@ interface ToolViewProps {
     agentLoading: boolean;
     setAgentLoading: React.Dispatch<React.SetStateAction<boolean>>;
     instances: Instance[];
+    setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
 }
 
 const ToolView: React.FC<ToolViewProps> = ({
@@ -23,7 +24,8 @@ const ToolView: React.FC<ToolViewProps> = ({
     setMessages,
     agentLoading,
     setAgentLoading,
-    instances
+    instances,
+    setInstances
 }) => {
     const [activeTab, setActiveTab] = useState<'chat' | 'code'>('chat');
 
@@ -57,6 +59,9 @@ const ToolView: React.FC<ToolViewProps> = ({
                         agentLoading={agentLoading}
                         setAgentLoading={setAgentLoading}
                         instances={instances}
+                        logs={logs}
+                        htmlContexts={htmlContexts}
+                        setInstances={setInstances}
                     />
                 )}
                 {activeTab === 'code' && (
