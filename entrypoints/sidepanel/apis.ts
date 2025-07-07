@@ -172,6 +172,7 @@ Note:
 - Use double backslashes (\\\\) for special regex characters like \\s or \\d.
 - You may use markdown formatting in the summary for better readability (e.g., **bold**, *italic*, \`code\`, lists).
 - Do not leave any non-optional fields empty for each result instance.
+- When returning one or more instances in the results, assign a meaningful, human-readable, and unique ID to each instance (e.g., 'Annual_report', 'Info_list', etc.), which will be used for rendering.
 
 ---
 
@@ -428,6 +429,7 @@ ${userMessage}
 - Use the HTML contexts when URLs are mentioned to understand web content
 - Reference existing instances when relevant using their IDs
 - Be conversational and helpful while maintaining focus on web automation tasks
+- When returning one or more instances in the results, assign a meaningful, human-readable, and unique ID to each instance (e.g., 'Annual_Report', 'Info_list', etc.), which will be used for rendering.
 
 Now, respond to the user's message appropriately.`.trim();
 

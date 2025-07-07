@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Message, Instance } from '../types';
 import { chatWithAgent } from '../apis';
-import { generateInstanceContext, parseInstance, detectMarkdown, renderMarkdown } from '../utils';
+import { generateInstanceContext, parseInstance, detectMarkdown, renderMarkdown, ensureValidInstanceIds } from '../utils';
 import './chattab.css';
 
 interface ChatTabProps {
@@ -164,13 +164,14 @@ const ChatTab: React.FC<ChatTabProps> = ({
             
             // If there are structured results, add them to instances
             if (results && results.length > 0) {
-                const parsedResults: Instance[] = results
+                let parsedResults: Instance[] = results
                     .map((result) => parseInstance(result))
                     .filter((inst): inst is Instance =>
                         inst && typeof inst === 'object' &&
                         'id' in inst && 'type' in inst && 'x' in inst && 'y' in inst && 'width' in inst && 'height' in inst
                     );
-                
+                // Ensure valid, unique IDs
+                parsedResults = ensureValidInstanceIds(parsedResults, instances.map(i => i.id));
                 if (parsedResults.length > 0) {
                     setInstances(prev => [...prev, ...parsedResults]);
                 }

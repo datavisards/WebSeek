@@ -70,8 +70,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   // Instance context menu state
   const [contextMenu, setContextMenu] = useState({
     visible: false,
-    instanceId: null,
-    position: { x: 0, y: 0 }
+    instanceId: null as string | null,
+    position: { x: 0, y: 0 },
+    multi: false
   });
   const [renamingInstance, setRenamingInstance] = useState<Instance | null>(null);
   // General editor state
@@ -116,6 +117,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   const tableCountRef = useRef(0);
   const [captureTarget, setCaptureTarget] = useState<{ tableId: string, row: number, col: number } | null>(null);
   const captureTargetRef = useRef<{ tableId: string, row: number, col: number } | null>(null);
+  // Selection mode state
+  const [mode, setMode] = useState<'hand' | 'select'>('hand');
+  const [selectedInstanceIds, setSelectedInstanceIds] = useState<string[]>([]);
+  const [selectionBox, setSelectionBox] = useState<null | { startX: number; startY: number; endX: number; endY: number }>(null);
+  const selectionStartRef = useRef<{ x: number; y: number } | null>(null);
 
   // Update the latest state values
   useEffect(() => {
@@ -567,6 +573,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       const element = document.getElementById(`instance-${instance.id}`);
       return element && element.contains(event.target as Node);
     });
+    console.log("handleCanvasClick called", event, isOnInstance);
 
     if (!isOnInstance) {
       setIsResizing(false);
@@ -1104,7 +1111,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     const { tableId, row, col } = captureTargetRef.current;
     console.log("Table ID:", tableId, "Row:", row, "Col:", col, "Instances:", instancesRef.current);
     const table = instancesRef.current.find(inst => inst.id === tableId && inst.type === 'table') as TableInstance | undefined;
-    
+
     if (!table) {
       console.error('Table not found for capture target');
       setCaptureTarget(null);
@@ -1127,13 +1134,13 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     // Handle different content types
     if (message.type === 'text') {
       const newText = message.data;
-      
+
       // If cell is empty or contains text, append the new text
       if (!currentContent || currentContent.type === 'text') {
-        const combinedText = currentContent 
+        const combinedText = currentContent
           ? `${currentContent.content} ${newText}`
           : newText;
-        
+
         // Create embedded text instance
         const embeddedText: EmbeddedInstance = {
           type: 'text',
@@ -1640,14 +1647,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   // Handle capture to specific table cell
   const handleCaptureToTableCell = (row: number, col: number) => {
     if (!editingTableId) return;
-    
+
     // Store the target cell information for when capture completes
     setCaptureTarget({ tableId: editingTableId, row, col });
-    
+
     // Start capture process
     if (bgPort.current) {
       console.log("Sending message to start element selection for table cell", bgPort.current);
-      bgPort.current.postMessage({ 
+      bgPort.current.postMessage({
         action: 'start_element_selection'
       });
       setIsCaptureEnabled(false);
@@ -1657,18 +1664,18 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   // Handle adding a row to the table
   const handleAddRow = (position: 'before' | 'after', rowIndex: number) => {
     if (!editingTableId) return;
-    
+
     setInstances(prev => prev.map(inst => {
       if (inst.id === editingTableId && inst.type === 'table') {
         const newRowIndex = position === 'after' ? rowIndex + 1 : rowIndex;
         const newRows = inst.rows + 1;
-        
+
         // First, update row numbers for existing cells that need to be shifted
         const updatedCells = inst.cells.map(cell => ({
           ...cell,
           row: cell.row >= newRowIndex ? cell.row + 1 : cell.row
         }));
-        
+
         // Then add new cells for the new row
         const newCells = [...updatedCells];
         for (let col = 0; col < inst.cols; col++) {
@@ -1678,7 +1685,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             content: null
           });
         }
-        
+
         return {
           ...inst,
           rows: newRows,
@@ -1692,11 +1699,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   // Handle removing a row from the table
   const handleRemoveRow = (rowIndex: number) => {
     if (!editingTableId) return;
-    
+
     setInstances(prev => prev.map(inst => {
       if (inst.id === editingTableId && inst.type === 'table') {
         const newRows = inst.rows - 1;
-        
+
         // Remove cells in the specified row and update row numbers
         const newCells = inst.cells
           .filter(cell => cell.row !== rowIndex)
@@ -1704,7 +1711,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             ...cell,
             row: cell.row > rowIndex ? cell.row - 1 : cell.row
           }));
-        
+
         return {
           ...inst,
           rows: newRows,
@@ -1718,18 +1725,18 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   // Handle adding a column to the table
   const handleAddColumn = (position: 'before' | 'after', colIndex: number) => {
     if (!editingTableId) return;
-    
+
     setInstances(prev => prev.map(inst => {
       if (inst.id === editingTableId && inst.type === 'table') {
         const newColIndex = position === 'after' ? colIndex + 1 : colIndex;
         const newCols = inst.cols + 1;
-        
+
         // First, update column numbers for existing cells that need to be shifted
         const updatedCells = inst.cells.map(cell => ({
           ...cell,
           col: cell.col >= newColIndex ? cell.col + 1 : cell.col
         }));
-        
+
         // Then add new cells for the new column
         const newCells = [...updatedCells];
         for (let row = 0; row < inst.rows; row++) {
@@ -1739,7 +1746,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             content: null
           });
         }
-        
+
         return {
           ...inst,
           cols: newCols,
@@ -1753,11 +1760,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   // Handle removing a column from the table
   const handleRemoveColumn = (colIndex: number) => {
     if (!editingTableId) return;
-    
+
     setInstances(prev => prev.map(inst => {
       if (inst.id === editingTableId && inst.type === 'table') {
         const newCols = inst.cols - 1;
-        
+
         // Remove cells in the specified column and update column numbers
         const newCells = inst.cells
           .filter(cell => cell.col !== colIndex)
@@ -1765,7 +1772,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             ...cell,
             col: cell.col > colIndex ? cell.col - 1 : cell.col
           }));
-        
+
         return {
           ...inst,
           cols: newCols,
@@ -1776,13 +1783,24 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     }));
   };
 
-  const handleInstanceContextMenu = (e: React.MouseEvent, instanceId: any) => {
+  const handleInstanceContextMenu = (e: React.MouseEvent, instanceId: string) => {
     e.preventDefault();
-    setContextMenu({
-      visible: true,
-      instanceId,
-      position: { x: e.clientX, y: e.clientY }
-    });
+    // In selection mode, if the instance is in the selection, show multi-select menu
+    if (mode === 'select' && selectedInstanceIds.includes(instanceId) && selectedInstanceIds.length > 1) {
+      setContextMenu({
+        visible: true,
+        instanceId: null,
+        position: { x: e.clientX, y: e.clientY },
+        multi: true
+      });
+    } else {
+      setContextMenu({
+        visible: true,
+        instanceId,
+        position: { x: e.clientX, y: e.clientY },
+        multi: false
+      });
+    }
   };
 
   const closeContextMenu = () => {
@@ -1928,6 +1946,216 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   }, [updateInstanceReferences, setInstances, selectedInstanceId, editingSketchId,
     editingTextId, editingTableId, originalInstanceId, setAvailableInstances]);
 
+  // Helper: get instance bounding box in canvas coordinates
+  const getInstanceBox = (instance: Instance) => {
+    return {
+      x: getInstanceGeometry(instance).x,
+      y: getInstanceGeometry(instance).y,
+      width: getInstanceGeometry(instance).width,
+      height: getInstanceGeometry(instance).height,
+    };
+  };
+
+  // Helper: check if instance is in selection box
+  const isInstanceInBox = (instance: Instance, box: { startX: number; startY: number; endX: number; endY: number }) => {
+    const { x, y, width, height } = getInstanceBox(instance);
+    const minX = Math.min(box.startX, box.endX);
+    const maxX = Math.max(box.startX, box.endX);
+    const minY = Math.min(box.startY, box.endY);
+    const maxY = Math.max(box.startY, box.endY);
+    return x + width > minX && x < maxX && y + height > minY && y < maxY;
+  };
+
+  // Handle mode switch
+  const handleModeSwitch = (newMode: 'hand' | 'select') => {
+    setMode(newMode);
+    setSelectionBox(null);
+    setSelectedInstanceIds([]);
+  };
+
+  // Handle mouse down for selection mode
+  const handleSelectionMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (mode !== 'select' || event.button !== 0) return;
+    const { x, y } = screenToCanvas(event.clientX, event.clientY);
+    selectionStartRef.current = { x, y };
+    setSelectionBox({ startX: x, startY: y, endX: x, endY: y });
+  };
+
+  // Handle mouse move for selection mode
+  const handleSelectionMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (mode !== 'select' || !selectionBox || !selectionStartRef.current) return;
+    const { x, y } = screenToCanvas(event.clientX, event.clientY);
+    setSelectionBox(box => box ? { ...box, endX: x, endY: y } : null);
+  };
+
+  // Handle mouse up for selection mode
+  const handleSelectionMouseUp = () => {
+    if (mode !== 'select' || !selectionBox || !selectionStartRef.current) return;
+    // Select all instances in box
+    const box = selectionBox;
+    const selected = instances.filter(inst => isInstanceInBox(inst, box)).map(inst => inst.id);
+    setSelectedInstanceIds(selected);
+    setSelectionBox(null);
+    selectionStartRef.current = null;
+  };
+
+  // Handle instance click for shift selection
+  const handleInstanceSelectClick = (event: React.MouseEvent, id: string) => {
+    if (mode !== 'select') return;
+    event.stopPropagation();
+    if (event.shiftKey) {
+      setSelectedInstanceIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+    } else {
+      setSelectedInstanceIds([id]);
+    }
+  };
+
+  // Batch delete selected
+  const handleBatchDelete = () => {
+    if (selectedInstanceIds.length === 0) return;
+    setInstances(prev => prev.filter(inst => !selectedInstanceIds.includes(inst.id)));
+    setDeletedInstances(prev => [
+      ...prev,
+      ...instances.filter(inst => selectedInstanceIds.includes(inst.id))
+    ]);
+    setSelectedInstanceIds([]);
+  };
+
+  // Batch create sketch from selected
+  const handleBatchCreateSketch = () => {
+    if (selectedInstanceIds.length === 0) return;
+    const newId = `Sketch${sketchCount + 1}`;
+    setSketchCount(prev => prev + 1);
+    const selected = instances.filter(inst => selectedInstanceIds.includes(inst.id));
+    const newSketch: Instance = {
+      id: newId,
+      type: 'sketch',
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 50 + 60 * selected.length,
+      content: selected.map((inst, idx) => ({
+        type: 'instance',
+        id: generateId(),
+        instance: inst.type === 'text' ? { type: 'text', id: generateId(), content: inst.content, originalId: inst.id } :
+          inst.type === 'image' ? { type: 'image', id: generateId(), src: inst.src, originalId: inst.id } :
+            inst.type === 'table' ? { ...inst, id: generateId(), originalId: inst.id } : inst,
+        x: 10,
+        y: 10 + idx * 60,
+        width: getInstanceGeometry(inst).width,
+        height: getInstanceGeometry(inst).height
+      })),
+      thumbnail: ''
+    };
+    setInstances(prev => [...prev, newSketch]);
+    onOperation(`Created [${newId}](#instance-${newId}) from batch selection: ${selected.map(inst => `[${inst.id}](#instance-${inst.id})`).join(', ')}`);
+    setSelectedInstanceIds([]);
+  };
+
+  // Batch create table from selected
+  const handleBatchCreateTable = () => {
+    if (selectedInstanceIds.length === 0) return;
+    const newId = generateId();
+    const selected = instances.filter(inst => selectedInstanceIds.includes(inst.id));
+    const rows = selected.length;
+    const cols = 1;
+    const cells = selected.map((inst, idx) => {
+      let embedded: EmbeddedInstance | null = null;
+      if (inst.type === 'text') {
+        embedded = { type: 'text', id: generateId(), content: inst.content, originalId: inst.id };
+      } else if (inst.type === 'image') {
+        embedded = { type: 'image', id: generateId(), src: inst.src, originalId: inst.id };
+      } else if (inst.type === 'table') {
+        // For table, embed as EmbeddedTableInstance
+        embedded = { ...inst, id: generateId(), originalId: inst.id, type: 'table' } as EmbeddedInstance;
+      } else if (inst.type === 'sketch') {
+        embedded = { ...inst, id: generateId(), originalId: inst.id, type: 'sketch' } as EmbeddedInstance;
+      }
+      return {
+        row: idx,
+        col: 0,
+        content: embedded
+      };
+    });
+    const newTable: Instance = {
+      id: newId,
+      type: 'table',
+      rows,
+      cols,
+      cells,
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 50 + 60 * rows
+    };
+    setInstances(prev => [...prev, newTable]);
+    onOperation(`Created [${newId}](#instance-${newId}) as table from batch selection: ${selected.map(inst => `[${inst.id}](#instance-${inst.id})`).join(', ')}`);
+    setSelectedInstanceIds([]);
+  };
+
+  // Batch LLM inference
+  const handleBatchInfer = async () => {
+    if (selectedInstanceIds.length === 0) return;
+    let { imageContext, textContext } = generateInstanceContext(instances);
+    const selected = instances.filter(inst => selectedInstanceIds.includes(inst.id));
+    addMessage({
+      "role": "user",
+      "message": `Infer my intent based on the following instances: ${selected.map(inst => inst.id).join(', ')}. Finish the task.`
+    });
+    setAgentLoading(true);
+    try {
+      let { summary, results } = await parseLogWithAgent(logs, textContext, imageContext, htmlContexts, selectedInstanceIds.join(','));
+      addMessage({
+        "role": "agent",
+        "message": summary
+      });
+      let parsedResults: Instance[] = results
+        .map((result) => parseInstance(result))
+        .filter(
+          (inst): inst is Instance =>
+            inst &&
+            typeof inst === 'object' &&
+            (
+              (inst.type === 'text' && 'content' in inst) ||
+              (inst.type === 'image' && 'src' in inst) ||
+              (inst.type === 'sketch' && 'content' in inst && 'thumbnail' in inst) ||
+              (inst.type === 'table' && 'cells' in inst)
+            )
+        );
+      setInstances(prev => [...prev, ...parsedResults]);
+    } finally {
+      setAgentLoading(false);
+    }
+    setSelectedInstanceIds([]);
+    closeContextMenu();
+  };
+
+  // Update keyboard handler for batch delete
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // ... existing code ...
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        // Check if we're focused on an input field
+        const focused = document.activeElement;
+        const isInputFocused = focused && (
+          focused.tagName === 'INPUT' ||
+          focused.tagName === 'TEXTAREA' ||
+          (focused as HTMLElement).isContentEditable
+        );
+        // Only handle if not focused on input and we have a selection
+        if (!isInputFocused) {
+          if (mode === 'select' && selectedInstanceIds.length > 0) {
+            e.preventDefault();
+            handleBatchDelete();
+          } else if (selectedInstanceIdRef.current) {
+            e.preventDefault();
+            deleteSelectedInstance();
+          }
+        }
+      }
+    };
+    // ... existing code ...
+  }, [isCaptureEnabled, mode, selectedInstanceIds]);
 
   return (
     <>
@@ -2020,6 +2248,18 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
               <button onClick={handleCreateTable}>
                 Table
               </button>
+              <button
+                onClick={() => handleModeSwitch(mode === 'hand' ? 'select' : 'hand')}
+                style={{
+                  background: mode === 'select' ? '#0078ff' : undefined,
+                  color: mode === 'select' ? 'white' : undefined,
+                  borderRadius: 4,
+                  marginLeft: 12
+                }}
+                title={mode === 'select' ? 'Switch to Hand Tool' : 'Switch to Selection Tool'}
+              >
+                {mode === 'select' ? 'Selection Mode' : 'Hand Tool'}
+              </button>
             </div>
             {contextMenu.visible && (
               <div
@@ -2032,28 +2272,74 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                   borderRadius: '4px',
                   boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
                   zIndex: 2000,
-                  minWidth: '120px',
+                  minWidth: '140px',
                 }}
                 onClick={closeContextMenu}
               >
-                <div
-                  className="contextmenuoption"
-                  onClick={() => {
-                    const instance = instances.find(i => i.id === contextMenu.instanceId);
-                    if (instance) handleRename(instance);
-                  }}
-                >
-                  Rename
-                </div>
-                <div
-                  className="contextmenuoption"
-                  onClick={() => {
-                    const instance = instances.find(i => i.id === contextMenu.instanceId);
-                    if (instance) handleInfer(instance);
-                  }}
-                >
-                  Infer
-                </div>
+                {/* Multi-selection context menu */}
+                {contextMenu.multi ? (
+                  <>
+                    <div
+                      className="contextmenuoption"
+                      onClick={() => {
+                        handleBatchDelete();
+                        closeContextMenu();
+                      }}
+                    >
+                      Delete Selected
+                    </div>
+                    <div
+                      className="contextmenuoption"
+                      onClick={() => {
+                        handleBatchCreateSketch();
+                        closeContextMenu();
+                      }}
+                    >
+                      Create Sketch from Selected
+                    </div>
+                    <div
+                      className="contextmenuoption"
+                      onClick={() => {
+                        handleBatchCreateTable();
+                        closeContextMenu();
+                      }}
+                    >
+                      Create Table from Selected
+                    </div>
+                    <div
+                      className="contextmenuoption"
+                      onClick={() => {
+                        handleBatchInfer();
+                        closeContextMenu();
+                      }}
+                    >
+                      Infer on Selected
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div
+                      className="contextmenuoption"
+                      onClick={() => {
+                        const instance = instances.find(i => i.id === contextMenu.instanceId);
+                        if (instance) handleRename(instance);
+                        closeContextMenu();
+                      }}
+                    >
+                      Rename
+                    </div>
+                    <div
+                      className="contextmenuoption"
+                      onClick={() => {
+                        const instance = instances.find(i => i.id === contextMenu.instanceId);
+                        if (instance) handleInfer(instance);
+                        closeContextMenu();
+                      }}
+                    >
+                      Infer
+                    </div>
+                  </>
+                )}
               </div>
             )}
             <div
@@ -2067,10 +2353,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
               onDragOver={handleDragOver}
               onPaste={handlePaste}
               tabIndex={0}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
+              onMouseDown={mode === 'select' ? handleSelectionMouseDown : handleMouseDown}
+              onMouseMove={mode === 'select' ? handleSelectionMouseMove : handleMouseMove}
+              onMouseUp={mode === 'select' ? handleSelectionMouseUp : handleMouseUp}
+              onMouseLeave={mode === 'select' ? handleSelectionMouseUp : handleMouseUp}
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
@@ -2080,7 +2366,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                 style={{
                   width: 800,
                   height: 400,
-                  cursor: isPanning ? 'grabbing' : 'grab',
+                  cursor: mode === 'hand' ? (isPanning ? 'grabbing' : 'grab') : 'crosshair',
                   touchAction: 'none',
                   transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                   transformOrigin: '0 0',
@@ -2089,6 +2375,22 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                   left: 0,
                 }}
               >
+                {/* Render selection box */}
+                {mode === 'select' && selectionBox && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: Math.min(selectionBox.startX, selectionBox.endX),
+                      top: Math.min(selectionBox.startY, selectionBox.endY),
+                      width: Math.abs(selectionBox.endX - selectionBox.startX),
+                      height: Math.abs(selectionBox.endY - selectionBox.startY),
+                      background: 'rgba(0, 120, 255, 0.1)',
+                      border: '1.5px dashed #0078ff',
+                      zIndex: 2000,
+                      pointerEvents: 'none',
+                    }}
+                  />
+                )}
                 {instances.map(instance => (
                   <div
                     key={instance.id}
@@ -2100,17 +2402,20 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                       top: Number.isFinite(instance.y) ? instance.y : 0,
                       width: getInstanceGeometry(instance).width,
                       height: getInstanceGeometry(instance).height,
-                      cursor: draggingInstanceId === instance.id ? 'grabbing' : 'grab',
+                      cursor: mode === 'select' ? 'pointer' : (draggingInstanceId === instance.id ? 'grabbing' : 'grab'),
                       userSelect: 'none',
                       maxWidth: '200px',
                       wordBreak: 'break-word',
-                      background: 'white',
+                      background: selectedInstanceIds.includes(instance.id) ? '#e6f2ff' : 'white',
+                      border: selectedInstanceIds.includes(instance.id) ? '2px solid #0078ff' : '1px solid #ddd',
                       borderRadius: '4px',
                       boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                       zIndex: draggingInstanceId === instance.id ? 1000 : 'auto',
                       padding: '4px'
                     }}
-                    onMouseDown={e => handleInstanceMouseDown(e, instance.id)}
+                    onMouseDown={mode === 'select' ? (e => {
+                      if (e.button === 0) handleInstanceSelectClick(e, instance.id);
+                    }) : (e => handleInstanceMouseDown(e, instance.id))}
                     onDoubleClick={e => handleInstanceDoubleClick(instance)}
                     onContextMenu={e => handleInstanceContextMenu(e, instance.id)}
                   >

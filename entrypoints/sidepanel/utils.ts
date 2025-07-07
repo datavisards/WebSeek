@@ -108,7 +108,7 @@ export const cleanHTML = (htmlString: string): string => {
     );
     let commentNode: Node | null;
     while ((commentNode = comments.nextNode())) {
-        commentNode.remove();
+        commentNode.parentNode?.removeChild(commentNode);
     }
 
     // Remove empty nodes (elements and text nodes)
@@ -121,7 +121,7 @@ export const cleanHTML = (htmlString: string): string => {
         // Remove empty text nodes
         if (node.nodeType === Node.TEXT_NODE) {
             if (node.textContent?.trim() === '') {
-                node.remove();
+                node.parentNode?.removeChild(node);
                 return true;
             }
             return false;
@@ -136,7 +136,7 @@ export const cleanHTML = (htmlString: string): string => {
 
             // Remove if no children remain (skip body)
             if (node.childNodes.length === 0 && node !== doc.body) {
-                node.remove();
+                node.parentNode?.removeChild(node);
                 return true;
             }
             return false;
@@ -162,7 +162,7 @@ export const cleanHTML = (htmlString: string): string => {
         if (inlineTags.has(node.nodeName.toLowerCase()) && node.childNodes.length === 1) {
             const child = node.firstChild;
             if (child) {
-                node.replaceWith(child);
+                node.parentNode?.replaceChild(child, node);
             }
         }
     }
@@ -313,7 +313,7 @@ export function parseInstance(input: any): Instance | EmbeddedInstance {
 
 // Helper functions for each type
 function parseTextInstance(input: any, generateId: () => string): TextInstance | EmbeddedTextInstance {
-    const id = generateId();
+    const id = input.id || generateId();
     const content = input.content || input.text || '';
 
     if (hasGeometricProperties(input)) {
@@ -338,7 +338,7 @@ function parseTextInstance(input: any, generateId: () => string): TextInstance |
 }
 
 function parseImageInstance(input: any, generateId: () => string): ImageInstance | EmbeddedImageInstance {
-    const id = generateId();
+    const id = input.id || generateId();
 
     if (hasGeometricProperties(input)) {
         return {
@@ -362,7 +362,7 @@ function parseImageInstance(input: any, generateId: () => string): ImageInstance
 }
 
 function parseSketchInstance(input: any, generateId: () => string): SketchInstance | EmbeddedSketchInstance {
-    const id = generateId();
+    const id = input.id || generateId();
 
     if (hasGeometricProperties(input)) {
         return {
@@ -386,7 +386,7 @@ function parseSketchInstance(input: any, generateId: () => string): SketchInstan
 }
 
 function parseTableInstance(input: any, generateId: () => string): TableInstance | EmbeddedTableInstance {
-    const id = generateId();
+    const id = input.id || generateId();
     let tableData: any;
 
     // Handle both table formats (nested content vs flat)
@@ -547,5 +547,25 @@ export const renderMarkdown = (text: string): string => {
 
     return html;
 };
+
+/**
+ * Ensures all instances have valid, non-empty, and unique IDs. If not, generates a new unique ID using type-based prefix.
+ * @param instances Array of instances to check
+ * @param existingIds Array of IDs already in use (optional)
+ * @returns Array of instances with valid, unique IDs
+ */
+export function ensureValidInstanceIds(instances: any[], existingIds: string[] = []): any[] {
+    const usedIds = new Set(existingIds.map(id => id.toLowerCase()));
+    const typeCounters: Record<string, number> = {};
+    return instances.map(inst => {
+        let id = inst.id;
+        // If missing, empty, or duplicate (case-insensitive), generate a new one
+        if (!id || typeof id !== 'string' || usedIds.has(id.toLowerCase())) {
+            id = generateId();
+        }
+        usedIds.add(id.toLowerCase());
+        return { ...inst, id };
+    });
+}
 
 export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance };
