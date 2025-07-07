@@ -8,6 +8,7 @@ import {
     EmbeddedTableInstance,
     Message
 } from './types';
+import { extractJSONFromResponse } from './utils';
 
 const openai = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1",
@@ -267,311 +268,6 @@ Now, analyze the provided logs and return the JSON response.
 `.trim();
 
         console.log('Constructed prompt for LLM:', prompt);
-        // return { summary: 'Processing...', results: [] };
-        // return {
-        //     "summary": "The user wants to extract a list of products from the Amazon search results page, getting the image and title for each product, and organize them in a two-column table.",
-        //     "results": [
-        //         {
-        //             "type": "table",
-        //             "content": {
-        //                 "rows": 18,
-        //                 "cols": 2,
-        //                 "cells": [
-        //                     {
-        //                         "row": 0,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/611M64fQfJL._AC_UY218_.jpg",
-        //                             "originalId": "Image1"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 0,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "Blink Outdoor 4 (newest model), Wireless smart security camera, two-year battery, 1080p HD day and infrared night live view, two-way talk – 3 camera system",
-        //                             "originalId": "Text1"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 1,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/71whGfcSbeL._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 1,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "Digital Camera, FHD 1080P Camera, Digital Point and Shoot Camera with 16X Zoom Anti Shake, Compact Small Camera for Boys Girls Kids"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 2,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/61Y-FhF223L._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 2,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "Fujifilm S9700 / S9750 16.2MP Digital Camera With 50x Optical Zoom, Black (Renewed)"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 3,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/610CDb2u5GL._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 3,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "REOLINK Smart 5MP 8CH Home Security Camera System, 4pcs Wired PoE IP Cameras Outdoor with Person/Pet/Vehicle Detection, 4K 8CH NVR with 2TB HDD for 24-7 Recording, RLK8-520D4-5MP"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 4,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/51rP-l+s8xL._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 4,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "Kasa Indoor Pan/Tilt Smart Security Camera, 1080p HD Dog-Camera,2.4GHz with Night Vision,Motion Detection for Baby and Pet Monitor, Cloud & SD Card Storage, Works with Alexa& Google Home (EC70), White"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 5,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/51L8D2UqocL._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 5,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "Ring Indoor Cam (newest model) — Home or business security in 1080p HD video, White"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 6,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/410x1S1-xGL._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 6,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "TP-Link Tapo 1080P Indoor Security Camera for Baby Monitor, Dog Camera w/Motion Detection, 2-Way Audio Siren, Night Vision, Cloud & SD Card Storage, Works w/Alexa & Google Home (Tapo C100)"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 7,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/718E29NlV5L._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 7,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "4K Retro Vintage Digital Camera, 64MP Retro 3" IPS Screen Camera with 6X Optical Zoom, WiFi Transfer Autofocus Rechargeable Retro Camera for Travel Vlogging and Gifts"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 8,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/71-3m+Tq2HL._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 8,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "4K Digital Camera for Photography, 64MP Vlogging Camera for YouTube with 3" 180° Flip Screen, 18X Digital Zoom Point and Shoot Camara with 32GB Micro SD Card for Beginner (Black)"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 9,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/713J1LS3MRL._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 9,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "REDTIGER Dash Cam Front Rear, 4K/2.5K Full HD Dash Camera for Cars, Included 32GB Card, Built-in Wi-Fi GPS, APP Control, 3.18" IPS Screen, Night Vision, Wide Angle, WDR, 24H Parking Mode(F7NP)"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 10,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/51n8J-pX2ZL._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 10,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "Blink Mini 2 (Newest Model) — Home Security & Pet Camera(s) with HD video, color night view, motion detection, two-way audio, and built-in spotlight — 1 camera (White)"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 11,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/41D8O354aWL._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 11,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "TP-Link Tapo Pan/Tilt Security Camera for Baby Monitor, Pet Camera w/Motion Detection, 1080P, 2-Way Audio, Night Vision, Cloud & SD Card Storage, Works with Alexa & Google Home (Tapo C200)"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 12,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/714w+sQ3wHL._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 12,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "4K Digital Camera for Photography- 48MP Autofocus Vlogging Camera with 2.8" 180° Flip Screen, 16X Digital Zoom- Compact Point and Shoot Camera with 64GB SD for YouTube, Travel, Beginners"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 13,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/718y6JvHnHL._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 13,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "4K Digital Camera for Photography Autofocus, 2024 Latest 48MP Vlogging Camera for YouTube with SD Card, 2 Batteries, 3" 180°Flip Screen Compact Travel Camera for Teens with 16X Zoom, Anti-Shake,Black"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 14,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/61i+lPUYqjL._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 14,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "Blink Mini - Compact indoor plug-in smart security camera, 1080p HD video, night vision, motion detection, two-way audio, easy set up, Works with Alexa – 2 cameras (White)"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 15,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/71Yy+JNLZNL._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 15,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "4K Digital Camera for Photography, UHD Autofocus 48MP 180° Flip Screen 16X Zoom Compact Point Shoot Vlogging Camera for YouTube with 2 Batteries, 32GB Card (Black)"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 16,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/715Jv7t2A6L._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 16,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "Digital Camera,Autofocus 4K Vlogging Camera for Photography with 32GB Card,48MP Portable Compact Point and Shoot Digital Camera for Teens Adult Beginner with 16X Zoom,Anti-Shake,2 Batteries(White)"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 17,
-        //                         "col": 0,
-        //                         "content": {
-        //                             "type": "image",
-        //                             "src": "https://m.media-amazon.com/images/I/6182I7B7tML._AC_UY218_.jpg"
-        //                         }
-        //                     },
-        //                     {
-        //                         "row": 17,
-        //                         "col": 1,
-        //                         "content": {
-        //                             "type": "text",
-        //                             "text": "TP-Link 𝗧𝗮𝗽𝗼 MagCam, 2024 PCMag Editors' Choice & Wirecutter Recommended Outdoor Security Camera, 2K, Battery, Magnetic Mount Wireless Camera, 150° FOV, SD/Cloud Storage, Person/Vehicle Detection"
-        //                         }
-        //                     }
-        //                 ]
-        //             }
-        //         }
-        //     ]
-        // }
 
         // Call the LLM
         const completion = await openai.chat.completions.create({
@@ -591,29 +287,21 @@ Now, analyze the provided logs and return the JSON response.
         const content = completion.choices[0]?.message?.content || '';
         console.log('LLM response content:', content);
 
-        // Parse JSON response
-        const cleanContent = content
-            .replace(/^```json\s*/, '')  // Remove markdown code blocks
-            .replace(/```$/, '')
-            .trim();
+        // Extract the JSON part of the response. Note that the JSON may not start with ```json
+        const jsonContent = extractJSONFromResponse(content);
 
-        const sanitizedContent = sanitizeJSONString(cleanContent);
-
-        let parsed;
-        try {
-            parsed = JSON.parse(sanitizedContent);
-        } catch (e) {
-            console.error('Failed to parse LLM response:', sanitizedContent);
+        if (!jsonContent) {
+            console.error('No JSON found in LLM response');
             return {
-                summary: 'Error: Invalid JSON response.',
+                summary: 'Error: No JSON found in LLM response.',
                 results: []
             };
         }
 
         // Return structured result
         return {
-            summary: parsed.summary || 'Summary not provided by LLM.',
-            results: parsed.results || []
+            summary: jsonContent.summary || 'Summary not provided by LLM.',
+            results: jsonContent.results || []
         };
     } catch (error) {
         console.error('Error calling LLM:', error);
@@ -622,16 +310,6 @@ Now, analyze the provided logs and return the JSON response.
             results: []
         };
     }
-}
-
-function sanitizeJSONString(jsonString: string): string {
-    // Replace invalid escaped single quotes (e.g., `\'`) with plain quotes (`'`)
-    let sanitized = jsonString.replace(/\\'/g, "'");
-
-    // Replace escaped spaces (`\s`) with actual spaces
-    sanitized = sanitized.replace(/\\s/g, ' ');
-
-    return sanitized;
 }
 
 export async function chatWithAgent(
@@ -773,31 +451,21 @@ Now, respond to the user's message appropriately.`.trim();
         const content = completion.choices[0]?.message?.content || '';
         console.log('LLM chat response content:', content);
 
-        // Check if response contains structured data
-        const jsonMatch = content.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-        
-        if (jsonMatch) {
-            // Parse structured response
-            try {
-                const parsed = JSON.parse(jsonMatch[1]);
-                return {
-                    response: parsed.response || content,
-                    results: parsed.results || []
-                };
-            } catch (e) {
-                console.error('Failed to parse structured response:', e);
-                return {
-                    response: content,
-                    results: []
-                };
-            }
-        } else {
-            // Return text-only response
-            return {
-                response: content,
-                results: []
-            };
+        // Extract the JSON part of the response. Note that the JSON may not start with ```json
+        const jsonContent = extractJSONFromResponse(content);
+
+        if (!jsonContent) {
+          return {
+            response: content,
+            results: []
+          };
         }
+
+        // Return structured result
+        return {
+            response: jsonContent.response || 'Sorry, I encountered an error while processing your request. Please try again.',
+            results: jsonContent.results || []
+        };
     } catch (error) {
         console.error('Error in chat with agent:', error);
         return {

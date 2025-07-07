@@ -1,6 +1,58 @@
 // import htmlclean from 'htmlclean';
 import { Instance, EmbeddedInstance, TextInstance, EmbeddedImageInstance, EmbeddedSketchInstance, EmbeddedTableInstance, EmbeddedTextInstance, ImageInstance, SketchInstance, TableInstance, SketchItem } from './types';
 
+// Get the geometry of an instance
+export function getInstanceGeometry(inst: any) {
+    let x = inst.x ?? 0;
+    let y = inst.y ?? 0;
+    let width: number;
+    let height: number;
+    if (inst.type === 'text') {
+        width = inst.width ?? 100;
+        height = inst.height ?? 20;
+    } else if (inst.type === 'image') {
+        width = inst.width ?? 100;
+        height = inst.height ?? 100;
+    } else if (inst.type === 'sketch' || inst.type === 'table') {
+        width = inst.width ?? 400;
+        height = inst.height ?? 300;
+    } else {
+        width = inst.width ?? 100;
+        height = inst.height ?? 100;
+    }
+    return { x, y, width, height };
+}
+
+function sanitizeJSONString(jsonString: any): any {
+    if (typeof jsonString !== 'string') {
+      return jsonString;
+    }
+
+    // Replace invalid escaped single quotes (e.g., `\'`) with plain quotes (`'`)
+    let sanitized = jsonString.replace(/\\'/g, "'");
+
+    // Replace escaped spaces (`\s`) with actual spaces
+    sanitized = sanitized.replace(/\\s/g, ' ');
+
+    return sanitized;
+}
+
+export function extractJSONFromResponse(response: string) {
+    try {
+        // Use a regular expression to find JSON-like structures in the response
+        const jsonMatch = response.match(/{[\s\S]*}/);
+
+        // If a match is found, parse it into a JavaScript object
+        if (jsonMatch) {
+            const jsonString = jsonMatch[0];
+            return JSON.parse(sanitizeJSONString(jsonString));
+        } else {
+            throw new Error("No JSON found in the response");
+        }
+    } catch (error: any) {
+        return null;
+    }
+}
 // Convert column index to Excel-style letters (0 -> A, 1-> B, etc.)
 export const indexToLetters = (index: number): string => {
     let letters = '';
@@ -435,7 +487,7 @@ export const detectMarkdown = (text: string): boolean => {
         /^---+$/m,                        // Horizontal rules (---)
         /^===+$/m,                        // Horizontal rules (===)
     ];
-    
+
     return markdownPatterns.some(pattern => pattern.test(text));
 };
 
@@ -496,4 +548,4 @@ export const renderMarkdown = (text: string): string => {
     return html;
 };
 
-export default { indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance };
+export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance };

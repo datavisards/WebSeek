@@ -32,10 +32,10 @@ export type TextInstance = {
   id: string;
   type: 'text';
   content: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x?: number; // default: 0
+  y?: number; // default: 0
+  width?: number; // default: 100
+  height?: number; // default: 20
   sourcePageId?: string;
 };
 
@@ -43,10 +43,10 @@ export type ImageInstance = {
   id: string;
   type: 'image';
   src: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x?: number; // default: 0
+  y?: number; // default: 0
+  width?: number; // default: 100
+  height?: number; // default: 100
   sourcePageId?: string;
 };
 
@@ -71,10 +71,10 @@ export type SketchItem =
 export type SketchInstance = {
   id: string;
   type: 'sketch';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x?: number; // default: 0
+  y?: number; // default: 0
+  width?: number; // default: 400
+  height?: number; // default: 300
   content: SketchItem[];
   thumbnail: string;
   sourcePageId?: string;
@@ -90,10 +90,10 @@ export type TableInstance = {
     col: number;
     content: EmbeddedInstance | null;
   }>;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  x?: number; // default: 0
+  y?: number; // default: 0
+  width?: number; // default: 400
+  height?: number; // default: 300
   sourcePageId?: string;
 };
 

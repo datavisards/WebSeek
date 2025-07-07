@@ -1,7 +1,7 @@
 import { browser, type Browser } from 'wxt/browser';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Instance, EmbeddedInstance, SketchItem, TextInstance, ImageInstance, SketchInstance, TableInstance, Message } from '../types';
-import { cleanHTML, generateInstanceContext, generateId, parseInstance, detectMarkdown, renderMarkdown } from '../utils';
+import { getInstanceGeometry, cleanHTML, generateInstanceContext, generateId, parseInstance, detectMarkdown, renderMarkdown } from '../utils';
 import TextEditor from './texteditor';
 import SketchEditor from './sketcheditor';
 import TrashView from './trashview';
@@ -594,10 +594,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     dragStartPos.current = {
       mouseX: event.clientX,
       mouseY: event.clientY,
-      instanceX: instance.x,
-      instanceY: instance.y,
-      offsetX: canvasX - instance.x,
-      offsetY: canvasY - instance.y,
+      instanceX: getInstanceGeometry(instance).x,
+      instanceY: getInstanceGeometry(instance).y,
+      offsetX: canvasX - getInstanceGeometry(instance).x,
+      offsetY: canvasY - getInstanceGeometry(instance).y,
     };
   };
 
@@ -611,10 +611,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     resizerStart.current = {
       mouseX: e.clientX,
       mouseY: e.clientY,
-      instanceWidth: instance.width,
-      instanceHeight: instance.height,
-      instanceX: instance.x,
-      instanceY: instance.y,
+      instanceWidth: getInstanceGeometry(instance).width,
+      instanceHeight: getInstanceGeometry(instance).height,
+      instanceX: getInstanceGeometry(instance).x,
+      instanceY: getInstanceGeometry(instance).y,
       initialCanvasX,
       initialCanvasY,
     };
@@ -669,8 +669,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         })),
         x: 50,
         y: 50,
-        width: instance.width,
-        height: instance.height
+        width: getInstanceGeometry(instance).width,
+        height: getInstanceGeometry(instance).height
       };
     }
 
@@ -683,8 +683,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             instance: embedded!,
             x: 50,
             y: 50,
-            width: instance.width,
-            height: instance.height
+            width: getInstanceGeometry(instance).width,
+            height: getInstanceGeometry(instance).height
           };
           return { ...inst, content: [...inst.content, newItem] };
         }
@@ -1303,10 +1303,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       let newSketch: Instance = {
         id: newId,
         type: 'sketch',
-        x: instance.x,
-        y: instance.y,
-        width: instance.width,
-        height: instance.height,
+        x: getInstanceGeometry(instance).x,
+        y: getInstanceGeometry(instance).y,
+        width: getInstanceGeometry(instance).width,
+        height: getInstanceGeometry(instance).height,
         content: [],
         thumbnail: ''
       };
@@ -1322,8 +1322,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           },
           x: 0,
           y: 0,
-          width: instance.width,
-          height: instance.height
+          width: getInstanceGeometry(instance).width,
+          height: getInstanceGeometry(instance).height
         })
       } else if (instance.type === 'sketch') {
         newSketch.content = instance.content.map(item => {
@@ -1805,9 +1805,16 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       });
       let parsedResults: Instance[] = results
         .map((result) => parseInstance(result))
-        .filter((inst): inst is Instance =>
-          inst && typeof inst === 'object' &&
-          'id' in inst && 'type' in inst && 'x' in inst && 'y' in inst && 'width' in inst && 'height' in inst
+        .filter(
+          (inst): inst is Instance =>
+            inst &&
+            typeof inst === 'object' &&
+            (
+              (inst.type === 'text' && 'content' in inst) ||
+              (inst.type === 'image' && 'src' in inst) ||
+              (inst.type === 'sketch' && 'content' in inst && 'thumbnail' in inst) ||
+              (inst.type === 'table' && 'cells' in inst)
+            )
         );
       setInstances(prev => [...prev, ...parsedResults]);
     } finally {
@@ -2091,8 +2098,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                       position: 'absolute',
                       left: Number.isFinite(instance.x) ? instance.x : 0,
                       top: Number.isFinite(instance.y) ? instance.y : 0,
-                      width: instance.width,
-                      height: instance.height,
+                      width: getInstanceGeometry(instance).width,
+                      height: getInstanceGeometry(instance).height,
                       cursor: draggingInstanceId === instance.id ? 'grabbing' : 'grab',
                       userSelect: 'none',
                       maxWidth: '200px',

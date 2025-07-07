@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TableInstance, Instance, EmbeddedInstance } from '../types';
-import { indexToLetters } from '../utils';
+import { getInstanceGeometry, indexToLetters } from '../utils';
 import './tablegrid.css';
 
 interface TableGridProps {
@@ -32,8 +32,8 @@ const TableGrid: React.FC<TableGridProps> = ({
   onAddColumn,
   onRemoveColumn
 }) => {
-  const cellWidth = Math.max(50, Math.min(200, table.width / table.cols));
-  const cellHeight = Math.max(50, Math.min(200, table.height / table.rows));
+  const cellWidth = Math.max(50, Math.min(200, getInstanceGeometry(table).width / table.cols));
+  const cellHeight = Math.max(50, Math.min(200, getInstanceGeometry(table).height / table.rows));
   const [hoveredCell, setHoveredCell] = useState<{ row: number, col: number } | null>(null);
   const [editingCell, setEditingCell] = useState<{ row: number, col: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
