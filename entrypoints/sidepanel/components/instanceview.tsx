@@ -1465,7 +1465,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         const newRows = inst.rows + 1;
 
         // First, update row numbers for existing cells that need to be shifted
-        const newCells = inst.cells.splice(newRowIndex, 0, Array(inst.cols).fill(null));
+        const newCells = [...inst.cells.slice(0, newRowIndex), Array(inst.cols).fill(null), ...inst.cells.slice(newRowIndex)];
 
         return {
           ...inst,
@@ -1486,7 +1486,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         const newRows = inst.rows - 1;
 
         // Remove cells in the specified row and update row numbers
-        const newCells = inst.cells.splice(rowIndex, 1);
+        const newCells = [...inst.cells.slice(0, rowIndex), ...inst.cells.slice(rowIndex + 1)];
 
         return {
           ...inst,
@@ -1509,7 +1509,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
 
         const newCells = inst.cells.map(rowArr => {
           if (rowArr.length === 0) return rowArr;
-          return rowArr.splice(newColIndex, 0, null);
+          return [...rowArr.slice(0, newColIndex), null, ...rowArr.slice(newColIndex)];
         });
 
         return {
@@ -1532,7 +1532,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
 
         const newCells = inst.cells.map(rowArr => {
           if (rowArr.length === 0) return rowArr;
-          return rowArr.splice(colIndex, 1);
+          return [...rowArr.slice(0, colIndex), ...rowArr.slice(colIndex + 1)];
         });
 
         return {
