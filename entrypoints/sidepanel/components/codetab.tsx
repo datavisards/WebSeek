@@ -43,7 +43,7 @@ const CodeTab: React.FC<CodeTabProps> = ({ instances }) => {
             setIsPyodideLoading(true);
             try {
                 const loadedPyodide = await loadPyodide({
-                    indexURL: "https://cdn.jsdelivr.net/pyodide/v0.23.4/full/",
+                    indexURL: "/pyodide/pyodide/",
                 });
                 // Load numpy first as pandas depends on it
                 await loadedPyodide.loadPackage('numpy');
