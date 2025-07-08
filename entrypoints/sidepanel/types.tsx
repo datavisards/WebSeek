@@ -76,7 +76,7 @@ export type SketchInstance = {
   width?: number; // default: 400
   height?: number; // default: 300
   content: SketchItem[];
-  thumbnail: string;
+  thumbnail?: string;
   sourcePageId?: string;
 };
 
@@ -85,11 +85,7 @@ export type TableInstance = {
   type: 'table';
   rows: number;
   cols: number;
-  cells: Array<{
-    row: number;
-    col: number;
-    content: EmbeddedInstance | null;
-  }>;
+  cells: Array<Array<EmbeddedInstance | null>>;
   x?: number; // default: 0
   y?: number; // default: 0
   width?: number; // default: 400

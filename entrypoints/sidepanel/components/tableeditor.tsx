@@ -47,6 +47,7 @@ const TableEditor: React.FC<TableEditorProps> = ({
   const table = instances.find(inst =>
     inst.id === tableId && inst.type === 'table'
   ) as TableInstance | undefined;
+  console.log("Table:", table);
 
   if (!table) return null;
 

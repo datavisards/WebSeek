@@ -1,6 +1,8 @@
 // import htmlclean from 'htmlclean';
 import { Instance, EmbeddedInstance, TextInstance, EmbeddedImageInstance, EmbeddedSketchInstance, EmbeddedTableInstance, EmbeddedTextInstance, ImageInstance, SketchInstance, TableInstance, SketchItem } from './types';
 
+export const generateId = () => '_' + Math.random().toString(36).substring(2, 9);
+
 // Get the geometry of an instance
 export function getInstanceGeometry(inst: any) {
     let x = inst.x ?? 0;
@@ -25,7 +27,7 @@ export function getInstanceGeometry(inst: any) {
 
 function sanitizeJSONString(jsonString: any): any {
     if (typeof jsonString !== 'string') {
-      return jsonString;
+        return jsonString;
     }
 
     // Replace invalid escaped single quotes (e.g., `\'`) with plain quotes (`'`)
@@ -215,6 +217,9 @@ export const generateInstanceContext = (instances: Instance[]): any => {
                 "src": "(See the " + (imageIndex == 1 ? 'first' : imageIndex == 2 ? 'second' : imageIndex == 3 ? 'third' : String(imageIndex) + 'th') + " image.)"
             });
         } else if (instance.type === 'sketch') {
+            if (!instance.thumbnail) {
+                throw new Error("Sketch thumbnail is required");
+            }
             const imageIndex = getImageIndex(instance.id, instance.thumbnail);
             return JSON.stringify({
                 "type": "sketch",
@@ -246,31 +251,15 @@ export const generateInstanceContext = (instances: Instance[]): any => {
                 "table": {
                     "rows": instance.rows,
                     "cols": instance.cols,
-                    "cells": instance.cells.filter(cell => cell.content).map(cell => ({
-                        "row": cell.row,
-                        "col": cell.col,
-                        "content": cell.content?.type === 'image' ? {
-                            "type": "image",
-                            "src": `(See ${cell.content.originalId} image.)`,
-                            "originalId": cell.content.originalId
-
-                            // if (item.instance.type === 'image') {
-                            //     return {
-                            //         "type": "image",
-                            //         "src": `(See ${item.instance.originalId} image.)`,
-                            //         "originalId": item.instance.originalId
-                            //     };
-                            // } else if (item.instance.type === 'text') {
-                            //     return {
-                            //         "type": "text",
-                            //         "text": item.instance.content
-                            //     };
-                            // }
-                        } : cell.content?.type === 'text' ? {
-                            "type": "text",
-                            "text": cell.content.content
-                        } : null
-                    }))
+                    "cells": instance.cells.flatMap((rowArr, r) => rowArr.map((cell, c) => cell ? (cell.type === 'image' ? {
+                        type: 'image',
+                        src: `(See ${cell.originalId} image.)`,
+                        originalId: cell.originalId
+                    } : cell.type === 'text' ? {
+                        type: 'text',
+                        text: cell.content
+                    } : null
+                    ) : null)).filter(cell => cell !== null)
                 }
             });
         }
@@ -285,8 +274,6 @@ export const generateInstanceContext = (instances: Instance[]): any => {
     return { imageContext, textContext };
 }
 
-export const generateId = () => '_' + Math.random().toString(36).substring(2, 9);
-
 export function parseInstance(input: any): Instance | EmbeddedInstance {
     if (typeof input !== 'object' || input === null) {
         throw new Error('Input must be an object');
@@ -299,20 +286,20 @@ export function parseInstance(input: any): Instance | EmbeddedInstance {
 
     switch (type) {
         case 'text':
-            return parseTextInstance(input, generateId);
+            return parseTextInstance(input);
         case 'image':
-            return parseImageInstance(input, generateId);
+            return parseImageInstance(input);
         case 'sketch':
-            return parseSketchInstance(input, generateId);
+            return parseSketchInstance(input);
         case 'table':
-            return parseTableInstance(input, generateId);
+            return parseTableInstance(input);
         default:
             throw new Error(`Unknown type: ${type}`);
     }
 }
 
 // Helper functions for each type
-function parseTextInstance(input: any, generateId: () => string): TextInstance | EmbeddedTextInstance {
+function parseTextInstance(input: any): TextInstance | EmbeddedTextInstance {
     const id = input.id || generateId();
     const content = input.content || input.text || '';
 
@@ -337,7 +324,7 @@ function parseTextInstance(input: any, generateId: () => string): TextInstance |
     };
 }
 
-function parseImageInstance(input: any, generateId: () => string): ImageInstance | EmbeddedImageInstance {
+function parseImageInstance(input: any): ImageInstance | EmbeddedImageInstance {
     const id = input.id || generateId();
 
     if (hasGeometricProperties(input)) {
@@ -361,7 +348,7 @@ function parseImageInstance(input: any, generateId: () => string): ImageInstance
     };
 }
 
-function parseSketchInstance(input: any, generateId: () => string): SketchInstance | EmbeddedSketchInstance {
+function parseSketchInstance(input: any): SketchInstance | EmbeddedSketchInstance {
     const id = input.id || generateId();
 
     if (hasGeometricProperties(input)) {
@@ -385,7 +372,7 @@ function parseSketchInstance(input: any, generateId: () => string): SketchInstan
     };
 }
 
-function parseTableInstance(input: any, generateId: () => string): TableInstance | EmbeddedTableInstance {
+function parseTableInstance(input: any): TableInstance | EmbeddedTableInstance {
     const id = input.id || generateId();
     let tableData: any;
 
@@ -396,26 +383,28 @@ function parseTableInstance(input: any, generateId: () => string): TableInstance
         tableData = input;
     }
 
-    const cells = (tableData.cells || []).map((cell: any) => ({
-        row: cell.row,
-        col: cell.col,
-        content: cell.content ? parseInstance(cell.content) : null,
-    }));
-
-    // Calculate max row and column indices
-    let maxRowIndex = -1;
-    let maxColIndex = -1;
-    cells.forEach((cell: any) => {
-        if (cell.row > maxRowIndex) maxRowIndex = cell.row;
-        if (cell.col > maxColIndex) maxColIndex = cell.col;
-    });
-
+    // Convert flat or 2D cells to 2D array
+    let cells: Array<Array<EmbeddedInstance | null>> = [];
+    if (Array.isArray(tableData.cells) && Array.isArray(tableData.cells[0])) {
+        // Already 2D
+        cells = tableData.cells.map((row: any[]) => row.map(cell => cell ? parseInstance(cell) : null));
+    } else if (Array.isArray(tableData.cells)) {
+        // Flat array with row/col
+        const maxRow = Math.max(0, ...tableData.cells.map((cell: any) => cell.row || 0));
+        const maxCol = Math.max(0, ...tableData.cells.map((cell: any) => cell.col || 0));
+        cells = Array.from({ length: maxRow + 1 }, () => Array(maxCol + 1).fill(null));
+        tableData.cells.forEach((cell: any) => {
+            if (typeof cell.row === 'number' && typeof cell.col === 'number') {
+                cells[cell.row][cell.col] = cell.content ? parseInstance(cell.content) : null;
+            }
+        });
+    }
 
     const table: any = {
         type: 'table',
         id,
-        rows: tableData.rows || maxRowIndex + 1,
-        cols: tableData.cols || maxColIndex + 1,
+        rows: tableData.rows || (cells.length),
+        cols: tableData.cols || (cells[0]?.length || 0),
         cells,
         x: input.x || 0,
         y: input.y || 0,
@@ -567,5 +556,176 @@ export function ensureValidInstanceIds(instances: any[], existingIds: string[] =
         return { ...inst, id };
     });
 }
+
+/**
+ * Create a sketch thumbnail as a data URL
+ */
+export const createSketchThumbnail = async (
+  sketch: SketchInstance,
+  currentStroke: { id: string; points: { x: number; y: number }[] } | null,
+  sketchColor: string,
+  sketchWidth: number,
+  wrapTextForThumbnail: (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number,
+    maxHeight: number
+  ) => string[],
+  canvasWidth: number,
+  canvasHeight: number
+): Promise<string> => {
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = canvasWidth;
+  tempCanvas.height = canvasHeight;
+  const tempCtx = tempCanvas.getContext('2d');
+  if (!tempCtx) return '';
+
+  // Fill background as white
+  tempCtx.fillStyle = 'white';
+  tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+  // Draw all strokes
+  sketch.content.forEach(item => {
+    if (item.type === 'stroke') {
+      tempCtx.beginPath();
+      tempCtx.strokeStyle = item.color;
+      tempCtx.lineWidth = item.width;
+      tempCtx.lineCap = 'round';
+      tempCtx.lineJoin = 'round';
+      item.points.forEach((point: { x: number; y: number }, i: number) => {
+        if (i === 0) {
+          tempCtx.moveTo(point.x, point.y);
+        } else {
+          tempCtx.lineTo(point.x, point.y);
+        }
+      });
+      tempCtx.stroke();
+    }
+    // Draw embedded text items
+    else if (item.type === 'instance' && item.instance.type === 'text') {
+      tempCtx.save();
+      tempCtx.fillStyle = '#000';
+      tempCtx.font = '12px sans-serif';
+      const lines = wrapTextForThumbnail(
+        tempCtx,
+        item.instance.content,
+        item.width,
+        item.height
+      );
+      lines.forEach((line: string, i: number) => {
+        tempCtx.fillText(
+          line,
+          item.x,
+          item.y + 12 + (i * 15)
+        );
+      });
+      tempCtx.restore();
+    }
+    // Queue image drawing (async)
+    else if (item.type === 'instance' && item.instance.type === 'image') {
+      const img = new window.Image();
+      img.src = item.instance.src;
+      img.onload = () => {
+        tempCtx.drawImage(img, item.x, item.y, item.width, item.height);
+      };
+    }
+    else if (item.type === 'instance' && item.instance.type === 'table') {
+      const table = item.instance;
+      const cellWidth = item.width / table.cols;
+      const cellHeight = item.height / table.rows;
+      for (let r = 0; r < table.rows; r++) {
+        for (let c = 0; c < table.cols; c++) {
+          const cell = table.cells[r][c];
+          if (!cell) continue;
+          // Draw cell border
+          tempCtx.strokeStyle = '#ccc';
+          tempCtx.lineWidth = 1;
+          tempCtx.strokeRect(
+            item.x + c * cellWidth,
+            item.y + r * cellHeight,
+            cellWidth,
+            cellHeight
+          );
+          // Draw content of the first item in the cell
+          if (cell) {
+            if (cell.type === 'text') {
+              tempCtx.fillStyle = '#000';
+              tempCtx.font = '10px sans-serif';
+              const lines = wrapTextForThumbnail(
+                tempCtx,
+                cell.content,
+                cellWidth - 4,
+                cellHeight - 4
+              );
+              lines.forEach((line: string, i: number) => {
+                tempCtx.fillText(
+                  line,
+                  item.x + c * cellWidth + 2,
+                  item.y + r * cellHeight + 10 + (i * 12)
+                );
+              });
+            } else if (cell.type === 'image') {
+              // Draw a placeholder image icon
+              tempCtx.save();
+              tempCtx.fillStyle = '#eee';
+              tempCtx.fillRect(
+                item.x + c * cellWidth + 1,
+                item.y + r * cellHeight + 1,
+                cellWidth - 2,
+                cellHeight - 2
+              );
+              tempCtx.strokeStyle = '#999';
+              tempCtx.strokeRect(
+                item.x + c * cellWidth + 5,
+                item.y + r * cellHeight + 5,
+                cellWidth - 10,
+                cellHeight - 10
+              );
+              tempCtx.beginPath();
+              tempCtx.moveTo(item.x + c * cellWidth + 5, item.y + r * cellHeight + cellHeight - 5);
+              tempCtx.lineTo(item.x + c * cellWidth + cellWidth / 2, item.y + r * cellHeight + 5);
+              tempCtx.lineTo(item.x + c * cellWidth + cellWidth - 5, item.y + r * cellHeight + cellHeight - 5);
+              tempCtx.stroke();
+              tempCtx.restore();
+            }
+          }
+        }
+      }
+    }
+  });
+  // Add current stroke if still drawing
+  if (currentStroke) {
+    tempCtx.beginPath();
+    tempCtx.strokeStyle = sketchColor;
+    tempCtx.lineWidth = sketchWidth;
+    tempCtx.lineCap = 'round';
+    tempCtx.lineJoin = 'round';
+    currentStroke.points.forEach((point: { x: number; y: number }, i: number) => {
+      if (i === 0) {
+        tempCtx.moveTo(point.x, point.y);
+      } else {
+        tempCtx.lineTo(point.x, point.y);
+      }
+    });
+    tempCtx.stroke();
+  }
+  // Wait for all images to load before finalizing the thumbnail
+  await new Promise(resolve => {
+    const interval = setInterval(() => {
+      if (sketch.content.every(item => {
+        if (item.type === 'instance' && item.instance.type === 'image') {
+          const img = new window.Image();
+          img.src = item.instance.src;
+          return img.complete;
+        }
+        return true;
+      })) {
+        clearInterval(interval);
+        resolve(undefined);
+      }
+    }, 100);
+  });
+  return tempCanvas.toDataURL('image/png');
+};
 
 export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance };

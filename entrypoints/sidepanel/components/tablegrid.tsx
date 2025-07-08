@@ -126,14 +126,14 @@ const TableGrid: React.FC<TableGridProps> = ({
     
     if (isReadOnly || !selectedCell) return;
 
-    const cell = table.cells.find(c => c.row === selectedCell.row && c.col === selectedCell.col);
+    const cell = table.cells[selectedCell.row][selectedCell.col];
     if (!cell) return;
 
     if (e.key === 'F2' || e.key === 'Enter') {
       e.preventDefault();
       if (canEditCell(cell)) {
         setEditingCell(selectedCell);
-      } else if (cell.content?.type === 'image') {
+      } else if (cell.type === 'image') {
         alert('Image cells cannot be edited directly. Please remove the image first.');
       } else {
         alert('This type of content cannot be edited directly. Please remove it first.');
@@ -241,8 +241,8 @@ const TableGrid: React.FC<TableGridProps> = ({
   };
 
   // Check if a cell can be edited (only text cells or empty cells)
-  const canEditCell = (cell: { content: EmbeddedInstance | null }) => {
-    return !cell.content || cell.content.type === 'text';
+  const canEditCell = (cell: EmbeddedInstance | null) => {
+    return !cell || cell.type === 'text';
   };
 
   // Context menu handlers
@@ -383,99 +383,99 @@ const TableGrid: React.FC<TableGridProps> = ({
       ))}
 
       {/* Content Cells */}
-      {table.cells.map(cell => {
-        const isHovered = hoveredCell?.row === cell.row && hoveredCell?.col === cell.col;
-        const isCellSelected = selectedCell?.row === cell.row && selectedCell?.col === cell.col;
-        const isEditing = editingCell?.row === cell.row && editingCell?.col === cell.col;
-        const isHeaderSelected = isSelectedViaHeader(cell.row, cell.col);
+      {table.cells.map((row, rowIndex) => (
+        row.map((cell, colIndex) => {
+          const isHovered = hoveredCell?.row === rowIndex && hoveredCell?.col === colIndex;
+          const isCellSelected = selectedCell?.row === rowIndex && selectedCell?.col === colIndex;
+          const isEditing = editingCell?.row === rowIndex && editingCell?.col === colIndex;
+          const isHeaderSelected = isSelectedViaHeader(rowIndex, colIndex);
 
-        return (
-          <div
-            key={`${cell.row}-${cell.col}`}
-            className={`table-cell 
-                ${isHovered ? 'drop-zone' : ''} 
-                ${isCellSelected ? 'selected' : ''}
-                ${isHeaderSelected ? 'header-selected' : ''}
-                ${isEditing ? 'editing' : ''}`}
-            onDragOver={isReadOnly ? undefined : (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setHoveredCell({ row: cell.row, col: cell.col });
-            }}
-            onDragLeave={isReadOnly ? undefined : () => setHoveredCell(null)}
-            onDrop={isReadOnly ? undefined : (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              const instanceId = e.dataTransfer.getData('text/plain');
-              const draggedInstance = instances.find(inst => inst.id === instanceId);
-              if (draggedInstance) {
-                onAddToTable(draggedInstance, cell.row, cell.col);
-              }
-              setDraggingInstanceId(null);
-              setHoveredCell(null);
-            }}
-            onClick={isReadOnly || isEditing ? undefined : () => handleCellClick(cell.row, cell.col)}
-            onDoubleClick={isReadOnly || isEditing ? undefined : () => {
-              if (canEditCell(cell)) {
-                setEditingCell({ row: cell.row, col: cell.col });
-              } else if (cell.content?.type === 'image') {
-                alert('Image cells cannot be edited directly. Please remove the image first.');
-              } else {
-                alert('This type of content cannot be edited directly. Please remove it first.');
-              }
-            }}
-            style={{
-              gridRow: cell.row + 2,
-              gridColumn: cell.col + 2,
-              cursor: isReadOnly ? 'default' : 'pointer',
-            }}
-          >
-            {isEditing ? (
-              <div
-                contentEditable
-                suppressContentEditableWarning
-                className="editable-text"
-                ref={inputRef}
-                onBlur={isReadOnly ? undefined : (e) => handleBlur(e, cell.row, cell.col)}
-                onKeyDown={isReadOnly ? undefined : (e) => handleKeyDown(e, cell.row, cell.col)}
-                onClick={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
-                onMouseUp={(e) => e.stopPropagation()}
-                onSelect={(e) => e.stopPropagation()}
-                onFocus={(e) => e.stopPropagation()}
-              >
-                {cell.content && cell.content.type === 'text' ? cell.content.content : ''}
-              </div>
-            ) : cell.content ?
-              <div
-                key={cell.content.id}
-                className={`embedded-instance ${isEditing ? 'editing-content' : ''}`}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  userSelect: isReadOnly ? 'none' : undefined
-                }}
-                onClick={isReadOnly ? undefined : (e) => handleContentClick(e, cell.row, cell.col)}
-              >
-                {
-                  renderEmbeddedContent(cell.content)
+          return (
+            <div
+              key={`${rowIndex}-${colIndex}`}
+              className={`table-cell 
+                  ${isHovered ? 'drop-zone' : ''} 
+                  ${isCellSelected ? 'selected' : ''}
+                  ${isHeaderSelected ? 'header-selected' : ''}
+                  ${isEditing ? 'editing' : ''}`}
+              onDragOver={isReadOnly ? undefined : (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setHoveredCell({ row: rowIndex, col: colIndex });
+              }}
+              onDragLeave={isReadOnly ? undefined : () => setHoveredCell(null)}
+              onDrop={isReadOnly ? undefined : (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const instanceId = e.dataTransfer.getData('text/plain');
+                const draggedInstance = instances.find(inst => inst.id === instanceId);
+                if (draggedInstance) {
+                  onAddToTable(draggedInstance, rowIndex, colIndex);
                 }
-                {!isReadOnly && !isEditing && (
-                  <button
-                    className="remove-cell-content"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveCellContent(cell.row, cell.col);
-                    }}
-                  >
-                    ×
-                  </button>
-                )}
-              </div> : null
-            }
-          </div>
-        );
-      })}
+                setDraggingInstanceId(null);
+                setHoveredCell(null);
+              }}
+              onClick={isReadOnly || isEditing ? undefined : () => handleCellClick(rowIndex, colIndex)}
+              onDoubleClick={isReadOnly || isEditing ? undefined : () => {
+                if (canEditCell(cell)) {
+                  setEditingCell({ row: rowIndex, col: colIndex });
+                } else if (cell && cell.type === 'image') {
+                  alert('Image cells cannot be edited directly. Please remove the image first.');
+                } else {
+                  alert('This type of content cannot be edited directly. Please remove it first.');
+                }
+              }}
+              style={{
+                gridRow: rowIndex + 2,
+                gridColumn: colIndex + 2,
+                cursor: isReadOnly ? 'default' : 'pointer',
+              }}
+            >
+              {isEditing ? (
+                <div
+                  contentEditable
+                  suppressContentEditableWarning
+                  className="editable-text"
+                  ref={inputRef}
+                  onBlur={isReadOnly ? undefined : (e) => handleBlur(e, rowIndex, colIndex)}
+                  onKeyDown={isReadOnly ? undefined : (e) => handleKeyDown(e, rowIndex, colIndex)}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onMouseUp={(e) => e.stopPropagation()}
+                  onSelect={(e) => e.stopPropagation()}
+                  onFocus={(e) => e.stopPropagation()}
+                >
+                  {cell && cell.type === 'text' ? cell.content : ''}
+                </div>
+              ) : cell ?
+                <div
+                  key={cell.id}
+                  className={`embedded-instance ${isEditing ? 'editing-content' : ''}`}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    userSelect: isReadOnly ? 'none' : undefined
+                  }}
+                  onClick={isReadOnly ? undefined : (e) => handleContentClick(e, rowIndex, colIndex)}
+                >
+                  {cell ? renderEmbeddedContent(cell) : null}
+                  {!isReadOnly && !isEditing && (
+                    <button
+                      className="remove-cell-content"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemoveCellContent(rowIndex, colIndex);
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div> : null
+              }
+            </div>
+          );
+        })
+      ))}
       
       {/* Context Menu */}
       {contextMenu && (

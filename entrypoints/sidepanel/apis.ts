@@ -144,7 +144,7 @@ type SketchInstance = {
   width?: number;
   height?: number;
   content: SketchItem[];
-  thumbnail: string;
+  thumbnail?: string;
   sourcePageId?: string;
 };
 
@@ -153,11 +153,7 @@ type TableInstance = {
   type: 'table';
   rows: number;
   cols: number;
-  cells: Array<{
-    row: number;
-    col: number;
-    content: EmbeddedInstance | null;
-  }>;
+  cells: Array<Array<EmbeddedInstance | null>>;
   x?: number;
   y?: number;
   width?: number;
@@ -234,32 +230,19 @@ Response for this example:
         "rols": 10,
         "cols": 1,
         "cells": [
-          {
-            "row": 0,
-            "col": 0,
-            "content": {
-              "type": "text",
-              "content": "John Doe",
-              "originalId": "Text1"
-            }
-          }, {
-            "row": 1,
-            "col": 0,
-            "content": {
-              "type": "text",
-              "content": "Jane Smith",
-              "originalId": null
-            }
-          }, {
-            "row": 2,
-            "col": 0,
-            "content": {
-              "type": "text",
-              "content": "Alice Brown",
-              "originalId": null
-            }
-          }
-        ]
+          [{
+            "type": "text",
+            "content": "John Doe",
+            "originalId": "Text1"
+          }], [{
+            "type": "text",
+            "content": "Jane Smith",
+            "originalId": null
+          }], [{
+            "type": "text",
+            "content": "Alice Brown",
+            "originalId": null
+          }], ...]
       }
     }
   ]
@@ -399,10 +382,97 @@ You can respond in two ways:
 \`\`\`
 
 ### Instance Types for Results:
-- **TextInstance**: { "type": "text", "id": "string", "content": "string", "x": number, "y": number, "width": number, "height": number }
-- **ImageInstance**: { "type": "image", "id": "string", "src": "string", "x": number, "y": number, "width": number, "height": number }
-- **TableInstance**: { "type": "table", "id": "string", "rows": number, "cols": number, "cells": [...], "x": number, "y": number, "width": number, "height": number }
-- **SketchInstance**: { "type": "sketch", "id": "string", "content": [...], "thumbnail": "string", "x": number, "y": number, "width": number, "height": number }
+interface EmbeddedTextInstance {
+  type: 'text';
+  content: string;
+  id: string;
+}
+
+interface EmbeddedImageInstance {
+  type: 'image';
+  src: string;
+  id: string;
+}
+
+interface EmbeddedSketchInstance {
+  type: 'sketch';
+  id: string;
+}
+
+interface EmbeddedTableInstance = TableInstance
+
+type EmbeddedInstance =
+  | EmbeddedTextInstance
+  | EmbeddedImageInstance
+  | EmbeddedSketchInstance
+  | EmbeddedTableInstance;
+
+type TextInstance = {
+  id: string;
+  type: 'text';
+  content: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  sourcePageId?: string;
+};
+
+type ImageInstance = {
+  id: string;
+  type: 'image';
+  src: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  sourcePageId?: string;
+};
+
+type SketchItem =
+  | {
+    type: 'stroke';
+    id: string;
+    points: Array<{ x: number; y: number }>;
+    color: string;
+    width: number;
+  }
+  | {
+    type: 'instance';
+    id: string;
+    instance: EmbeddedInstance;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+  };
+
+type SketchInstance = {
+  id: string;
+  type: 'sketch';
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  content: SketchItem[];
+  thumbnail?: string;
+  sourcePageId?: string;
+};
+
+type TableInstance = {
+  id: string;
+  type: 'table';
+  rows: number;
+  cols: number;
+  cells: Array<Array<EmbeddedInstance | null>>;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  sourcePageId?: string;
+};
+
+type Instance = TextInstance | ImageInstance | SketchInstance | TableInstance;
 
 ### Context Information:
 

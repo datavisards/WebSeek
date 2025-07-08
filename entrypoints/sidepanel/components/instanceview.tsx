@@ -1,7 +1,7 @@
 import { browser, type Browser } from 'wxt/browser';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Instance, EmbeddedInstance, SketchItem, TextInstance, ImageInstance, SketchInstance, TableInstance, Message } from '../types';
-import { getInstanceGeometry, cleanHTML, generateInstanceContext, generateId, parseInstance, detectMarkdown, renderMarkdown } from '../utils';
+import { getInstanceGeometry, cleanHTML, generateInstanceContext, generateId, parseInstance, detectMarkdown, renderMarkdown, createSketchThumbnail } from '../utils';
 import TextEditor from './texteditor';
 import SketchEditor from './sketcheditor';
 import TrashView from './trashview';
@@ -122,6 +122,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   const [selectedInstanceIds, setSelectedInstanceIds] = useState<string[]>([]);
   const [selectionBox, setSelectionBox] = useState<null | { startX: number; startY: number; endX: number; endY: number }>(null);
   const selectionStartRef = useRef<{ x: number; y: number } | null>(null);
+  // Add state for dropdowns at the top of the component
+  const [webToolsOpen, setWebToolsOpen] = useState(false);
+  const [instanceToolsOpen, setInstanceToolsOpen] = useState(false);
 
   // Update the latest state values
   useEffect(() => {
@@ -670,10 +673,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         originalId: instance.id,
         rows: tableInstance.rows,
         cols: tableInstance.cols,
-        cells: tableInstance.cells.map(cell => ({
-          ...cell,
-          content: cell.content ? { ...cell.content, id: generateId() } : null
-        })),
+        cells: tableInstance.cells.map(rowArr => rowArr.map(cell => cell ? { ...cell, id: generateId() } : null)),
         x: 50,
         y: 50,
         width: getInstanceGeometry(instance).width,
@@ -703,179 +703,20 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   // Save the sketch
   const handleSaveSketch = async () => {
     if (!editingSketchId || !sketchCanvasRef.current) return;
-
     const canvas = sketchCanvasRef.current;
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
-    const tempCtx = tempCanvas.getContext('2d');
-
-    if (!tempCtx) return;
-
-    // Fill background as white
-    tempCtx.fillStyle = 'white';
-    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-
     const sketch = instances.find(inst =>
       inst.id === editingSketchId && inst.type === 'sketch'
     ) as SketchInstance | undefined;
-
     if (!sketch) return;
-
-    // Draw all strokes
-    sketch.content.forEach(item => {
-      if (item.type === 'stroke') {
-        tempCtx.beginPath();
-        tempCtx.strokeStyle = item.color;
-        tempCtx.lineWidth = item.width;
-        tempCtx.lineCap = 'round';
-        tempCtx.lineJoin = 'round';
-
-        item.points.forEach((point, i) => {
-          if (i === 0) {
-            tempCtx.moveTo(point.x, point.y);
-          } else {
-            tempCtx.lineTo(point.x, point.y);
-          }
-        });
-        tempCtx.stroke();
-      }
-      // Draw embedded text items
-      else if (item.type === 'instance' && item.instance.type === 'text') {
-        tempCtx.save();
-        tempCtx.fillStyle = '#000';
-        tempCtx.font = '12px sans-serif';
-        const lines = wrapTextForThumbnail(
-          tempCtx,
-          item.instance.content,
-          item.width,
-          item.height
-        );
-
-        lines.forEach((line, i) => {
-          tempCtx.fillText(
-            line,
-            item.x,
-            item.y + 12 + (i * 15) // 12px baseline, 15px line height
-          );
-        });
-        tempCtx.restore();
-      }
-      // Queue image drawing (async)
-      else if (item.type === 'instance' && item.instance.type === 'image') {
-        const img = new Image();
-        img.src = item.instance.src;
-        img.onload = () => {
-          tempCtx.drawImage(img, item.x, item.y, item.width, item.height);
-        };
-      }
-      else if (item.type === 'instance' && item.instance.type === 'table') {
-        const table = item.instance;
-        const cellWidth = item.width / table.cols;
-        const cellHeight = item.height / table.rows;
-
-        for (let r = 0; r < table.rows; r++) {
-          for (let c = 0; c < table.cols; c++) {
-            const cell = table.cells.find(cell => cell.row === r && cell.col === c);
-            if (!cell) continue;
-
-            // Draw cell border
-            tempCtx.strokeStyle = '#ccc';
-            tempCtx.lineWidth = 1;
-            tempCtx.strokeRect(
-              item.x + c * cellWidth,
-              item.y + r * cellHeight,
-              cellWidth,
-              cellHeight
-            );
-
-            // Draw content of the first item in the cell
-            if (cell.content) {
-              const content = cell.content;
-              if (content.type === 'text') {
-                tempCtx.fillStyle = '#000';
-                tempCtx.font = '10px sans-serif';
-                const lines = wrapTextForThumbnail(
-                  tempCtx,
-                  content.content,
-                  cellWidth - 4,
-                  cellHeight - 4
-                );
-                lines.forEach((line, i) => {
-                  tempCtx.fillText(
-                    line,
-                    item.x + c * cellWidth + 2,
-                    item.y + r * cellHeight + 10 + (i * 12)
-                  );
-                });
-              } else if (content.type === 'image') {
-                // Draw a placeholder image icon
-                tempCtx.save();
-                tempCtx.fillStyle = '#eee';
-                tempCtx.fillRect(
-                  item.x + c * cellWidth + 1,
-                  item.y + r * cellHeight + 1,
-                  cellWidth - 2,
-                  cellHeight - 2
-                );
-                tempCtx.strokeStyle = '#999';
-                tempCtx.strokeRect(
-                  item.x + c * cellWidth + 5,
-                  item.y + r * cellHeight + 5,
-                  cellWidth - 10,
-                  cellHeight - 10
-                );
-                tempCtx.beginPath();
-                tempCtx.moveTo(item.x + c * cellWidth + 5, item.y + r * cellHeight + cellHeight - 5);
-                tempCtx.lineTo(item.x + c * cellWidth + cellWidth / 2, item.y + r * cellHeight + 5);
-                tempCtx.lineTo(item.x + c * cellWidth + cellWidth - 5, item.y + r * cellHeight + cellHeight - 5);
-                tempCtx.stroke();
-                tempCtx.restore();
-              }
-            }
-          }
-        }
-      }
-    });
-
-    // Add current stroke if still drawing
-    if (currentStroke) {
-      tempCtx.beginPath();
-      tempCtx.strokeStyle = sketchColor;
-      tempCtx.lineWidth = sketchWidth;
-      tempCtx.lineCap = 'round';
-      tempCtx.lineJoin = 'round';
-
-      currentStroke.points.forEach((point, i) => {
-        if (i === 0) {
-          tempCtx.moveTo(point.x, point.y);
-        } else {
-          tempCtx.lineTo(point.x, point.y);
-        }
-      });
-      tempCtx.stroke();
-    }
-
-    // Wait for all images to load before finalizing the thumbnail
-    await new Promise(resolve => {
-      const interval = setInterval(() => {
-        if (sketch.content.every(item => {
-          if (item.type === 'instance' && item.instance.type === 'image') {
-            const img = new Image();
-            img.src = item.instance.src;
-            return img.complete;
-          }
-          return true;
-        })) {
-          clearInterval(interval);
-          resolve(undefined);
-        }
-      }, 100);
-    });
-
-    const thumbnail = tempCanvas.toDataURL('image/png');
-
-    // Update instance with thumbnail
+    const thumbnail = await createSketchThumbnail(
+      sketch,
+      currentStroke,
+      sketchColor,
+      sketchWidth,
+      wrapTextForThumbnail,
+      canvas.width,
+      canvas.height
+    );
     setInstances(prev =>
       prev.map(inst => {
         if (inst.id === editingSketchId && inst.type === 'sketch') {
@@ -899,7 +740,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         return inst;
       })
     );
-
     // Log the operation
     let withstr = sketch.content
       .filter(item => item.type === 'instance')
@@ -912,9 +752,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         }
       })
       .join(', ');
-
     onOperation(`Created [${sketch.id}](#instance-${sketch.id})` + (originalInstanceId ? ` from [${originalInstanceId}](#instance-${originalInstanceId})` : '') + (withstr ? ` with ${withstr}` : ''));
-
     setCurrentStroke(null);
     setEditingSketchId(null);
   };
@@ -1119,17 +957,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       return;
     }
 
-    // Find the current cell content
-    const cellIndex = table.cells.findIndex(c => c.row === row && c.col === col);
-    if (cellIndex === -1) {
-      console.error('Cell not found');
-      setCaptureTarget(null);
-      setIsCaptureEnabled(true);
-      return;
-    }
-
-    const currentCell = table.cells[cellIndex];
-    const currentContent = currentCell.content;
+    const currentContent = table.cells[row][col];
 
     // Handle different content types
     if (message.type === 'text') {
@@ -1152,10 +980,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         setInstances(prev => prev.map(inst => {
           if (inst.id === tableId && inst.type === 'table') {
             const newCells = [...inst.cells];
-            newCells[cellIndex] = {
-              ...newCells[cellIndex],
-              content: embeddedText
-            };
+            newCells[row][col] = embeddedText;
             return { ...inst, cells: newCells };
           }
           return inst;
@@ -1178,10 +1003,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         setInstances(prev => prev.map(inst => {
           if (inst.id === tableId && inst.type === 'table') {
             const newCells = [...inst.cells];
-            newCells[cellIndex] = {
-              ...newCells[cellIndex],
-              content: embeddedImage
-            };
+            newCells[row][col] = embeddedImage;
             return { ...inst, cells: newCells };
           }
           return inst;
@@ -1350,14 +1172,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     } else if (instance.type === 'table') {
       let newTable = structuredClone(instance) as TableInstance;
       newTable.id = generateId();
-      newTable.cells = newTable.cells.map(cell => ({
-        ...cell,
-        content: cell.content ? {
-          ...cell.content,
-          id: generateId(),
-          originalId: cell.content.originalId
-        } : null
-      }));
+      newTable.cells = newTable.cells.map(rowArr => rowArr.map(cell => cell ? { ...cell, id: generateId() } : null));
       setInstances(prev => [...prev, newTable]);
       setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
       setEditingTableId(newTable.id);
@@ -1513,12 +1328,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     const cols = 3;
 
     // Initialize cells for all positions
-    const cells = [];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        cells.push({ row: r, col: c, content: null });
-      }
-    }
+    const cells = Array.from({ length: rows }, () => Array.from({ length: cols }, () => null));
 
     const newId = generateId();
     const newTable: Instance = {
@@ -1563,18 +1373,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       setInstances(prev => prev.map(inst => {
         if (inst.id === editingTableId && inst.type === 'table') {
           const newCells = [...inst.cells];
-          const cellIndex = newCells.findIndex(
-            c => c.row === row && c.col === col
-          );
-          if (cellIndex >= 0) {
-            newCells[cellIndex] = {
-              ...newCells[cellIndex],
-              content: { // Note: the current cell content is replaced
-                ...embedded!,
-                id: generateId()
-              }
-
-            };
+          if (newCells[row]) {
+            newCells[row][col] = embedded;
           }
           return { ...inst, cells: newCells };
         }
@@ -1590,15 +1390,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     setInstances(prev => prev.map(inst => {
       if (inst.id === editingTableId && inst.type === 'table') {
         const newCells = [...inst.cells];
-        const cellIndex = newCells.findIndex(
-          c => c.row === row && c.col === col
-        );
-        if (cellIndex >= 0) {
-          newCells[cellIndex] = {
-            ...newCells[cellIndex],
-            content: null // Clear the content
-          };
-        }
+        newCells[row][col] = null;
         return { ...inst, cells: newCells };
       }
       return inst;
@@ -1614,19 +1406,21 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     setInstances(prev => prev.map(inst => inst.id === editingTableId ? table : inst));
     // Log the operation
     let withstr = "";
-    if (table.cells.some(cell => cell.content != null)) {
-      withstr = table.cells.map(cell => {
-        let embedded = cell.content;
-        if (!embedded || embedded.id.startsWith('_')) return '';
-        if (embedded.type === 'text') {
-          return `[${embedded.content}](#instance-${embedded.originalId || embedded.id})`;
-        } else if (embedded.type === 'image') {
-          return `[${embedded.originalId || embedded.id}](#instance-${embedded.originalId || embedded.id})`;
-        } else if (embedded.type === 'sketch') {
-          return `[${embedded.originalId || embedded.id}](#instance-${embedded.originalId || embedded.id})`;
-        } else if (embedded.type === 'table') {
-          return `[${embedded.originalId || embedded.id}](#instance-${embedded.originalId || embedded.id})`;
-        }
+    if (table.cells.some(rowArr => rowArr.some(cell => cell != null))) {
+      withstr = table.cells.map(rowArr => {
+        let embedded = rowArr.filter(cell => cell != null && cell.originalId);
+        return embedded.map(cell => {
+          if (!cell) return '';
+          if (cell.type === 'text') {
+            return `[${cell.content}](#instance-${cell.originalId || cell.id})`;
+          } else if (cell.type === 'image') {
+            return `[${cell.originalId || cell.id}](#instance-${cell.originalId || cell.id})`;
+          } else if (cell.type === 'sketch') {
+            return `[${cell.originalId || cell.id}](#instance-${cell.originalId || cell.id})`;
+          } else if (cell.type === 'table') {
+            return `[${cell.originalId || cell.id}](#instance-${cell.originalId || cell.id})`;
+          }
+        }).join(', ');
       }).filter(item => item != '').join(', ');
     }
 
@@ -1671,20 +1465,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         const newRows = inst.rows + 1;
 
         // First, update row numbers for existing cells that need to be shifted
-        const updatedCells = inst.cells.map(cell => ({
-          ...cell,
-          row: cell.row >= newRowIndex ? cell.row + 1 : cell.row
-        }));
-
-        // Then add new cells for the new row
-        const newCells = [...updatedCells];
-        for (let col = 0; col < inst.cols; col++) {
-          newCells.push({
-            row: newRowIndex,
-            col: col,
-            content: null
-          });
-        }
+        const newCells = inst.cells.splice(newRowIndex, 0, Array(inst.cols).fill(null));
 
         return {
           ...inst,
@@ -1705,12 +1486,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         const newRows = inst.rows - 1;
 
         // Remove cells in the specified row and update row numbers
-        const newCells = inst.cells
-          .filter(cell => cell.row !== rowIndex)
-          .map(cell => ({
-            ...cell,
-            row: cell.row > rowIndex ? cell.row - 1 : cell.row
-          }));
+        const newCells = inst.cells.splice(rowIndex, 1);
 
         return {
           ...inst,
@@ -1731,21 +1507,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         const newColIndex = position === 'after' ? colIndex + 1 : colIndex;
         const newCols = inst.cols + 1;
 
-        // First, update column numbers for existing cells that need to be shifted
-        const updatedCells = inst.cells.map(cell => ({
-          ...cell,
-          col: cell.col >= newColIndex ? cell.col + 1 : cell.col
-        }));
-
-        // Then add new cells for the new column
-        const newCells = [...updatedCells];
-        for (let row = 0; row < inst.rows; row++) {
-          newCells.push({
-            row: row,
-            col: newColIndex,
-            content: null
-          });
-        }
+        const newCells = inst.cells.map(rowArr => {
+          if (rowArr.length === 0) return rowArr;
+          return rowArr.splice(newColIndex, 0, null);
+        });
 
         return {
           ...inst,
@@ -1765,13 +1530,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       if (inst.id === editingTableId && inst.type === 'table') {
         const newCols = inst.cols - 1;
 
-        // Remove cells in the specified column and update column numbers
-        const newCells = inst.cells
-          .filter(cell => cell.col !== colIndex)
-          .map(cell => ({
-            ...cell,
-            col: cell.col > colIndex ? cell.col - 1 : cell.col
-          }));
+        const newCells = inst.cells.map(rowArr => {
+          if (rowArr.length === 0) return rowArr;
+          return rowArr.splice(colIndex, 1);
+        });
 
         return {
           ...inst,
@@ -1821,7 +1583,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         "role": "agent",
         "message": summary
       });
-      let parsedResults: Instance[] = results
+      let parsedResults: Instance[] = await Promise.all(results
         .map((result) => parseInstance(result))
         .filter(
           (inst): inst is Instance =>
@@ -1830,10 +1592,26 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             (
               (inst.type === 'text' && 'content' in inst) ||
               (inst.type === 'image' && 'src' in inst) ||
-              (inst.type === 'sketch' && 'content' in inst && 'thumbnail' in inst) ||
+              (inst.type === 'sketch' && 'content' in inst) ||
               (inst.type === 'table' && 'cells' in inst)
             )
-        );
+        )
+        .map(async (inst) => {
+          if (inst.type === 'sketch' && (!inst.thumbnail || inst.thumbnail === '')) {
+            // Use default values for color, width, and canvas size
+            inst.thumbnail = await createSketchThumbnail(
+              inst,
+              null,
+              sketchColor,
+              sketchWidth,
+              wrapTextForThumbnail,
+              inst.width || 400,
+              inst.height || 300
+            );
+          }
+          return inst;
+        })
+      );
       setInstances(prev => [...prev, ...parsedResults]);
     } finally {
       setAgentLoading(false);
@@ -1865,13 +1643,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       if (embedded.type === 'table') {
         return {
           ...embedded,
-          cells: embedded.cells.map(cell => {
-            if (!cell.content) return cell;
-            return {
-              ...cell,
-              content: updateEmbeddedRef(cell.content)
-            };
-          })
+          cells: embedded.cells.map(rowArr => rowArr.map(cell => cell ? updateEmbeddedRef(cell) : null))
         };
       }
 
@@ -1905,13 +1677,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       if (inst.type === 'table') {
         return {
           ...inst,
-          cells: inst.cells.map(cell => {
-            if (!cell.content) return cell;
-            return {
-              ...cell,
-              content: updateEmbeddedRef(cell.content)
-            };
-          })
+          cells: inst.cells.map(rowArr => rowArr.map(cell => cell ? updateEmbeddedRef(cell) : null))
         };
       }
 
@@ -2071,11 +1837,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       } else if (inst.type === 'sketch') {
         embedded = { ...inst, id: generateId(), originalId: inst.id, type: 'sketch' } as EmbeddedInstance;
       }
-      return {
-        row: idx,
-        col: 0,
-        content: embedded
-      };
+      return [embedded];
     });
     const newTable: Instance = {
       id: newId,
@@ -2157,6 +1919,18 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     // ... existing code ...
   }, [isCaptureEnabled, mode, selectedInstanceIds]);
 
+  // Add global click handler to close dropdowns when clicking outside
+  useEffect(() => {
+    const closeDropdowns = () => {
+      setWebToolsOpen(false);
+      setInstanceToolsOpen(false);
+    };
+    if (webToolsOpen || instanceToolsOpen) {
+      window.addEventListener('click', closeDropdowns);
+      return () => window.removeEventListener('click', closeDropdowns);
+    }
+  }, [webToolsOpen, instanceToolsOpen]);
+
   return (
     <>
       <div
@@ -2236,18 +2010,105 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           <>
             <div className="view-title-container">
               <h3 style={{ margin: 0 }}>Instances</h3>
-              <button onClick={handleCaptureStart} disabled={!isCaptureEnabled}>
-                Capture
-              </button>
-              <button onClick={handleScreenshotStart} disabled={!isCaptureEnabled}>
-                Screenshot
-              </button>
-              <button onClick={handleCreateSketch}>
-                Sketch
-              </button>
-              <button onClick={handleCreateTable}>
-                Table
-              </button>
+              {/* Web Tools Dropdown */}
+              <div style={{ display: 'inline-block', position: 'relative' }}>
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setWebToolsOpen(v => !v);
+                  }}
+                  disabled={!isCaptureEnabled}
+                  style={{ minWidth: 90 }}
+                >
+                  Web Tools ▾
+                </button>
+                {webToolsOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '110%',
+                      left: 0,
+                      background: 'white',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                      zIndex: 1000,
+                      minWidth: '120px',
+                    }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div
+                      className="contextmenuoption"
+                      onClick={() => {
+                        handleCaptureStart();
+                        setWebToolsOpen(false);
+                      }}
+                      style={{ color: isCaptureEnabled ? undefined : '#ccc', pointerEvents: isCaptureEnabled ? 'auto' : 'none' }}
+                    >
+                      Capture
+                    </div>
+                    <div
+                      className="contextmenuoption"
+                      onClick={() => {
+                        handleScreenshotStart();
+                        setWebToolsOpen(false);
+                      }}
+                      style={{ color: isCaptureEnabled ? undefined : '#ccc', pointerEvents: isCaptureEnabled ? 'auto' : 'none' }}
+                    >
+                      Screenshot
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Instance Tools Dropdown */}
+              <div style={{ display: 'inline-block', position: 'relative' }}>
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setInstanceToolsOpen(v => !v);
+                  }}
+                  style={{ minWidth: 110 }}
+                >
+                  Instance Tools ▾
+                </button>
+                {instanceToolsOpen && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '110%',
+                      left: 0,
+                      background: 'white',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                      zIndex: 1000,
+                      minWidth: '140px',
+                    }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div
+                      className="contextmenuoption"
+                      onClick={() => {
+                        handleCreateSketch();
+                        setInstanceToolsOpen(false);
+                      }}
+                    >
+                      Sketch
+                    </div>
+                    <div
+                      className="contextmenuoption"
+                      onClick={() => {
+                        handleCreateTable();
+                        setInstanceToolsOpen(false);
+                      }}
+                    >
+                      Table
+                    </div>
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => handleModeSwitch(mode === 'hand' ? 'select' : 'hand')}
                 style={{
@@ -2493,69 +2354,68 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                           overflow: 'hidden'
                         }}
                       >
-                        {Array.from({ length: instance.rows * instance.cols }).map((_, index) => {
-                          const row = Math.floor(index / instance.cols);
-                          const col = index % instance.cols;
-                          const cell = instance.cells.find(c => c.row === row && c.col === col);
-                          const key = `${row}-${col}`;
+                        {instance.cells.map((row, rowIndex) => {
+                          return row.map((cell, colIndex) => {
+                            const key = `${rowIndex}-${colIndex}`;
 
-                          return (
-                            <div
-                              key={key}
-                              style={{
-                                border: '1px solid #ddd',
-                                padding: '2px',
-                                boxSizing: 'border-box',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '2px',
-                              }}
-                            >
-                              {!cell || !cell.content ? (
-                                <div
-                                  style={{
-                                    width: '100%',
-                                    height: '100%',
-                                    background: '#f0f0f0',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    color: '#aaa',
-                                    fontSize: '8px',
-                                  }}
-                                >
-                                  Empty
-                                </div>
-                              ) : cell.content.type === 'text' ? (
-                                <p
-                                  key={cell.content.id}
-                                  style={{
-                                    margin: 0,
-                                    fontSize: '10px',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
-                                  }}
-                                >
-                                  {cell.content.content.length > 10
-                                    ? `${cell.content.content.slice(0, 10)}...`
-                                    : cell.content.content}
-                                </p>
-                              ) : cell.content.type === 'image' ? (
-                                <img
-                                  key={cell.content.id}
-                                  src={cell.content.src}
-                                  alt="thumbnail"
-                                  style={{
-                                    maxWidth: '100%',
-                                    maxHeight: '100%',
-                                    objectFit: 'contain',
-                                    pointerEvents: 'none',
-                                  }}
-                                />
-                              ) : null}
-                            </div>
-                          );
+                            return (
+                              <div
+                                key={key}
+                                style={{
+                                  border: '1px solid #ddd',
+                                  padding: '2px',
+                                  boxSizing: 'border-box',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: '2px',
+                                }}
+                              >
+                                {!cell ? (
+                                  <div
+                                    style={{
+                                      width: '100%',
+                                      height: '100%',
+                                      background: '#f0f0f0',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      color: '#aaa',
+                                      fontSize: '8px',
+                                    }}
+                                  >
+                                    Empty
+                                  </div>
+                                ) : cell.type === 'text' ? (
+                                  <p
+                                    key={cell.id}
+                                    style={{
+                                      margin: 0,
+                                      fontSize: '10px',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    {cell.content.length > 10
+                                      ? `${cell.content.slice(0, 10)}...`
+                                      : cell.content}
+                                  </p>
+                                ) : cell.type === 'image' ? (
+                                  <img
+                                    key={cell.id}
+                                    src={cell.src}
+                                    alt="thumbnail"
+                                    style={{
+                                      maxWidth: '100%',
+                                      maxHeight: '100%',
+                                      objectFit: 'contain',
+                                      pointerEvents: 'none',
+                                    }}
+                                  />
+                                ) : null}
+                              </div>
+                            );
+                          })
                         })}
                       </div>
                     ) : null}
