@@ -5,9 +5,11 @@ import { python } from '@codemirror/lang-python';
 import { loadPyodide } from 'pyodide';
 import { Instance } from '../types';
 import './codetab.css';
+import { mapToObject, parseInstance } from '../utils';
 
 interface CodeTabProps {
     instances: Instance[];
+    setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
 }
 
 interface CodeCell {
@@ -23,7 +25,7 @@ interface CodeOutput {
     timestamp: Date;
 }
 
-const CodeTab: React.FC<CodeTabProps> = ({ instances }) => {
+const CodeTab: React.FC<CodeTabProps> = ({ instances, setInstances }) => {
     const [cells, setCells] = useState<CodeCell[]>([
         {
             id: 0,
@@ -37,6 +39,21 @@ const CodeTab: React.FC<CodeTabProps> = ({ instances }) => {
     const pyodide = useRef<any>(null);
     const [isPyodideLoading, setIsPyodideLoading] = useState(true);
     const outputsEndRef = useRef<null | HTMLDivElement>(null);
+
+    // Define the render function to be exposed to Pyodide
+    const render = (data: any) => {
+        console.log("render", data);
+        const parsed = parseInstance(data);
+        console.log("parsed", parsed);
+        // If the id exists, update the instance; otherwise, add it
+        setInstances(prev => {
+            const existingIndex = prev.findIndex(inst => inst.id === parsed.id);
+            if (existingIndex !== -1) {
+                return [...prev.slice(0, existingIndex), parsed as Instance, ...prev.slice(existingIndex + 1)];
+            }
+            return [...prev, parsed as Instance];
+        });
+    };
 
     useEffect(() => {
         const initPyodide = async () => {
@@ -52,6 +69,24 @@ const CodeTab: React.FC<CodeTabProps> = ({ instances }) => {
                 // Verify pandas is loaded
                 await loadedPyodide.runPythonAsync('import pandas as pd; print("Pandas version:", pd.__version__)');
                 pyodide.current = loadedPyodide;
+
+                // Expose the render function to Pyodide
+                loadedPyodide.globals.set("render", (data: any) => {
+                    // data is a PyProxy, convert to JS object if possible
+                    let jsData;
+                    if (data && typeof data.toJs === "function") {
+                        jsData = data.toJs({ dict_converter: Object.fromEntries });
+                        if (typeof data.destroy === "function") {
+                            data.destroy();
+                        }
+                        // Ensure all nested Maps are converted to objects
+                        jsData = mapToObject(jsData);
+                    } else {
+                        jsData = data;
+                    }
+                    render(jsData);
+                });
+
             } catch (error) {
                 console.error('Failed to load Pyodide:', error);
             } finally {
@@ -139,6 +174,7 @@ const CodeTab: React.FC<CodeTabProps> = ({ instances }) => {
             });
 
             updateGlobalEnvironment();
+
             const result = await pyodide.current.runPythonAsync(cell.content);
 
             if (result !== undefined) {

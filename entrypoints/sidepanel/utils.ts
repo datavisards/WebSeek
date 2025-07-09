@@ -758,4 +758,16 @@ export const createSketchThumbnail = async (
     return tempCanvas.toDataURL('image/png');
 };
 
-export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance };
+export function mapToObject(obj: any): any {
+    if (obj instanceof Map) {
+        return Object.fromEntries(
+            Array.from(obj.entries()).map(([k, v]) => [k, mapToObject(v)])
+        );
+    } else if (Array.isArray(obj)) {
+        return obj.map(mapToObject);
+    } else {
+        return obj;
+    }
+}
+
+export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance, mapToObject };
