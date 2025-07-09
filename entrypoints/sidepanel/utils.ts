@@ -226,11 +226,25 @@ export const generateInstanceContext = (instances: Instance[]): any => {
                 "thumbnail": "(See the " + (imageIndex == 1 ? 'first' : imageIndex == 2 ? 'second' : imageIndex == 3 ? 'third' : String(imageIndex) + 'th') + " sketch for the sketch thumbnail.)",
                 "content": instance.content.filter(item => item.type == "instance").map(item => {
                     if (item.instance.type === 'image') {
-                        return {
-                            "type": "image",
-                            "src": `(See ${item.instance.originalId} image.)`,
-                            "originalId": item.instance.originalId
-                        };
+                        if (item.instance.originalId) {
+                            return {
+                                "type": "image",
+                                "src": `(See ${item.instance.originalId} image.)`,
+                                "originalId": item.instance.originalId
+                            };
+                        } else {
+                            imageContext.push({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": item.instance.src
+                                }
+                            })
+                            let imageIndex = getImageIndex(item.instance.id, item.instance.src);
+                            return {
+                                "type": "image",
+                                "src": `${item.instance.src} (See the ${imageIndex == 1 ? 'first' : imageIndex == 2 ? 'second' : imageIndex == 3 ? 'third' : String(imageIndex) + 'th'} image.)`
+                            };
+                        }
                     } else if (item.instance.type === 'text') {
                         return {
                             "type": "text",
@@ -251,15 +265,31 @@ export const generateInstanceContext = (instances: Instance[]): any => {
                 "table": {
                     "rows": instance.rows,
                     "cols": instance.cols,
-                    "cells": instance.cells.flatMap((rowArr, r) => rowArr.map((cell, c) => cell ? (cell.type === 'image' ? {
-                        type: 'image',
-                        src: `(See ${cell.originalId} image.)`,
-                        originalId: cell.originalId
-                    } : cell.type === 'text' ? {
-                        type: 'text',
-                        text: cell.content
-                    } : null
-                    ) : null)).filter(cell => cell !== null)
+                    "cells": instance.cells.map((rowArr, r) => {
+                        return rowArr.map((cell, c) => {
+                            if (!cell) return null;
+                            if (cell.type === 'image') {
+                                if (cell.originalId) {
+                                    return {
+                                        type: 'image',
+                                        src: `(See ${cell.originalId} image.)`,
+                                        originalId: cell.originalId
+                                    }
+                                } else {
+                                    let imageIndex = getImageIndex(cell.id, cell.src);
+                                    return {
+                                        type: 'image',
+                                        src: `${cell.src} (See the ${imageIndex == 1 ? 'first' : imageIndex == 2 ? 'second' : imageIndex == 3 ? 'third' : String(imageIndex) + 'th'} image.)`
+                                    }
+                                }
+                            } else if (cell.type === 'text') {
+                                return {
+                                    type: 'text',
+                                    text: cell.content
+                                }
+                            }
+                        });
+                    })
                 }
             });
         }
@@ -561,171 +591,171 @@ export function ensureValidInstanceIds(instances: any[], existingIds: string[] =
  * Create a sketch thumbnail as a data URL
  */
 export const createSketchThumbnail = async (
-  sketch: SketchInstance,
-  currentStroke: { id: string; points: { x: number; y: number }[] } | null,
-  sketchColor: string,
-  sketchWidth: number,
-  wrapTextForThumbnail: (
-    ctx: CanvasRenderingContext2D,
-    text: string,
-    maxWidth: number,
-    maxHeight: number
-  ) => string[],
-  canvasWidth: number,
-  canvasHeight: number
+    sketch: SketchInstance,
+    currentStroke: { id: string; points: { x: number; y: number }[] } | null,
+    sketchColor: string,
+    sketchWidth: number,
+    wrapTextForThumbnail: (
+        ctx: CanvasRenderingContext2D,
+        text: string,
+        maxWidth: number,
+        maxHeight: number
+    ) => string[],
+    canvasWidth: number,
+    canvasHeight: number
 ): Promise<string> => {
-  const tempCanvas = document.createElement('canvas');
-  tempCanvas.width = canvasWidth;
-  tempCanvas.height = canvasHeight;
-  const tempCtx = tempCanvas.getContext('2d');
-  if (!tempCtx) return '';
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvasWidth;
+    tempCanvas.height = canvasHeight;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return '';
 
-  // Fill background as white
-  tempCtx.fillStyle = 'white';
-  tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+    // Fill background as white
+    tempCtx.fillStyle = 'white';
+    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
 
-  // Draw all strokes
-  sketch.content.forEach(item => {
-    if (item.type === 'stroke') {
-      tempCtx.beginPath();
-      tempCtx.strokeStyle = item.color;
-      tempCtx.lineWidth = item.width;
-      tempCtx.lineCap = 'round';
-      tempCtx.lineJoin = 'round';
-      item.points.forEach((point: { x: number; y: number }, i: number) => {
-        if (i === 0) {
-          tempCtx.moveTo(point.x, point.y);
-        } else {
-          tempCtx.lineTo(point.x, point.y);
+    // Draw all strokes
+    sketch.content.forEach(item => {
+        if (item.type === 'stroke') {
+            tempCtx.beginPath();
+            tempCtx.strokeStyle = item.color;
+            tempCtx.lineWidth = item.width;
+            tempCtx.lineCap = 'round';
+            tempCtx.lineJoin = 'round';
+            item.points.forEach((point: { x: number; y: number }, i: number) => {
+                if (i === 0) {
+                    tempCtx.moveTo(point.x, point.y);
+                } else {
+                    tempCtx.lineTo(point.x, point.y);
+                }
+            });
+            tempCtx.stroke();
         }
-      });
-      tempCtx.stroke();
-    }
-    // Draw embedded text items
-    else if (item.type === 'instance' && item.instance.type === 'text') {
-      tempCtx.save();
-      tempCtx.fillStyle = '#000';
-      tempCtx.font = '12px sans-serif';
-      const lines = wrapTextForThumbnail(
-        tempCtx,
-        item.instance.content,
-        item.width,
-        item.height
-      );
-      lines.forEach((line: string, i: number) => {
-        tempCtx.fillText(
-          line,
-          item.x,
-          item.y + 12 + (i * 15)
-        );
-      });
-      tempCtx.restore();
-    }
-    // Queue image drawing (async)
-    else if (item.type === 'instance' && item.instance.type === 'image') {
-      const img = new window.Image();
-      img.src = item.instance.src;
-      img.onload = () => {
-        tempCtx.drawImage(img, item.x, item.y, item.width, item.height);
-      };
-    }
-    else if (item.type === 'instance' && item.instance.type === 'table') {
-      const table = item.instance;
-      const cellWidth = item.width / table.cols;
-      const cellHeight = item.height / table.rows;
-      for (let r = 0; r < table.rows; r++) {
-        for (let c = 0; c < table.cols; c++) {
-          const cell = table.cells[r][c];
-          if (!cell) continue;
-          // Draw cell border
-          tempCtx.strokeStyle = '#ccc';
-          tempCtx.lineWidth = 1;
-          tempCtx.strokeRect(
-            item.x + c * cellWidth,
-            item.y + r * cellHeight,
-            cellWidth,
-            cellHeight
-          );
-          // Draw content of the first item in the cell
-          if (cell) {
-            if (cell.type === 'text') {
-              tempCtx.fillStyle = '#000';
-              tempCtx.font = '10px sans-serif';
-              const lines = wrapTextForThumbnail(
+        // Draw embedded text items
+        else if (item.type === 'instance' && item.instance.type === 'text') {
+            tempCtx.save();
+            tempCtx.fillStyle = '#000';
+            tempCtx.font = '12px sans-serif';
+            const lines = wrapTextForThumbnail(
                 tempCtx,
-                cell.content,
-                cellWidth - 4,
-                cellHeight - 4
-              );
-              lines.forEach((line: string, i: number) => {
+                item.instance.content,
+                item.width,
+                item.height
+            );
+            lines.forEach((line: string, i: number) => {
                 tempCtx.fillText(
-                  line,
-                  item.x + c * cellWidth + 2,
-                  item.y + r * cellHeight + 10 + (i * 12)
+                    line,
+                    item.x,
+                    item.y + 12 + (i * 15)
                 );
-              });
-            } else if (cell.type === 'image') {
-              // Draw a placeholder image icon
-              tempCtx.save();
-              tempCtx.fillStyle = '#eee';
-              tempCtx.fillRect(
-                item.x + c * cellWidth + 1,
-                item.y + r * cellHeight + 1,
-                cellWidth - 2,
-                cellHeight - 2
-              );
-              tempCtx.strokeStyle = '#999';
-              tempCtx.strokeRect(
-                item.x + c * cellWidth + 5,
-                item.y + r * cellHeight + 5,
-                cellWidth - 10,
-                cellHeight - 10
-              );
-              tempCtx.beginPath();
-              tempCtx.moveTo(item.x + c * cellWidth + 5, item.y + r * cellHeight + cellHeight - 5);
-              tempCtx.lineTo(item.x + c * cellWidth + cellWidth / 2, item.y + r * cellHeight + 5);
-              tempCtx.lineTo(item.x + c * cellWidth + cellWidth - 5, item.y + r * cellHeight + cellHeight - 5);
-              tempCtx.stroke();
-              tempCtx.restore();
+            });
+            tempCtx.restore();
+        }
+        // Queue image drawing (async)
+        else if (item.type === 'instance' && item.instance.type === 'image') {
+            const img = new window.Image();
+            img.src = item.instance.src;
+            img.onload = () => {
+                tempCtx.drawImage(img, item.x, item.y, item.width, item.height);
+            };
+        }
+        else if (item.type === 'instance' && item.instance.type === 'table') {
+            const table = item.instance;
+            const cellWidth = item.width / table.cols;
+            const cellHeight = item.height / table.rows;
+            for (let r = 0; r < table.rows; r++) {
+                for (let c = 0; c < table.cols; c++) {
+                    const cell = table.cells[r][c];
+                    if (!cell) continue;
+                    // Draw cell border
+                    tempCtx.strokeStyle = '#ccc';
+                    tempCtx.lineWidth = 1;
+                    tempCtx.strokeRect(
+                        item.x + c * cellWidth,
+                        item.y + r * cellHeight,
+                        cellWidth,
+                        cellHeight
+                    );
+                    // Draw content of the first item in the cell
+                    if (cell) {
+                        if (cell.type === 'text') {
+                            tempCtx.fillStyle = '#000';
+                            tempCtx.font = '10px sans-serif';
+                            const lines = wrapTextForThumbnail(
+                                tempCtx,
+                                cell.content,
+                                cellWidth - 4,
+                                cellHeight - 4
+                            );
+                            lines.forEach((line: string, i: number) => {
+                                tempCtx.fillText(
+                                    line,
+                                    item.x + c * cellWidth + 2,
+                                    item.y + r * cellHeight + 10 + (i * 12)
+                                );
+                            });
+                        } else if (cell.type === 'image') {
+                            // Draw a placeholder image icon
+                            tempCtx.save();
+                            tempCtx.fillStyle = '#eee';
+                            tempCtx.fillRect(
+                                item.x + c * cellWidth + 1,
+                                item.y + r * cellHeight + 1,
+                                cellWidth - 2,
+                                cellHeight - 2
+                            );
+                            tempCtx.strokeStyle = '#999';
+                            tempCtx.strokeRect(
+                                item.x + c * cellWidth + 5,
+                                item.y + r * cellHeight + 5,
+                                cellWidth - 10,
+                                cellHeight - 10
+                            );
+                            tempCtx.beginPath();
+                            tempCtx.moveTo(item.x + c * cellWidth + 5, item.y + r * cellHeight + cellHeight - 5);
+                            tempCtx.lineTo(item.x + c * cellWidth + cellWidth / 2, item.y + r * cellHeight + 5);
+                            tempCtx.lineTo(item.x + c * cellWidth + cellWidth - 5, item.y + r * cellHeight + cellHeight - 5);
+                            tempCtx.stroke();
+                            tempCtx.restore();
+                        }
+                    }
+                }
             }
-          }
         }
-      }
-    }
-  });
-  // Add current stroke if still drawing
-  if (currentStroke) {
-    tempCtx.beginPath();
-    tempCtx.strokeStyle = sketchColor;
-    tempCtx.lineWidth = sketchWidth;
-    tempCtx.lineCap = 'round';
-    tempCtx.lineJoin = 'round';
-    currentStroke.points.forEach((point: { x: number; y: number }, i: number) => {
-      if (i === 0) {
-        tempCtx.moveTo(point.x, point.y);
-      } else {
-        tempCtx.lineTo(point.x, point.y);
-      }
     });
-    tempCtx.stroke();
-  }
-  // Wait for all images to load before finalizing the thumbnail
-  await new Promise(resolve => {
-    const interval = setInterval(() => {
-      if (sketch.content.every(item => {
-        if (item.type === 'instance' && item.instance.type === 'image') {
-          const img = new window.Image();
-          img.src = item.instance.src;
-          return img.complete;
-        }
-        return true;
-      })) {
-        clearInterval(interval);
-        resolve(undefined);
-      }
-    }, 100);
-  });
-  return tempCanvas.toDataURL('image/png');
+    // Add current stroke if still drawing
+    if (currentStroke) {
+        tempCtx.beginPath();
+        tempCtx.strokeStyle = sketchColor;
+        tempCtx.lineWidth = sketchWidth;
+        tempCtx.lineCap = 'round';
+        tempCtx.lineJoin = 'round';
+        currentStroke.points.forEach((point: { x: number; y: number }, i: number) => {
+            if (i === 0) {
+                tempCtx.moveTo(point.x, point.y);
+            } else {
+                tempCtx.lineTo(point.x, point.y);
+            }
+        });
+        tempCtx.stroke();
+    }
+    // Wait for all images to load before finalizing the thumbnail
+    await new Promise(resolve => {
+        const interval = setInterval(() => {
+            if (sketch.content.every(item => {
+                if (item.type === 'instance' && item.instance.type === 'image') {
+                    const img = new window.Image();
+                    img.src = item.instance.src;
+                    return img.complete;
+                }
+                return true;
+            })) {
+                clearInterval(interval);
+                resolve(undefined);
+            }
+        }, 100);
+    });
+    return tempCanvas.toDataURL('image/png');
 };
 
 export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance };
