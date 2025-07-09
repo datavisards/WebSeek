@@ -174,10 +174,16 @@ const ChatTab: React.FC<ChatTabProps> = ({
                         inst && typeof inst === 'object' &&
                         'id' in inst && 'type' in inst && 'x' in inst && 'y' in inst && 'width' in inst && 'height' in inst
                     );
-                // Ensure valid, unique IDs
-                parsedResults = ensureValidInstanceIds(parsedResults, instances.map(i => i.id));
                 if (parsedResults.length > 0) {
-                    setInstances(prev => [...prev, ...parsedResults]);
+                    for (const inst of parsedResults) {
+                        const index = instances.findIndex(i => i.id === inst.id);
+                        if (index !== -1) {
+                            instances[index] = inst;
+                        } else {
+                            instances.push(inst);
+                        }
+                    }
+                    setInstances(instances);
                 }
             }
         } catch (error) {

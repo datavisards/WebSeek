@@ -56,17 +56,15 @@ export async function parseLogWithAgent(
         const prompt = `
 You are an AI assistant tasked with analyzing the intent behind the instance with ID '${currentInstanceId}' created by the user. Each instance serves as an example demonstration of the user's desired tasks, i.e., an initial artifact. Your goal is to generate both a concise summary of the inferred user's intent and produce the complete output wanted by the user in structured formats (detailed below). 
 
-The operation logs provided below contain the user's actions and interactions for building the example instance, which are only meant to help you induct the user's intent.
-
 ### Your Task:
-1. Analyze the instance with ID '${currentInstanceId}' and extract the primary intent or pattern based on the user's interaction logs.
-2. If needed, use the provided HTML contexts for any URLs mentioned in the logs to assist your analysis.
+1. Analyze the instance with ID '${currentInstanceId}' and extract the primary intent or pattern.
+2. If needed, use the provided HTML contexts for any URLs mentioned in the instance to assist your analysis.
 3. Execute the tasks based on the inferred intent and provide the results.
 
 ### Expected Response Format:
 Return your response strictly as a JSON object in the following format:
 {
-  "summary": "A concise summary of the user's intent inferred from the provided logs.",
+  "summary": "A concise summary of the user's intent inferred from the instance.",
   "results": Instance[]
 }
 
@@ -186,11 +184,6 @@ Note:
 
 ---
 
-### Operation Logs:
-${logsText}
-
----
-
 ### HTML Contexts (for URLs referenced above):
 ${Object.entries(uniqueHtmlContexts).map(([url, html]) =>
             `URL: ${url}\nHTML:\n\`\`\`html\n${html}\n\`\`\``).join('\n\n')}
@@ -262,7 +255,7 @@ Response for this example:
   ]
 }
 
-Now, analyze the provided logs and return the JSON response.
+Now, analyze the provided instance and return the JSON response.
 `.trim();
 
         console.log('Constructed prompt for LLM:', prompt);
@@ -508,9 +501,6 @@ type Instance = TextInstance | ImageInstance | SketchInstance | TableInstance | 
 
 **Current Instances:**
 ${instanceContexts}
-
-**Operation Logs:**
-${logs.join('\n')}
 
 **HTML Contexts (for URLs mentioned):**
 ${Object.entries(uniqueHtmlContexts).map(([url, html]) =>

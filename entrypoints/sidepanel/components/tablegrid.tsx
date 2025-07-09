@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { TableInstance, Instance, EmbeddedInstance } from '../types';
 import { getInstanceGeometry, indexToLetters } from '../utils';
 import './tablegrid.css';
@@ -48,6 +48,33 @@ const TableGrid: React.FC<TableGridProps> = ({
     index: number;
     position: { x: number; y: number };
   } | null>(null);
+
+  // Add sort state after other useStates
+  const [sortColumn, setSortColumn] = useState<number | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+
+  // Memoize sorted rows
+  const sortedRows = useMemo(() => {
+    if (sortColumn === null || sortDirection === null) return table.cells;
+    // Only sort if all cells in the column are text or null
+    const canSort = table.cells.every(row => {
+      const cell = row[sortColumn];
+      return !cell || cell.type === 'text';
+    });
+    if (!canSort) return table.cells;
+    // Pair each row with its index for stable sort
+    const paired = table.cells.map((row, idx) => ({ row, idx }));
+    paired.sort((a, b) => {
+      const cellA = a.row[sortColumn];
+      const cellB = b.row[sortColumn];
+      const valA = cellA && cellA.type === 'text' ? cellA.content : '';
+      const valB = cellB && cellB.type === 'text' ? cellB.content : '';
+      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+      return a.idx - b.idx;
+    });
+    return paired.map(p => p.row);
+  }, [table.cells, sortColumn, sortDirection]);
 
   useEffect(() => {
     if (editingCell !== null && inputRef.current) {
@@ -308,6 +335,19 @@ const TableGrid: React.FC<TableGridProps> = ({
     closeContextMenu();
   };
 
+  // Sorting handler
+  const handleSortClick = (colIndex: number) => {
+    if (sortColumn !== colIndex) {
+      setSortColumn(colIndex);
+      setSortDirection('asc');
+    } else if (sortDirection === 'asc') {
+      setSortDirection('desc');
+    } else if (sortDirection === 'desc') {
+      setSortColumn(null);
+      setSortDirection(null);
+    }
+  };
+
   return (
     <div
       className="table-grid"
@@ -352,9 +392,30 @@ const TableGrid: React.FC<TableGridProps> = ({
             border: '1px solid #ccc',
             backgroundColor: '#f0f0f0',
             fontWeight: 'bold',
+            position: 'relative',
           }}
         >
-          {indexToLetters(colIndex)}
+          <span style={{ marginRight: '4px' }}>{indexToLetters(colIndex)}</span>
+          <span
+            style={{ cursor: 'pointer', marginLeft: '2px', fontSize: '12px', userSelect: 'none' }}
+            onClick={e => {
+              e.stopPropagation();
+              handleSortClick(colIndex);
+            }}
+            title={
+              sortColumn === colIndex
+                ? sortDirection === 'asc'
+                  ? 'Sort descending'
+                  : 'Clear sort'
+                : 'Sort ascending'
+            }
+          >
+            {sortColumn === colIndex ? (
+              sortDirection === 'asc' ? '▲' : '▼'
+            ) : (
+              <span style={{ color: '#bbb' }}>⇅</span>
+            )}
+          </span>
         </div>
       ))}
 
@@ -383,7 +444,7 @@ const TableGrid: React.FC<TableGridProps> = ({
       ))}
 
       {/* Content Cells */}
-      {table.cells.map((row, rowIndex) => (
+      {sortedRows.map((row, rowIndex) => (
         row.map((cell, colIndex) => {
           const isHovered = hoveredCell?.row === rowIndex && hoveredCell?.col === colIndex;
           const isCellSelected = selectedCell?.row === rowIndex && selectedCell?.col === colIndex;

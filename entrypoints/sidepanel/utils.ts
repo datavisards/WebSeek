@@ -294,13 +294,16 @@ export const generateInstanceContext = async (instances: Instance[]): Promise<an
                 })
             });
         } else if (instance.type === 'table') {
+            // Fix: The original code returns an array of Promises (because of async in map), which serializes to [{}] in JSON.stringify.
+            // Solution: Remove async/await from the mapping, and ensure all cell values are serializable synchronously.
+
             return JSON.stringify({
                 "type": "table",
                 "table": {
                     "rows": instance.rows,
                     "cols": instance.cols,
                     "cells": instance.cells.map((rowArr, r) => {
-                        return rowArr.map(async (cell, c) => {
+                        return rowArr.map((cell, c) => {
                             if (!cell) return null;
                             if (cell.type === 'image') {
                                 if (cell.originalId) {
@@ -329,18 +332,23 @@ export const generateInstanceContext = async (instances: Instance[]): Promise<an
                                         originalId: cell.originalId
                                     }
                                 } else {
+                                    // If thumbnail is missing, just omit it (do not try to await a thumbnail here)
                                     if (!cell.thumbnail) {
-                                        cell.thumbnail = await getVisualizationThumbnail(cell.spec);
+                                        throw new Error("Visualization thumbnail is required");
                                     }
                                     let imageIndex = getImageIndex(cell.id, cell.thumbnail);
                                     return {
                                         type: 'visualization',
                                         spec: cell.spec,
-                                        thumbnail: `(See the ${imageIndex == 1 ? 'first' : imageIndex == 2 ? 'second' : imageIndex == 3 ? 'third' : String(imageIndex) + 'th'} visualization.)`,
+                                        thumbnail: cell.thumbnail
+                                            ? `(See the ${imageIndex == 1 ? 'first' : imageIndex == 2 ? 'second' : imageIndex == 3 ? 'third' : String(imageIndex) + 'th'} visualization.)`
+                                            : undefined,
                                         originalId: cell.originalId
                                     }
                                 }
                             }
+                            // If cell type is not recognized, return null
+                            return null;
                         });
                     })
                 }
