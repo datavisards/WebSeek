@@ -22,11 +22,37 @@ export interface EmbeddedTableInstance extends TableInstance {
   originalId?: string;
 }
 
+export interface VisualizationInstance {
+  id: string;
+  type: 'visualization';
+  /**
+   * The visualization specification, ideally in Vega-Lite or similar declarative grammar.
+   * This should be a JSON object (parsed) or a string (raw spec), depending on usage.
+   */
+  spec: object;
+  /**
+   * Optional thumbnail image (base64 or URL) for quick preview.
+   */
+  thumbnail?: string;
+  /**
+   * Optional original instance id (for duplication/traceability).
+   */
+  originalId?: string;
+  /**
+   * Optional width and height for layout.
+   */
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+}
+
 export type EmbeddedInstance =
   | EmbeddedTextInstance
   | EmbeddedImageInstance
   | EmbeddedSketchInstance
-  | EmbeddedTableInstance;
+  | EmbeddedTableInstance
+  | VisualizationInstance;
 
 export type TextInstance = {
   id: string;
@@ -93,7 +119,7 @@ export type TableInstance = {
   sourcePageId?: string;
 };
 
-export type Instance = TextInstance | ImageInstance | SketchInstance | TableInstance;
+export type Instance = TextInstance | ImageInstance | SketchInstance | TableInstance | VisualizationInstance;
 
 export interface Message {
   role: string;

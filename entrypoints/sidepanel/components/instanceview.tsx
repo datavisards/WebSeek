@@ -9,6 +9,8 @@ import TableEditor from './tableeditor';
 import RenameModal from './renamemodal';
 import './instanceview.css';
 import { parseLogWithAgent } from '../apis';
+import VisualizationRenderer from './visualizationrenderer';
+import VisualizationEditor from './visualizationeditor';
 
 // Props interface for the component
 interface InstanceViewProps {
@@ -125,6 +127,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   // Add state for dropdowns at the top of the component
   const [webToolsOpen, setWebToolsOpen] = useState(false);
   const [instanceToolsOpen, setInstanceToolsOpen] = useState(false);
+  // Add state for visualization editor
+  const [editingVisualizationSpec, setEditingVisualizationSpec] = useState<object | string | null>(null);
 
   // Update the latest state values
   useEffect(() => {
@@ -1176,6 +1180,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       setInstances(prev => [...prev, newTable]);
       setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
       setEditingTableId(newTable.id);
+    } else if (instance.type === 'visualization') {
+      setEditingVisualizationSpec(instance.spec);
+      setAvailableInstances(instances.filter(inst => inst.type !== 'visualization'));
     }
   }
 
@@ -1571,7 +1578,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
 
   const handleInfer = async (instance: Instance) => {
     console.log(`Analyzing instance ${instance.id}`);
-    let { imageContext, textContext } = generateInstanceContext(instances);
+    let { imageContext, textContext } = await generateInstanceContext(instances);
     addMessage({
       "role": "user",
       "message": `Infer my intent based on the instance ${instance.id} and finish the task.`
@@ -1583,8 +1590,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         "role": "agent",
         "message": summary
       });
-      let parsedResults: Instance[] = await Promise.all(results
-        .map((result) => parseInstance(result))
+      // Await all parseInstance calls and filter after resolving
+      let parsedResultsRaw = await Promise.all(results.map((result) => parseInstance(result)));
+      let parsedResults: Instance[] = parsedResultsRaw
         .filter(
           (inst): inst is Instance =>
             inst &&
@@ -1595,23 +1603,21 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
               (inst.type === 'sketch' && 'content' in inst) ||
               (inst.type === 'table' && 'cells' in inst)
             )
-        )
-        .map(async (inst) => {
-          if (inst.type === 'sketch' && (!inst.thumbnail || inst.thumbnail === '')) {
-            // Use default values for color, width, and canvas size
-            inst.thumbnail = await createSketchThumbnail(
-              inst,
-              null,
-              sketchColor,
-              sketchWidth,
-              wrapTextForThumbnail,
-              inst.width || 400,
-              inst.height || 300
-            );
-          }
-          return inst;
-        })
-      );
+        );
+      // For sketches, ensure thumbnail is generated
+      for (const inst of parsedResults) {
+        if (inst.type === 'sketch' && (!inst.thumbnail || inst.thumbnail === '')) {
+          inst.thumbnail = await createSketchThumbnail(
+            inst,
+            null,
+            sketchColor,
+            sketchWidth,
+            wrapTextForThumbnail,
+            inst.width || 400,
+            inst.height || 300
+          );
+        }
+      }
       setInstances(prev => [...prev, ...parsedResults]);
     } finally {
       setAgentLoading(false);
@@ -1858,7 +1864,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   // Batch LLM inference
   const handleBatchInfer = async () => {
     if (selectedInstanceIds.length === 0) return;
-    let { imageContext, textContext } = generateInstanceContext(instances);
+    let { imageContext, textContext } = await generateInstanceContext(instances);
     const selected = instances.filter(inst => selectedInstanceIds.includes(inst.id));
     addMessage({
       "role": "user",
@@ -1871,8 +1877,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         "role": "agent",
         "message": summary
       });
-      let parsedResults: Instance[] = results
-        .map((result) => parseInstance(result))
+      // Await all parseInstance calls and filter after resolving
+      let parsedResultsRaw = await Promise.all(results.map((result) => parseInstance(result)));
+      let parsedResults: Instance[] = parsedResultsRaw
         .filter(
           (inst): inst is Instance =>
             inst &&
@@ -1931,6 +1938,57 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     }
   }, [webToolsOpen, instanceToolsOpen]);
 
+  // Add handler to create a new visualization instance
+  const handleCreateVisualization = () => {
+    setOriginalInstanceId(null);
+    // Start with a simple Vega-Lite spec as a template
+    const defaultSpec = {
+      "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+      "description": "A simple bar chart with embedded data.",
+      "data": {
+        "values": [
+          { "a": "A", "b": 28 }, { "a": "B", "b": 55 }, { "a": "C", "b": 43 },
+          { "a": "D", "b": 91 }, { "a": "E", "b": 81 }, { "a": "F", "b": 53 },
+          { "a": "G", "b": 19 }, { "a": "H", "b": 87 }, { "a": "I", "b": 52 }
+        ]
+      },
+      "mark": "bar",
+      "encoding": {
+        "x": { "field": "a", "type": "nominal", "axis": { "labelAngle": 0 } },
+        "y": { "field": "b", "type": "quantitative" }
+      }
+    };
+    setEditingVisualizationSpec(defaultSpec);
+    setAvailableInstances(instances.filter(inst => inst.type === 'table' || inst.type === 'text' || inst.type === 'image'));
+  };
+
+  // Add save/cancel handlers for VisualizationEditor
+  const handleSaveVisualization = (spec: object, imageUrl: string) => {
+    const newId = `Visualization${instances.filter(i => i.type === 'visualization').length + 1}`;
+    const newVisualizationInstance: Instance = {
+      id: newId,
+      type: 'visualization',
+      spec,
+      thumbnail: imageUrl,
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300
+    };
+    setInstances(prev => [
+      ...prev,
+      newVisualizationInstance
+    ]);
+    console.log(newVisualizationInstance);
+    setEditingVisualizationSpec(null);
+    setAvailableInstances([]);
+    onOperation(`Created [${newId}](#instance-${newId}) as visualization`);
+  };
+  const handleCancelVisualization = () => {
+    setEditingVisualizationSpec(null);
+    setAvailableInstances([]);
+  };
+
   return (
     <>
       <div
@@ -1951,7 +2009,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         {editingSketchId ? (
           // Sketch Editor
           <SketchEditor
-            ref={sketchCanvasRef}
             editingSketchId={editingSketchId}
             instances={instances}
             setInstances={setInstances}
@@ -2004,6 +2061,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             onRemoveRow={handleRemoveRow}
             onAddColumn={handleAddColumn}
             onRemoveColumn={handleRemoveColumn}
+          />
+        ) : editingVisualizationSpec ? (
+          // Visualization Editor View
+          <VisualizationEditor
+            initialSpec={editingVisualizationSpec}
+            onSave={handleSaveVisualization}
+            onCancel={handleCancelVisualization}
+            availableInstances={availableInstances}
           />
         ) : (
           // Default Instance View
@@ -2105,6 +2170,15 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                       }}
                     >
                       Table
+                    </div>
+                    <div
+                      className="contextmenuoption"
+                      onClick={() => {
+                        handleCreateVisualization();
+                        setInstanceToolsOpen(false);
+                      }}
+                    >
+                      Visualization
                     </div>
                   </div>
                 )}
@@ -2412,12 +2486,36 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                                       pointerEvents: 'none',
                                     }}
                                   />
+                                ) : cell.type === 'visualization' ? (
+                                  <img
+                                    key={cell.id}
+                                    src={cell.thumbnail}
+                                    alt="thumbnail"
+                                    style={{
+                                      maxWidth: '100%',
+                                      maxHeight: '100%',
+                                      objectFit: 'contain',
+                                      pointerEvents: 'none',
+                                    }}
+                                  />
                                 ) : null}
                               </div>
                             );
                           })
                         })}
                       </div>
+                    ) : instance.type === 'visualization' ? (
+                      <img
+                        key={instance.id}
+                        src={instance.thumbnail}
+                        alt="thumbnail"
+                        style={{
+                          maxWidth: '100%',
+                          maxHeight: '100%',
+                          objectFit: 'contain',
+                          pointerEvents: 'none',
+                        }}
+                      />
                     ) : null}
                     {selectedInstanceId === instance.id && (
                       <>
@@ -2458,7 +2556,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           onCancel={() => setRenamingInstance(null)}
         />
       )}
-
     </>
   );
 };

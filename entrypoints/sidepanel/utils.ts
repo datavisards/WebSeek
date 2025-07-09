@@ -1,7 +1,33 @@
 // import htmlclean from 'htmlclean';
-import { Instance, EmbeddedInstance, TextInstance, EmbeddedImageInstance, EmbeddedSketchInstance, EmbeddedTableInstance, EmbeddedTextInstance, ImageInstance, SketchInstance, TableInstance, SketchItem } from './types';
+import { Instance, EmbeddedInstance, TextInstance, EmbeddedImageInstance, EmbeddedSketchInstance, EmbeddedTableInstance, EmbeddedTextInstance, ImageInstance, SketchInstance, TableInstance, SketchItem, VisualizationInstance } from './types';
 
 export const generateId = () => '_' + Math.random().toString(36).substring(2, 9);
+
+export const getVisualizationThumbnail = async (spec: object): Promise<string> => {
+    try {
+        const response = await fetch('http://127.0.0.1:8000/render-vega-lite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(spec)
+        });
+        if (!response.ok) throw new Error('Failed to fetch image');
+        const blob = await response.blob();
+        return await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                resolve(reader.result as string);
+            };
+            reader.onerror = () => {
+                console.error('Failed to read image blob');
+                reject('Failed to read image blob');
+            };
+            reader.readAsDataURL(blob);
+        });
+    } catch (err: any) {
+        console.error(err.message || err);
+        return '';
+    }
+};
 
 // Get the geometry of an instance
 export function getInstanceGeometry(inst: any) {
@@ -184,7 +210,7 @@ export const cleanHTML = (htmlString: string): string => {
         .replace(/\t/g, '');
 };
 
-export const generateInstanceContext = (instances: Instance[]): any => {
+export const generateInstanceContext = async (instances: Instance[]): Promise<any> => {
     let image_num = 0;
     let imageMap = new Map<string, number>();
     let imageContext: any = [], textContext = '';
@@ -256,6 +282,14 @@ export const generateInstanceContext = (instances: Instance[]): any => {
                             "tables": "(The object is omitted for brevity.)",
                             "originalId": item.instance.originalId
                         };
+                    } else if (item.instance.type === 'visualization') {
+                        return {
+                            "type": "visualization",
+                            "id": item.instance.id,
+                            "spec": item.instance.spec,
+                            "thumbnail": item.instance.thumbnail || undefined,
+                            "originalId": item.instance.originalId || undefined
+                        };
                     }
                 })
             });
@@ -266,7 +300,7 @@ export const generateInstanceContext = (instances: Instance[]): any => {
                     "rows": instance.rows,
                     "cols": instance.cols,
                     "cells": instance.cells.map((rowArr, r) => {
-                        return rowArr.map((cell, c) => {
+                        return rowArr.map(async (cell, c) => {
                             if (!cell) return null;
                             if (cell.type === 'image') {
                                 if (cell.originalId) {
@@ -287,10 +321,42 @@ export const generateInstanceContext = (instances: Instance[]): any => {
                                     type: 'text',
                                     text: cell.content
                                 }
+                            } else if (cell.type === 'visualization') {
+                                if (cell.originalId) {
+                                    return {
+                                        type: 'visualization',
+                                        spec: `(See ${cell.originalId} visualization.)`,
+                                        originalId: cell.originalId
+                                    }
+                                } else {
+                                    if (!cell.thumbnail) {
+                                        cell.thumbnail = await getVisualizationThumbnail(cell.spec);
+                                    }
+                                    let imageIndex = getImageIndex(cell.id, cell.thumbnail);
+                                    return {
+                                        type: 'visualization',
+                                        spec: cell.spec,
+                                        thumbnail: `(See the ${imageIndex == 1 ? 'first' : imageIndex == 2 ? 'second' : imageIndex == 3 ? 'third' : String(imageIndex) + 'th'} visualization.)`,
+                                        originalId: cell.originalId
+                                    }
+                                }
                             }
                         });
                     })
                 }
+            });
+        } else if (instance.type === 'visualization') {
+            // For visualization, include id, type, spec, and thumbnail if present
+            return JSON.stringify({
+                type: 'visualization',
+                id: instance.id,
+                spec: instance.spec,
+                thumbnail: instance.thumbnail || undefined,
+                originalId: instance.originalId || undefined,
+                x: instance.x,
+                y: instance.y,
+                width: instance.width,
+                height: instance.height
             });
         }
         return '';
@@ -304,7 +370,7 @@ export const generateInstanceContext = (instances: Instance[]): any => {
     return { imageContext, textContext };
 }
 
-export function parseInstance(input: any): Instance | EmbeddedInstance {
+export async function parseInstance(input: any): Promise<Instance | EmbeddedInstance> {
     if (typeof input !== 'object' || input === null) {
         throw new Error('Input must be an object');
     }
@@ -320,9 +386,12 @@ export function parseInstance(input: any): Instance | EmbeddedInstance {
         case 'image':
             return parseImageInstance(input);
         case 'sketch':
-            return parseSketchInstance(input);
+            return await parseSketchInstance(input);
         case 'table':
-            return parseTableInstance(input);
+            return await parseTableInstance(input);
+        case 'visualization':
+            let visualization = await parseVisualizationInstance(input);
+            return visualization;
         default:
             throw new Error(`Unknown type: ${type}`);
     }
@@ -378,7 +447,7 @@ function parseImageInstance(input: any): ImageInstance | EmbeddedImageInstance {
     };
 }
 
-function parseSketchInstance(input: any): SketchInstance | EmbeddedSketchInstance {
+async function parseSketchInstance(input: any): Promise<SketchInstance | EmbeddedSketchInstance> {
     const id = input.id || generateId();
 
     if (hasGeometricProperties(input)) {
@@ -389,7 +458,7 @@ function parseSketchInstance(input: any): SketchInstance | EmbeddedSketchInstanc
             y: input.y,
             width: input.width,
             height: input.height,
-            content: parseSketchContent(input.content || []),
+            content: await parseSketchContent(input.content || []),
             thumbnail: input.thumbnail || '',
             sourcePageId: input.sourcePageId,
         };
@@ -402,7 +471,7 @@ function parseSketchInstance(input: any): SketchInstance | EmbeddedSketchInstanc
     };
 }
 
-function parseTableInstance(input: any): TableInstance | EmbeddedTableInstance {
+async function parseTableInstance(input: any): Promise<TableInstance | EmbeddedTableInstance> {
     const id = input.id || generateId();
     let tableData: any;
 
@@ -417,17 +486,19 @@ function parseTableInstance(input: any): TableInstance | EmbeddedTableInstance {
     let cells: Array<Array<EmbeddedInstance | null>> = [];
     if (Array.isArray(tableData.cells) && Array.isArray(tableData.cells[0])) {
         // Already 2D
-        cells = tableData.cells.map((row: any[]) => row.map(cell => cell ? parseInstance(cell) : null));
+        cells = await Promise.all(tableData.cells.map(async (row: any[]) =>
+            await Promise.all(row.map(async cell => cell ? await parseInstance(cell) as EmbeddedInstance : null))
+        ));
     } else if (Array.isArray(tableData.cells)) {
         // Flat array with row/col
         const maxRow = Math.max(0, ...tableData.cells.map((cell: any) => cell.row || 0));
         const maxCol = Math.max(0, ...tableData.cells.map((cell: any) => cell.col || 0));
         cells = Array.from({ length: maxRow + 1 }, () => Array(maxCol + 1).fill(null));
-        tableData.cells.forEach((cell: any) => {
+        for (const cell of tableData.cells) {
             if (typeof cell.row === 'number' && typeof cell.col === 'number') {
-                cells[cell.row][cell.col] = cell.content ? parseInstance(cell.content) : null;
+                cells[cell.row][cell.col] = cell.content ? await parseInstance(cell.content) as EmbeddedInstance : null;
             }
-        });
+        }
     }
 
     const table: any = {
@@ -450,9 +521,27 @@ function parseTableInstance(input: any): TableInstance | EmbeddedTableInstance {
     return table;
 }
 
+async function parseVisualizationInstance(input: any): Promise<VisualizationInstance> {
+    const id = input.id || generateId();
+    if (!input.thumbnail) {
+        input.thumbnail = await getVisualizationThumbnail(input.spec);
+    }
+    return {
+        type: 'visualization' as const,
+        id,
+        spec: input.spec,
+        thumbnail: input.thumbnail,
+        originalId: input.originalId,
+        x: input.x,
+        y: input.y,
+        width: input.width,
+        height: input.height
+    };
+}
+
 // Helper for sketch content
-function parseSketchContent(items: any[]): SketchItem[] {
-    return items.map(item => {
+async function parseSketchContent(items: any[]): Promise<SketchItem[]> {
+    return Promise.all(items.map(async item => {
         switch (item.type) {
             case 'stroke':
                 return {
@@ -466,7 +555,7 @@ function parseSketchContent(items: any[]): SketchItem[] {
                 return {
                     type: 'instance',
                     id: item.id || Math.random().toString(36).substring(2, 9),
-                    instance: parseInstance(item.instance),
+                    instance: await parseInstance(item.instance) as EmbeddedInstance,
                     x: item.x || 0,
                     y: item.y || 0,
                     width: item.width || 0,
@@ -475,7 +564,7 @@ function parseSketchContent(items: any[]): SketchItem[] {
             default:
                 throw new Error(`Unknown sketch item type: ${item.type}`);
         }
-    });
+    }));
 }
 
 // Check for geometric properties

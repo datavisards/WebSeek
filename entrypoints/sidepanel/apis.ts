@@ -88,13 +88,26 @@ interface EmbeddedSketchInstance {
   id: string;
 }
 
-interface EmbeddedTableInstance = TableInstance
+type EmbeddedTableInstance = TableInstance
+
+interface VisualizationInstance {
+  id: string;
+  type: 'visualization';
+  spec: object | string; // Vega-Lite or similar spec
+  thumbnail?: string;
+  originalId?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+}
 
 type EmbeddedInstance =
   | EmbeddedTextInstance
   | EmbeddedImageInstance
   | EmbeddedSketchInstance
-  | EmbeddedTableInstance;
+  | EmbeddedTableInstance
+  | VisualizationInstance;
 
 type TextInstance = {
   id: string;
@@ -161,14 +174,15 @@ type TableInstance = {
   sourcePageId?: string;
 };
 
-type Instance = TextInstance | ImageInstance | SketchInstance | TableInstance;
+type Instance = TextInstance | ImageInstance | SketchInstance | TableInstance | VisualizationInstance;
 
 Note:
 - Do NOT escape single quotes (').
-- Use double backslashes (\\\\) for special regex characters like \\s or \\d.
+- Use double backslashes (\\) for special regex characters like \\s or \\d.
 - You may use markdown formatting in the summary for better readability (e.g., **bold**, *italic*, \`code\`, lists).
 - Do not leave any non-optional fields empty for each result instance.
 - When returning one or more instances in the results, assign a meaningful, human-readable, and unique ID to each instance (e.g., 'Annual_report', 'Info_list', etc.), which will be used for rendering.
+- For visualization, use the 'visualization' type and provide a Vega-Lite or similar spec in the 'spec' field.
 
 ---
 
@@ -308,6 +322,7 @@ export async function chatWithAgent(
     results?: any[];
 }> {
     try {
+        console.log(imageContexts)
         // Extract all unique URLs from logs and conversation history
         const urlRegex = /\bhttps?:\/\/[^\s'"<>]+\b/gi;
         const seenUrls = new Set<string>();
@@ -355,13 +370,15 @@ export async function chatWithAgent(
 2. **Image Processing**: Work with images and visual content
 3. **Table Creation**: Generate structured tables from data
 4. **Sketch Generation**: Create visual representations
-5. **Web Content Understanding**: Analyze HTML and extract relevant information
+5. **Visualization Generation**: Create and suggest data visualizations (e.g., Vega-Lite, charts, graphs)
+6. **Web Content Understanding**: Analyze HTML and extract relevant information
 
 ### Available Data Types:
 - **Text**: Plain text content
 - **Image**: Image URLs and visual content
 - **Table**: Structured tabular data with rows and columns
 - **Sketch**: Visual drawings and diagrams
+- **Visualization**: Data visualizations (charts, graphs, etc.) with Vega-Lite or similar specs
 
 ### Response Format:
 You can respond in two ways:
@@ -374,7 +391,7 @@ You can respond in two ways:
   "response": "A helpful text response explaining what you're doing",
   "results": [
     {
-      "type": "text|image|table|sketch",
+      "type": "text|image|table|sketch|visualization",
       // ... other properties based on type
     }
   ]
@@ -399,13 +416,26 @@ interface EmbeddedSketchInstance {
   id: string;
 }
 
-interface EmbeddedTableInstance = TableInstance
+type EmbeddedTableInstance = TableInstance
+
+interface VisualizationInstance {
+  id: string;
+  type: 'visualization';
+  spec: object | string; // Vega-Lite or similar spec
+  thumbnail?: string;
+  originalId?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+}
 
 type EmbeddedInstance =
   | EmbeddedTextInstance
   | EmbeddedImageInstance
   | EmbeddedSketchInstance
-  | EmbeddedTableInstance;
+  | EmbeddedTableInstance
+  | VisualizationInstance;
 
 type TextInstance = {
   id: string;
@@ -472,7 +502,7 @@ type TableInstance = {
   sourcePageId?: string;
 };
 
-type Instance = TextInstance | ImageInstance | SketchInstance | TableInstance;
+type Instance = TextInstance | ImageInstance | SketchInstance | TableInstance | VisualizationInstance;
 
 ### Context Information:
 
@@ -495,11 +525,12 @@ ${userMessage}
 ### Instructions:
 - If the user is asking for information or help, provide a helpful text response with markdown formatting when appropriate
 - Use markdown formatting to improve readability: **bold** for emphasis, *italic* for subtle emphasis, \`code\` for technical terms, and lists for step-by-step instructions
-- If the user wants to extract data or create structured content, provide both a text response and structured results
+- If the user wants to extract data, create structured content, or generate a visualization, provide both a text response and structured results
 - Use the HTML contexts when URLs are mentioned to understand web content
 - Reference existing instances when relevant using their IDs
-- Be conversational and helpful while maintaining focus on web automation tasks
-- When returning one or more instances in the results, assign a meaningful, human-readable, and unique ID to each instance (e.g., 'Annual_Report', 'Info_list', etc.), which will be used for rendering.
+- Be conversational and helpful while maintaining focus on web automation and visualization tasks
+- When returning one or more instances in the results, assign a meaningful, human-readable, and unique ID to each instance (e.g., 'Annual_Report', 'Info_list', 'Sales_Bar_Chart', etc.), which will be used for rendering.
+- For visualization, use the 'visualization' type and provide a Vega-Lite or similar spec in the 'spec' field.
 
 Now, respond to the user's message appropriately.`.trim();
 

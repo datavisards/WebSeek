@@ -148,7 +148,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
 
         try {
             // Generate instance context
-            const { imageContext, textContext } = generateInstanceContext(instances);
+            const { imageContext, textContext } = await generateInstanceContext(instances);
 
             // Call the chat agent
             const { response, results } = await chatWithAgent(
@@ -168,8 +168,8 @@ const ChatTab: React.FC<ChatTabProps> = ({
 
             // If there are structured results, add them to instances
             if (results && results.length > 0) {
-                let parsedResults: Instance[] = results
-                    .map((result) => parseInstance(result))
+                let parsedResultsRaw = await Promise.all(results.map((result) => parseInstance(result)));
+                let parsedResults: Instance[] = parsedResultsRaw
                     .filter((inst): inst is Instance =>
                         inst && typeof inst === 'object' &&
                         'id' in inst && 'type' in inst && 'x' in inst && 'y' in inst && 'width' in inst && 'height' in inst
