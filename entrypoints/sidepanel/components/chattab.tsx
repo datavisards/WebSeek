@@ -34,6 +34,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
     const [autoCompleteStartPos, setAutoCompleteStartPos] = useState(0);
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const [isStopped, setIsStopped] = useState(false);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -49,7 +50,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
         const cursorPos = inputRef.current?.selectionStart || 0;
         const textBeforeCursor = inputValue.substring(0, cursorPos);
         const lastAtPos = textBeforeCursor.lastIndexOf('@');
-        
+
         if (lastAtPos === -1) {
             setShowAutocomplete(false);
             return;
@@ -57,7 +58,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
 
         const textAfterAt = textBeforeCursor.substring(lastAtPos + 1);
         const hasSpace = /\s/.test(textAfterAt);
-        
+
         if (hasSpace) {
             setShowAutocomplete(false);
             return;
@@ -65,14 +66,14 @@ const ChatTab: React.FC<ChatTabProps> = ({
 
         setAutoCompleteStartPos(lastAtPos);
         setShowAutocomplete(true);
-        
+
         // Filter instances based on text after '@'
         const searchTerm = textAfterAt.toLowerCase();
         const instanceIds = instances.map(item => item.id);
-        const filteredIds = instanceIds.filter(id => 
+        const filteredIds = instanceIds.filter(id =>
             id.toLowerCase().includes(searchTerm)
         );
-        
+
         setAutoCompleteList(filteredIds);
         setAutoCompleteIndex(0);
     }, [inputValue, instances]);
@@ -94,7 +95,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
         const textAfter = inputValue.substring(autoCompleteStartPos).replace(/@[^\s]*/, `@${id}`);
         setInputValue(textBefore + textAfter);
         setShowAutocomplete(false);
-        
+
         // Focus input after selection
         setTimeout(() => {
             inputRef.current?.focus();
@@ -109,7 +110,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
         switch (e.key) {
             case 'ArrowDown':
                 e.preventDefault();
-                setAutoCompleteIndex(prev => 
+                setAutoCompleteIndex(prev =>
                     Math.min(prev + 1, autoCompleteList.length - 1)
                 );
                 break;
@@ -137,18 +138,18 @@ const ChatTab: React.FC<ChatTabProps> = ({
 
     const sendMsg = async () => {
         if (!inputValue.trim() || agentLoading) return;
-        
+        setIsStopped(false);
         const userMessage = inputValue.trim();
         setInputValue('');
-        
+
         // Add user message to chat
         addMessage({ role: 'user', message: userMessage });
         setAgentLoading(true);
-        
+
         try {
             // Generate instance context
             const { imageContext, textContext } = generateInstanceContext(instances);
-            
+
             // Call the chat agent
             const { response, results } = await chatWithAgent(
                 userMessage,
@@ -158,10 +159,13 @@ const ChatTab: React.FC<ChatTabProps> = ({
                 htmlContexts,
                 logs
             );
-            
+
+            // If stopped, do not update UI with agent response
+            if (isStopped) return;
+
             // Add agent response to chat
             addMessage({ role: 'agent', message: response });
-            
+
             // If there are structured results, add them to instances
             if (results && results.length > 0) {
                 let parsedResults: Instance[] = results
@@ -177,11 +181,13 @@ const ChatTab: React.FC<ChatTabProps> = ({
                 }
             }
         } catch (error) {
-            console.error('Error in chat:', error);
-            addMessage({ 
-                role: 'agent', 
-                message: 'Sorry, I encountered an error while processing your request. Please try again.' 
-            });
+            if (!isStopped) {
+                console.error('Error in chat:', error);
+                addMessage({
+                    role: 'agent',
+                    message: 'Sorry, I encountered an error while processing your request. Please try again.'
+                });
+            }
         } finally {
             setAgentLoading(false);
         }
@@ -196,7 +202,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
         // Only apply markdown rendering to agent messages
         if (role === 'agent' && detectMarkdown(message)) {
             return (
-                <div 
+                <div
                     className="markdown-content"
                     dangerouslySetInnerHTML={{ __html: renderMarkdown(message) }}
                 />
@@ -255,9 +261,20 @@ const ChatTab: React.FC<ChatTabProps> = ({
                         </div>
                     )}
                 </div>
-                <button type="submit" className="send-button" disabled={agentLoading || !inputValue.trim()}>
+                {agentLoading ? (
+                    <button
+                        type="button"
+                        className="stop-button"
+                        onClick={() => {
+                            setIsStopped(true);
+                            setAgentLoading(false);
+                        }}
+                    >
+                        Stop
+                    </button>
+                ) : <button type="submit" className="send-button" disabled={agentLoading || !inputValue.trim()}>
                     Send
-                </button>
+                </button>}
             </form>
         </>
     );
