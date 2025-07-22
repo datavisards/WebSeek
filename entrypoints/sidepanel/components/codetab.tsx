@@ -41,9 +41,9 @@ const CodeTab: React.FC<CodeTabProps> = ({ instances, setInstances }) => {
     const outputsEndRef = useRef<null | HTMLDivElement>(null);
 
     // Define the render function to be exposed to Pyodide
-    const render = (data: any) => {
+    const render = async (data: any) => {
         console.log("render", data);
-        const parsed = parseInstance(data);
+        const parsed = await parseInstance(data);
         console.log("parsed", parsed);
         // If the id exists, update the instance; otherwise, add it
         setInstances(prev => {

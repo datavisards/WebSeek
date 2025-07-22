@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { parseLogWithAgent } from "../apis";
+import { parseLogWithAgent } from "../apis_old";
 import './operationview.css';
 
 interface ParsedSummary {
   indices: number[];
   summary: string;
-  code: string;
+  results: any[];
 }
 
 interface OperationViewProps {
@@ -94,14 +94,18 @@ const OperationView: React.FC<OperationViewProps> = ({ logs, htmlContexts }) => 
     if (selectedIndices.length === 0) return;
 
     const selectedLogs = selectedIndices.map(i => logs[i]);
-    const res = await parseLogWithAgent(selectedLogs,
+    const res = await parseLogWithAgent(
+      selectedLogs,
+      "",  // instanceContexts 
+      [],  // imageContexts
       htmlContexts,
-      parsedSummaries.map(s => s.code)
+      null, // currentInstanceId
+      parsedSummaries.map(s => s.summary)  // use summary instead of code
     );
 
     setParsedSummaries([
       ...parsedSummaries,
-      { indices: selectedIndices, summary: res.summary, code: res.code }
+      { indices: selectedIndices, summary: res.summary, results: res.results }
     ]);
     
     // Reset collapse state for the new summary
@@ -140,15 +144,18 @@ const OperationView: React.FC<OperationViewProps> = ({ logs, htmlContexts }) => 
     const selectedLogs = existingSummary.indices.map(i => logs[i]);
     const res = await parseLogWithAgent(
       selectedLogs,
+      "",  // instanceContexts 
+      [],  // imageContexts
       htmlContexts,
-      updatedSummaries.map(s => s.code)
+      null, // currentInstanceId
+      updatedSummaries.map(s => s.summary)
     );
 
     // Add new summary
     const newSummary = {
       indices: existingSummary.indices,
       summary: res.summary,
-      code: res.code
+      results: res.results
     };
     setParsedSummaries([...updatedSummaries, newSummary]);
 
@@ -206,7 +213,7 @@ const OperationView: React.FC<OperationViewProps> = ({ logs, htmlContexts }) => 
     // Map the parsed summaries to their code content, and add the log as comment before each code block
     const codeContent = parsedSummaries.map(s => {
       const logSnippet = s.indices.map(i => logs[i]).join('\n');
-      return `# Log Snippet: ${logSnippet}\n\n${s.code}`;
+      return `# Log Snippet: ${logSnippet}\n\n${s.summary}`;
     }
     ).join('\n\n');
 

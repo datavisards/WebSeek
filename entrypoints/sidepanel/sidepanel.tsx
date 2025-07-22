@@ -1,11 +1,13 @@
 // sidepanel.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import OperationView from './components/operationview.tsx';
 import InstanceView from './components/instanceview.tsx';
 import { Instance } from './types.tsx';
 import './sidepanel.css';
 import { Message } from './types.tsx';
 import ToolView from './components/toolview.tsx';
+import websocketService from './websocket';
+import { contextService } from './context-service';
 
 const SidePanel = () => {
   const [logs, setLogs] = useState<string[]>([]);
@@ -21,6 +23,27 @@ const SidePanel = () => {
   const addMessage = (message: Message) => {
     setMessages(prev => [...prev, message]);
   };
+
+  // Sync contextService with state
+  useEffect(() => {
+    contextService.setInstances(instances);
+  }, [instances]);
+
+  useEffect(() => {
+    contextService.setMessages(messages);
+  }, [messages]);
+
+  useEffect(() => {
+    contextService.setHtmlContexts(htmlContexts);
+  }, [htmlContexts]);
+
+  // Connect websocket on mount, cleanup on unmount
+  useEffect(() => {
+    websocketService.connect();
+    return () => {
+      websocketService.disconnect();
+    };
+  }, []);
 
   return (
     <div className="side-panel">

@@ -35,7 +35,7 @@ interface SketchEditorProps {
   draggingEmbeddedId: string | null;
 }
 
-const SketchEditor: React.FC<SketchEditorProps> = forwardRef<HTMLCanvasElement, SketchEditorProps>(({
+const SketchEditor = forwardRef<HTMLCanvasElement, SketchEditorProps>(({
   editingSketchId,
   instances,
   setInstances,
@@ -348,7 +348,7 @@ const SketchEditor: React.FC<SketchEditorProps> = forwardRef<HTMLCanvasElement, 
                     {Array.from({ length: Math.min(instance.rows * instance.cols, 9) }).map((_, index) => {
                       const row = Math.floor(index / Math.min(instance.cols, 3));
                       const col = index % Math.min(instance.cols, 3);
-                      const cell = instance.cells.find(c => c.row === row && c.col === col);
+                      const cell = instance.cells[row]?.[col];
 
                       return (
                         <div
@@ -364,17 +364,17 @@ const SketchEditor: React.FC<SketchEditorProps> = forwardRef<HTMLCanvasElement, 
                             color: '#333'
                           }}
                         >
-                          {cell && cell.content ? (
+                          {cell ? (
                             <div style={{ textAlign: 'center' }}>
-                              {cell.content.type === 'text' ? (
-                                <span title={cell.content.content}>
-                                  {cell.content.content.length > 4
-                                    ? `${cell.content.content.slice(0, 4)}...`
-                                    : cell.content.content}
+                              {cell.type === 'text' ? (
+                                <span title={cell.content}>
+                                  {cell.content.length > 4
+                                    ? `${cell.content.slice(0, 4)}...`
+                                    : cell.content}
                                 </span>
-                              ) : cell.content.type === 'image' ? (
+                              ) : cell.type === 'image' ? (
                                 <img
-                                  src={cell.content.src}
+                                  src={cell.src}
                                   alt="cell"
                                   style={{
                                     width: '100%',

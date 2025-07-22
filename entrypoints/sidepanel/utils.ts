@@ -867,4 +867,45 @@ export function mapToObject(obj: any): any {
     }
 }
 
-export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance, mapToObject };
+interface InstanceEvent {
+    action: 'add' | 'remove' | 'update';
+    instance: Instance;
+}
+
+export function updateInstances(
+    oldInstances: Instance[], 
+    newInstances: InstanceEvent[] | null | undefined, 
+    setInstances: (instances: Instance[]) => void
+): void {
+    // If there are structured results, update the instances
+    let instancesClone = structuredClone(oldInstances);
+    if (newInstances && newInstances.length > 0) {
+        newInstances.forEach(event => {
+            // Fill incomplete fields of event.instance
+            event.instance.id = event.instance.id || generateId();
+
+            if (event.action === "add") {
+                instancesClone.push(event.instance);
+            } else if (event.action === "remove") {
+                let index = instancesClone.findIndex(item => item.id === event.instance.id);
+                if (index === -1) {
+                    console.error(`Failed to delete ${event.instance.id}: Not found`);
+                } else {
+                    instancesClone.splice(index, 1);
+                }
+            } else if (event.action === "update") {
+                let index = instancesClone.findIndex(item => item.id === event.instance.id);
+                if (index === -1) {
+                    console.error(`Failed to update ${event.instance.id}: Not found`);
+                } else {
+                    instancesClone.splice(index, 1, event.instance);
+                }
+            } else {
+                console.error(`Unknown action: ${event.action}`);
+            }
+        });
+    }
+    setInstances(instancesClone);
+}
+
+export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance, mapToObject, updateInstances };

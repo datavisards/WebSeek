@@ -1,14 +1,14 @@
 import { browser, type Browser } from 'wxt/browser';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Instance, EmbeddedInstance, SketchItem, TextInstance, ImageInstance, SketchInstance, TableInstance, Message } from '../types';
-import { getInstanceGeometry, cleanHTML, generateInstanceContext, generateId, parseInstance, detectMarkdown, renderMarkdown, createSketchThumbnail } from '../utils';
+import { getInstanceGeometry, cleanHTML, generateInstanceContext, generateId, parseInstance, detectMarkdown, renderMarkdown, createSketchThumbnail, updateInstances } from '../utils';
 import TextEditor from './texteditor';
 import SketchEditor from './sketcheditor';
 import TrashView from './trashview';
 import TableEditor from './tableeditor';
 import RenameModal from './renamemodal';
 import './instanceview.css';
-import { parseLogWithAgent } from '../apis';
+import { chatWithAgent } from '../apis';
 import VisualizationRenderer from './visualizationrenderer';
 import VisualizationEditor from './visualizationeditor';
 
@@ -1578,47 +1578,20 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
 
   const handleInfer = async (instance: Instance) => {
     console.log(`Analyzing instance ${instance.id}`);
-    let { imageContext, textContext } = await generateInstanceContext(instances);
+    let userMsg = `Infer my intent based on the instance ${instance.id} and finish the task.`;
     addMessage({
       "role": "user",
-      "message": `Infer my intent based on the instance ${instance.id} and finish the task.`
+      "message": userMsg
     });
     setAgentLoading(true);
     try {
-      let { summary, results } = await parseLogWithAgent(logs, textContext, imageContext, htmlContexts, instance.id);
+      let { message, instances: newInstances } = await chatWithAgent(userMsg);
       addMessage({
         "role": "agent",
-        "message": summary
+        "message": message
       });
-      // Await all parseInstance calls and filter after resolving
-      let parsedResultsRaw = await Promise.all(results.map((result) => parseInstance(result)));
-      let parsedResults: Instance[] = parsedResultsRaw
-        .filter(
-          (inst): inst is Instance =>
-            inst &&
-            typeof inst === 'object' &&
-            (
-              (inst.type === 'text' && 'content' in inst) ||
-              (inst.type === 'image' && 'src' in inst) ||
-              (inst.type === 'sketch' && 'content' in inst) ||
-              (inst.type === 'table' && 'cells' in inst)
-            )
-        );
-      // For sketches, ensure thumbnail is generated
-      for (const inst of parsedResults) {
-        if (inst.type === 'sketch' && (!inst.thumbnail || inst.thumbnail === '')) {
-          inst.thumbnail = await createSketchThumbnail(
-            inst,
-            null,
-            sketchColor,
-            sketchWidth,
-            wrapTextForThumbnail,
-            inst.width || 400,
-            inst.height || 300
-          );
-        }
-      }
-      setInstances(prev => [...prev, ...parsedResults]);
+      // update the instances
+      updateInstances(instances, newInstances, setInstances);      
     } finally {
       setAgentLoading(false);
     }
@@ -1864,34 +1837,24 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   // Batch LLM inference
   const handleBatchInfer = async () => {
     if (selectedInstanceIds.length === 0) return;
-    let { imageContext, textContext } = await generateInstanceContext(instances);
     const selected = instances.filter(inst => selectedInstanceIds.includes(inst.id));
+    const userMsg = `Infer my intent based on the following instances: ${selected.map(inst => inst.id).join(', ')}. Finish the task.`;
+    
+    console.log(`Analyzing batch of ${selected.length} instances: ${selected.map(inst => inst.id).join(', ')}`);
+    
     addMessage({
       "role": "user",
-      "message": `Infer my intent based on the following instances: ${selected.map(inst => inst.id).join(', ')}. Finish the task.`
+      "message": userMsg
     });
     setAgentLoading(true);
     try {
-      let { summary, results } = await parseLogWithAgent(logs, textContext, imageContext, htmlContexts, selectedInstanceIds.join(','));
+      let { message, instances: newInstances } = await chatWithAgent(userMsg);
       addMessage({
         "role": "agent",
-        "message": summary
+        "message": message
       });
-      // Await all parseInstance calls and filter after resolving
-      let parsedResultsRaw = await Promise.all(results.map((result) => parseInstance(result)));
-      let parsedResults: Instance[] = parsedResultsRaw
-        .filter(
-          (inst): inst is Instance =>
-            inst &&
-            typeof inst === 'object' &&
-            (
-              (inst.type === 'text' && 'content' in inst) ||
-              (inst.type === 'image' && 'src' in inst) ||
-              (inst.type === 'sketch' && 'content' in inst && 'thumbnail' in inst) ||
-              (inst.type === 'table' && 'cells' in inst)
-            )
-        );
-      setInstances(prev => [...prev, ...parsedResults]);
+      // update the instances
+      updateInstances(instances, newInstances, setInstances);
     } finally {
       setAgentLoading(false);
     }
@@ -2009,6 +1972,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         {editingSketchId ? (
           // Sketch Editor
           <SketchEditor
+            ref={sketchCanvasRef}
             editingSketchId={editingSketchId}
             instances={instances}
             setInstances={setInstances}

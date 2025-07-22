@@ -68,8 +68,8 @@ const RenameModal = ({ instance, instances, onConfirm, onCancel }: RenameModalPr
       
       // Check for embedded instances in tables
       if (inst.type === 'table') {
-        const hasTableDuplicate = inst.cells.some(cell => 
-          cell.content && cell.content.id === newInstanceName
+        const hasTableDuplicate = inst.cells.some(row => 
+          row.some(cell => cell && cell.id === newInstanceName)
         );
         if (hasTableDuplicate) return true;
       }

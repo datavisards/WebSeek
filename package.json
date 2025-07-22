@@ -16,6 +16,7 @@
   "dependencies": {
     "@codemirror/lang-python": "^6.2.1",
     "@uiw/react-codemirror": "^4.23.14",
+    "axios": "^1.10.0",
     "html2canvas": "^1.4.1",
     "htmlclean": "^3.0.8",
     "jsdom": "^26.1.0",

@@ -55,65 +55,67 @@ const TrashView: React.FC<TrashViewProps> = ({
                       boxSizing: 'border-box',
                     }}
                   >
-                    {instance.cells.map(cell => (
-                      <div
-                        key={`${cell.row}-${cell.col}`}
-                        style={{
-                          border: '1px solid #ddd',
-                          padding: '2px',
-                          boxSizing: 'border-box',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '2px',
-                        }}
-                      >
-                        {!cell.content ? (
-                          <div
-                            style={{
-                              width: '100%',
-                              height: '100%',
-                              background: '#f0f0f0',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: '#aaa',
-                              fontSize: '8px',
-                            }}
-                          >
-                            Empty
-                          </div>) :
-                          cell.content.type === 'text' ? (
-                            <p
-                              key={cell.content.id}
+                    {instance.cells.flatMap((row, rowIndex) => 
+                      row.map((cell, colIndex) => (
+                        <div
+                          key={`${rowIndex}-${colIndex}`}
+                          style={{
+                            border: '1px solid #ddd',
+                            padding: '2px',
+                            boxSizing: 'border-box',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '2px',
+                          }}
+                        >
+                          {!cell ? (
+                            <div
                               style={{
-                                margin: 0,
-                                fontSize: '10px',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
+                                width: '100%',
+                                height: '100%',
+                                background: '#f0f0f0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#aaa',
+                                fontSize: '8px',
                               }}
                             >
-                              {cell.content.content.length > 10
-                                ? `${cell.content.content.slice(0, 10)}...`
-                                : cell.content.content}
-                            </p>
-                          )
-                            : cell.content.type === 'image' ?
-                              (
-                                <img
-                                  key={cell.content.id}
-                                  src={cell.content.src}
-                                  alt="thumbnail"
-                                  style={{
-                                    maxWidth: '100%',
-                                    maxHeight: '100%',
-                                    objectFit: 'contain',
-                                    pointerEvents: 'none',
-                                  }}
-                                />
-                              ) : null}
-                      </div>
-                    ))}
+                              Empty
+                            </div>) :
+                            cell.type === 'text' ? (
+                              <p
+                                key={cell.id}
+                                style={{
+                                  margin: 0,
+                                  fontSize: '10px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {cell.content.length > 10
+                                  ? `${cell.content.slice(0, 10)}...`
+                                  : cell.content}
+                              </p>
+                            )
+                              : cell.type === 'image' ?
+                                (
+                                  <img
+                                    key={cell.id}
+                                    src={cell.src}
+                                    alt="thumbnail"
+                                    style={{
+                                      maxWidth: '100%',
+                                      maxHeight: '100%',
+                                      objectFit: 'contain',
+                                      pointerEvents: 'none',
+                                    }}
+                                  />
+                                ) : null}
+                        </div>
+                      ))
+                    )}
                   </div>
                 ) : null}
               </div>

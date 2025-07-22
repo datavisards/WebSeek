@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Message, Instance } from '../types';
 import { chatWithAgent } from '../apis';
-import { generateInstanceContext, parseInstance, detectMarkdown, renderMarkdown, ensureValidInstanceIds } from '../utils';
+import { generateInstanceContext, parseInstance, detectMarkdown, renderMarkdown, ensureValidInstanceIds, generateId, updateInstances } from '../utils';
 import './chattab.css';
 
 interface ChatTabProps {
@@ -147,45 +147,17 @@ const ChatTab: React.FC<ChatTabProps> = ({
         setAgentLoading(true);
 
         try {
-            // Generate instance context
-            const { imageContext, textContext } = await generateInstanceContext(instances);
-
             // Call the chat agent
-            const { response, results } = await chatWithAgent(
-                userMessage,
-                messages,
-                textContext,
-                imageContext,
-                htmlContexts,
-                logs
-            );
+            const { message, instances: newInstances } = await chatWithAgent(userMessage);
 
             // If stopped, do not update UI with agent response
             if (isStopped) return;
 
             // Add agent response to chat
-            addMessage({ role: 'agent', message: response });
+            addMessage({ role: 'agent', message: message });
 
-            // If there are structured results, add them to instances
-            if (results && results.length > 0) {
-                let parsedResultsRaw = await Promise.all(results.map((result) => parseInstance(result)));
-                let parsedResults: Instance[] = parsedResultsRaw
-                    .filter((inst): inst is Instance =>
-                        inst && typeof inst === 'object' &&
-                        'id' in inst && 'type' in inst && 'x' in inst && 'y' in inst && 'width' in inst && 'height' in inst
-                    );
-                if (parsedResults.length > 0) {
-                    for (const inst of parsedResults) {
-                        const index = instances.findIndex(i => i.id === inst.id);
-                        if (index !== -1) {
-                            instances[index] = inst;
-                        } else {
-                            instances.push(inst);
-                        }
-                    }
-                    setInstances(instances);
-                }
-            }
+            // Update the instances
+            updateInstances(instances, newInstances, setInstances);
         } catch (error) {
             if (!isStopped) {
                 console.error('Error in chat:', error);
