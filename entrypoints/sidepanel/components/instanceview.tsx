@@ -2286,7 +2286,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                         return (
                           <div
                             className="contextmenuoption"
-                            onClick={() => {
+                            onClick={async () => {
                               const webSource = instance.source as any;
                               if (webSource.url) {
                                 // Construct URL with highlighting parameters
@@ -2297,7 +2297,44 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                                 if (webSource.elementId) {
                                   url.searchParams.set('webseek_element_id', webSource.elementId);
                                 }
-                                window.open(url.toString(), '_blank');
+                                
+                                try {
+                                  // Check if the target webpage is already open
+                                  const tabs = await browser.tabs.query({});
+                                  const targetUrl = new URL(webSource.url);
+                                  const targetOrigin = targetUrl.origin;
+                                  const targetPathname = targetUrl.pathname;
+                                  
+                                  // Find existing tab with same origin and pathname
+                                  const existingTab = tabs.find(tab => {
+                                    if (!tab.url) return false;
+                                    try {
+                                      const tabUrl = new URL(tab.url);
+                                      return tabUrl.origin === targetOrigin && tabUrl.pathname === targetPathname;
+                                    } catch {
+                                      return false;
+                                    }
+                                  });
+                                  
+                                  if (existingTab && existingTab.id) {
+                                    // Switch to existing tab and update URL with highlighting parameters
+                                    await browser.tabs.update(existingTab.id, {
+                                      active: true,
+                                      url: url.toString()
+                                    });
+                                    // Also focus the window containing the tab
+                                    if (existingTab.windowId) {
+                                      await browser.windows.update(existingTab.windowId, { focused: true });
+                                    }
+                                  } else {
+                                    // Open in new tab if not found
+                                    await browser.tabs.create({ url: url.toString() });
+                                  }
+                                } catch (error) {
+                                  console.error('Error navigating to source:', error);
+                                  // Fallback to simple window.open
+                                  window.open(url.toString(), '_blank');
+                                }
                               }
                               closeContextMenu();
                             }}
