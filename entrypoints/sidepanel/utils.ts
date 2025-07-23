@@ -1,7 +1,35 @@
 // import htmlclean from 'htmlclean';
-import { Instance, EmbeddedInstance, TextInstance, EmbeddedImageInstance, EmbeddedSketchInstance, EmbeddedTableInstance, EmbeddedTextInstance, ImageInstance, SketchInstance, TableInstance, SketchItem, VisualizationInstance } from './types';
+import { Instance, EmbeddedInstance, TextInstance, EmbeddedImageInstance, EmbeddedSketchInstance, EmbeddedTableInstance, EmbeddedTextInstance, ImageInstance, SketchInstance, TableInstance, SketchItem, VisualizationInstance, InstanceSource, WebCaptureSource, ManualSource } from './types';
 
 export const generateId = () => '_' + Math.random().toString(36).substring(2, 9);
+
+// Helper function to create proper source from legacy sourcePageId or create manual source
+function createInstanceSource(input: any): InstanceSource {
+    // If input has the new source structure, use it
+    if (input.source && typeof input.source === 'object') {
+        if (input.source.type === 'web' || input.source.type === 'manual') {
+            return input.source;
+        }
+    }
+    
+    // Legacy support: convert sourcePageId to WebCaptureSource
+    if (input.sourcePageId) {
+        return {
+            type: 'web',
+            pageId: input.sourcePageId,
+            url: input.url || '',
+            selector: input.selector || '',
+            htmlSnippet: input.outerHTML,
+            capturedAt: input.capturedAt || new Date().toISOString()
+        };
+    }
+    
+    // Default to manual source
+    return {
+        type: 'manual',
+        createdAt: new Date().toISOString()
+    };
+}
 
 export const getVisualizationThumbnail = async (spec: object): Promise<string> => {
     try {
@@ -409,23 +437,26 @@ export async function parseInstance(input: any): Promise<Instance | EmbeddedInst
 function parseTextInstance(input: any): TextInstance | EmbeddedTextInstance {
     const id = input.id || generateId();
     const content = input.content || input.text || '';
+    const source = createInstanceSource(input);
 
     if (hasGeometricProperties(input)) {
         return {
             type: 'text',
             id,
+            source,
             content,
             x: input.x,
             y: input.y,
             width: input.width,
             height: input.height,
-            sourcePageId: input.sourcePageId,
+            originalId: input.originalId,
         };
     }
 
     return {
         type: 'text',
         id,
+        source,
         content,
         originalId: input.originalId,
     };
@@ -433,23 +464,26 @@ function parseTextInstance(input: any): TextInstance | EmbeddedTextInstance {
 
 function parseImageInstance(input: any): ImageInstance | EmbeddedImageInstance {
     const id = input.id || generateId();
+    const source = createInstanceSource(input);
 
     if (hasGeometricProperties(input)) {
         return {
             type: 'image',
             id,
+            source,
             src: input.src,
             x: input.x,
             y: input.y,
             width: input.width,
             height: input.height,
-            sourcePageId: input.sourcePageId,
+            originalId: input.originalId,
         };
     }
 
     return {
         type: 'image',
         id,
+        source,
         src: input.src,
         originalId: input.originalId,
     };
@@ -457,30 +491,34 @@ function parseImageInstance(input: any): ImageInstance | EmbeddedImageInstance {
 
 async function parseSketchInstance(input: any): Promise<SketchInstance | EmbeddedSketchInstance> {
     const id = input.id || generateId();
+    const source = createInstanceSource(input);
 
     if (hasGeometricProperties(input)) {
         return {
             type: 'sketch',
             id,
+            source,
             x: input.x,
             y: input.y,
             width: input.width,
             height: input.height,
             content: await parseSketchContent(input.content || []),
             thumbnail: input.thumbnail || '',
-            sourcePageId: input.sourcePageId,
+            originalId: input.originalId,
         };
     }
 
     return {
         type: 'sketch',
         id,
+        source,
         originalId: input.originalId,
     };
 }
 
 async function parseTableInstance(input: any): Promise<TableInstance | EmbeddedTableInstance> {
     const id = input.id || generateId();
+    const source = createInstanceSource(input);
     let tableData: any;
 
     // Handle both table formats (nested content vs flat)
@@ -512,6 +550,7 @@ async function parseTableInstance(input: any): Promise<TableInstance | EmbeddedT
     const table: any = {
         type: 'table',
         id,
+        source,
         rows: tableData.rows || (cells.length),
         cols: tableData.cols || (cells[0]?.length || 0),
         cells,
@@ -519,24 +558,24 @@ async function parseTableInstance(input: any): Promise<TableInstance | EmbeddedT
         y: input.y || 0,
         width: input.width || 400,
         height: input.height || 300,
-        sourcePageId: input.sourcePageId,
+        originalId: input.originalId,
     };
-
-    if (input.originalId) {
-        table.originalId = input.originalId;
-    }
 
     return table;
 }
 
 async function parseVisualizationInstance(input: any): Promise<VisualizationInstance> {
     const id = input.id || generateId();
+    const source = createInstanceSource(input);
+    
     if (!input.thumbnail) {
         input.thumbnail = await getVisualizationThumbnail(input.spec);
     }
+    
     return {
         type: 'visualization' as const,
         id,
+        source,
         spec: input.spec,
         thumbnail: input.thumbnail,
         originalId: input.originalId,

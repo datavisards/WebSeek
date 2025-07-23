@@ -47,8 +47,21 @@ export default defineBackground(() => {
             tabToPageId.set(tabId, newPageId);
           }
           const pageId = tabToPageId.get(tabId);
+          
+          // Create the source object according to the WebCaptureSource interface
+          const source = {
+            type: 'web' as const,
+            pageId: pageId!,
+            url: message.url || sender.url || '',
+            selector: message.selector || '',
+            htmlSnippet: message.htmlSnippet || '',
+            elementId: message.elementId || '',
+            capturedAt: message.capturedAt || new Date().toISOString()
+          };
+          
           sidePanelPort.postMessage({
             ...message,
+            source,
             pageId: pageId,
             pageURL: sender.url,
           });

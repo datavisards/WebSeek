@@ -27,6 +27,7 @@ const SidePanel = () => {
   // Sync contextService with state
   useEffect(() => {
     contextService.setInstances(instances);
+    console.log("Instances:", instances);
   }, [instances]);
 
   useEffect(() => {

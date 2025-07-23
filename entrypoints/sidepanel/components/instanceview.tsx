@@ -1,6 +1,6 @@
 import { browser, type Browser } from 'wxt/browser';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Instance, EmbeddedInstance, SketchItem, TextInstance, ImageInstance, SketchInstance, TableInstance, Message } from '../types';
+import { Instance, EmbeddedInstance, SketchItem, TextInstance, ImageInstance, SketchInstance, TableInstance, Message, InstanceSource } from '../types';
 import { getInstanceGeometry, cleanHTML, generateInstanceContext, generateId, parseInstance, detectMarkdown, renderMarkdown, createSketchThumbnail, updateInstances } from '../utils';
 import TextEditor from './texteditor';
 import SketchEditor from './sketcheditor';
@@ -8,6 +8,29 @@ import TrashView from './trashview';
 import TableEditor from './tableeditor';
 import RenameModal from './renamemodal';
 import './instanceview.css';
+
+// Helper function to create manual source for instances created within the app
+const createManualSource = (): InstanceSource => ({
+  type: 'manual',
+  createdAt: new Date().toISOString()
+});
+
+// Helper functions to create embedded instances with proper source
+const createEmbeddedTextInstance = (content: string, originalId?: string): EmbeddedInstance => ({
+  type: 'text',
+  id: generateId(),
+  source: createManualSource(),
+  content,
+  originalId
+});
+
+const createEmbeddedImageInstance = (src: string, originalId?: string): EmbeddedInstance => ({
+  type: 'image',
+  id: generateId(),
+  source: createManualSource(),
+  src,
+  originalId
+});
 import { chatWithAgent } from '../apis';
 import VisualizationRenderer from './visualizationrenderer';
 import VisualizationEditor from './visualizationeditor';
@@ -209,6 +232,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                 id: newId,
                 type: 'image',
                 src: result as string,
+                source: createManualSource(),
                 x,
                 y,
                 width: 100,
@@ -232,6 +256,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           id: newId,
           type: 'text',
           content: text,
+          source: createManualSource(),
           x,
           y,
           width: 100,
@@ -266,6 +291,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                 id: newId,
                 type: 'image',
                 src: result as string,
+                source: createManualSource(),
                 x: pasteX,
                 y: pasteY,
                 width: 100,
@@ -284,6 +310,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             id: newId,
             type: 'text',
             content: text,
+            source: createManualSource(),
             x: pasteX,
             y: pasteY,
             width: 100,
@@ -646,6 +673,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     const newSketch: Instance = {
       id: newId,
       type: 'sketch',
+      source: createManualSource(),
       x: 0,
       y: 0,
       width: 400,
@@ -665,15 +693,16 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     let embedded: EmbeddedInstance | null = null;
 
     if (instance.type === 'text') {
-      embedded = { type: 'text', id: generateId(), originalId: instance.id, content: instance.content };
+      embedded = createEmbeddedTextInstance(instance.content, instance.id);
     } else if (instance.type === 'image') {
-      embedded = { type: 'image', id: generateId(), originalId: instance.id, src: instance.src };
+      embedded = createEmbeddedImageInstance(instance.src, instance.id);
     } else if (instance.type === 'table') {
       // Create a full TableInstance with rows, cols, and cells
       const tableInstance = instance as TableInstance;
       embedded = {
         type: 'table',
         id: generateId(),
+        source: createManualSource(),
         originalId: instance.id,
         rows: tableInstance.rows,
         cols: tableInstance.cols,
@@ -922,7 +951,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           y,
           width: 100,
           height: 20,
-          sourcePageId: message.pageId,
+          source: {
+            type: 'web',
+            pageId: message.pageId,
+            url: message.pageURL || '',
+            selector: message.selector || '',
+            outerHTML: message.outerHTML,
+            capturedAt: new Date().toISOString()
+          },
         }
       ]);
     } else if (message.type === 'image') {
@@ -939,7 +975,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           y,
           width: 100,
           height: 100,
-          sourcePageId: message.pageId,
+          source: {
+            type: 'web',
+            pageId: message.pageId,
+            url: message.pageURL || '',
+            selector: message.selector || '',
+            outerHTML: message.outerHTML,
+            capturedAt: new Date().toISOString()
+          },
         }
       ]);
     }
@@ -974,11 +1017,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           : newText;
 
         // Create embedded text instance
-        const embeddedText: EmbeddedInstance = {
-          type: 'text',
-          id: generateId(),
-          content: combinedText
-        };
+        const embeddedText: EmbeddedInstance = createEmbeddedTextInstance(combinedText);
 
         // Update the table
         setInstances(prev => prev.map(inst => {
@@ -997,11 +1036,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     } else if (message.type === 'image') {
       // Only allow images in empty cells
       if (!currentContent) {
-        const embeddedImage: EmbeddedInstance = {
-          type: 'image',
-          id: generateId(),
-          src: message.data
-        };
+        const embeddedImage: EmbeddedInstance = createEmbeddedImageInstance(message.data);
 
         // Update the table
         setInstances(prev => prev.map(inst => {
@@ -1038,7 +1073,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         y: 0,
         width: message.dimensions.width,
         height: message.dimensions.height,
-        sourcePageId: message.pageId,
+        source: {
+          type: 'web',
+          pageId: message.pageId,
+          url: message.pageURL || '',
+          selector: message.selector || '',
+          outerHTML: message.outerHTML,
+          capturedAt: new Date().toISOString()
+        },
       }
     ]);
     setIsCaptureEnabled(true);
@@ -1136,6 +1178,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       let newSketch: Instance = {
         id: newId,
         type: 'sketch',
+        source: createManualSource(),
         x: getInstanceGeometry(instance).x,
         y: getInstanceGeometry(instance).y,
         width: getInstanceGeometry(instance).width,
@@ -1147,12 +1190,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         newSketch.content.push({
           type: 'instance',
           id: generateId(),
-          instance: {
-            type: 'image',
-            src: instance.src,
-            id: generateId(),
-            originalId: instance.id,
-          },
+          instance: createEmbeddedImageInstance(instance.src, instance.id),
           x: 0,
           y: 0,
           width: getInstanceGeometry(instance).width,
@@ -1198,6 +1236,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       {
         id: newTextId,
         type: 'text',
+        source: createManualSource(),
         content: editingTextContent,
         x: original.x,
         y: original.y,
@@ -1341,6 +1380,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     const newTable: Instance = {
       id: newId,
       type: 'table',
+      source: createManualSource(),
       rows,
       cols,
       cells,
@@ -1363,9 +1403,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     let embedded: EmbeddedInstance | null = null;
 
     if (instance.type === 'text') {
-      embedded = { type: 'text', id: generateId(), originalId: instance.id, content: instance.content };
+      embedded = createEmbeddedTextInstance(instance.content, instance.id);
     } else if (instance.type === 'image') {
-      embedded = { type: 'image', id: generateId(), originalId: instance.id, src: instance.src };
+      embedded = createEmbeddedImageInstance(instance.src, instance.id);
     } else if (instance.type === 'sketch') {
       // embedded = { type: 'sketch', id: generateId(), originalId: instance.id };
       console.error("Cannot embed a sketch inside a table");
@@ -1775,6 +1815,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     const newSketch: Instance = {
       id: newId,
       type: 'sketch',
+      source: createManualSource(),
       x: 0,
       y: 0,
       width: 400,
@@ -1782,9 +1823,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       content: selected.map((inst, idx) => ({
         type: 'instance',
         id: generateId(),
-        instance: inst.type === 'text' ? { type: 'text', id: generateId(), content: inst.content, originalId: inst.id } :
-          inst.type === 'image' ? { type: 'image', id: generateId(), src: inst.src, originalId: inst.id } :
-            inst.type === 'table' ? { ...inst, id: generateId(), originalId: inst.id } : inst,
+        instance: inst.type === 'text' ? createEmbeddedTextInstance(inst.content, inst.id) :
+          inst.type === 'image' ? createEmbeddedImageInstance(inst.src, inst.id) :
+            inst.type === 'table' ? { ...inst, id: generateId(), source: createManualSource(), originalId: inst.id } : inst,
         x: 10,
         y: 10 + idx * 60,
         width: getInstanceGeometry(inst).width,
@@ -1807,20 +1848,21 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     const cells = selected.map((inst, idx) => {
       let embedded: EmbeddedInstance | null = null;
       if (inst.type === 'text') {
-        embedded = { type: 'text', id: generateId(), content: inst.content, originalId: inst.id };
+        embedded = createEmbeddedTextInstance(inst.content, inst.id);
       } else if (inst.type === 'image') {
-        embedded = { type: 'image', id: generateId(), src: inst.src, originalId: inst.id };
+        embedded = createEmbeddedImageInstance(inst.src, inst.id);
       } else if (inst.type === 'table') {
         // For table, embed as EmbeddedTableInstance
-        embedded = { ...inst, id: generateId(), originalId: inst.id, type: 'table' } as EmbeddedInstance;
+        embedded = { ...inst, id: generateId(), source: createManualSource(), originalId: inst.id, type: 'table' } as EmbeddedInstance;
       } else if (inst.type === 'sketch') {
-        embedded = { ...inst, id: generateId(), originalId: inst.id, type: 'sketch' } as EmbeddedInstance;
+        embedded = { ...inst, id: generateId(), source: createManualSource(), originalId: inst.id, type: 'sketch' } as EmbeddedInstance;
       }
       return [embedded];
     });
     const newTable: Instance = {
       id: newId,
       type: 'table',
+      source: createManualSource(),
       rows,
       cols,
       cells,
@@ -1931,6 +1973,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     const newVisualizationInstance: Instance = {
       id: newId,
       type: 'visualization',
+      source: createManualSource(),
       spec,
       thumbnail: imageUrl,
       x: 0,
@@ -2237,6 +2280,34 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                     >
                       Infer
                     </div>
+                    {(() => {
+                      const instance = instances.find(i => i.id === contextMenu.instanceId);
+                      if (instance?.source.type === 'web') {
+                        return (
+                          <div
+                            className="contextmenuoption"
+                            onClick={() => {
+                              const webSource = instance.source as any;
+                              if (webSource.url) {
+                                // Construct URL with highlighting parameters
+                                const url = new URL(webSource.url);
+                                if (webSource.selector) {
+                                  url.searchParams.set('webseek_selector', webSource.selector);
+                                }
+                                if (webSource.elementId) {
+                                  url.searchParams.set('webseek_element_id', webSource.elementId);
+                                }
+                                window.open(url.toString(), '_blank');
+                              }
+                              closeContextMenu();
+                            }}
+                          >
+                            Go to Source
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                   </>
                 )}
               </div>
