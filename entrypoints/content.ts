@@ -7,17 +7,17 @@ let isSelecting = false;
 
 function generateUniqueElementId(element: HTMLElement): string {
   if (element.id) return element.id;
-  
+
   const dataAttrs = ['data-id', 'data-testid', 'data-test', 'data-cy', 'data-asin'];
   for (const attr of dataAttrs) {
     const value = element.getAttribute(attr);
     if (value) return `${attr}:${value}`;
   }
-  
+
   const tag = element.tagName.toLowerCase();
   const classes = element.className ? element.className.replace(/\s+/g, '.') : '';
   const text = element.innerText?.substring(0, 20).replace(/\s+/g, '_') || '';
-  
+
   return `${tag}${classes ? '.' + classes : ''}${text ? ':' + text : ''}`;
 }
 
@@ -36,21 +36,21 @@ function generateOptimalSelector(element: HTMLElement): string {
       // It's very specific but also very stable.
       let selector = `[data-asin="${asin}"]`;
       if (element !== current) {
-         // If the clicked element is a child of the ASIN container,
-         // add its tag and classes for more precision.
-         selector += ` ${element.tagName.toLowerCase()}`;
-         if (element.className) {
-            const classes = (typeof element.className === 'string') ? element.className.split(' ').filter(c => c.trim()) : [];
-            if (classes.length > 0) {
-               selector += `.${classes.join('.')}`;
-            }
-         }
+        // If the clicked element is a child of the ASIN container,
+        // add its tag and classes for more precision.
+        selector += ` ${element.tagName.toLowerCase()}`;
+        if (element.className) {
+          const classes = (typeof element.className === 'string') ? element.className.split(' ').filter(c => c.trim()) : [];
+          if (classes.length > 0) {
+            selector += `.${classes.join('.')}`;
+          }
+        }
       }
       return selector;
     }
     current = current.parentElement;
   }
-  
+
   // Strategy 2: Fallback to IDs or data-attributes if no ASIN container is found.
   if (element.id) {
     return `#${element.id.trim().replace(/\s/g, '\\ ')}`;
@@ -71,7 +71,8 @@ function generateOptimalSelector(element: HTMLElement): string {
     const parent = current.parentElement;
     if (parent) {
       const siblings = Array.from(parent.children);
-      const sameTagSiblings = siblings.filter(el => el.tagName === current.tagName);
+      const tagName = current.tagName;
+      const sameTagSiblings = siblings.filter(el => el.tagName === tagName);
       if (sameTagSiblings.length > 1) {
         const index = sameTagSiblings.indexOf(current) + 1;
         selectorPart += `:nth-of-type(${index})`;
@@ -142,14 +143,14 @@ function startElementSelection() {
   const clickHandler = (clickEvent: MouseEvent) => {
     clickEvent.preventDefault();
     clickEvent.stopPropagation();
-    
+
     const target = clickEvent.target as HTMLElement;
     const data = target.innerText.trim() || (target instanceof HTMLImageElement ? target.src : null);
     if (data) {
       const selector = generateOptimalSelector(target);
       const elementId = generateUniqueElementId(target);
       const htmlSnippet = generateHTMLSnippet(target);
-      
+
       browser.runtime.sendMessage({
         action: 'element_selected',
         type: target instanceof HTMLImageElement ? 'image' : 'text',
@@ -287,7 +288,7 @@ function startScreenshot(): void {
 
 function highlightTargetElement(selector: string, elementId?: string): boolean {
   let targetElement: HTMLElement | null = null;
-  
+
   if (selector) {
     try {
       targetElement = document.querySelector(selector) as HTMLElement;
@@ -295,7 +296,7 @@ function highlightTargetElement(selector: string, elementId?: string): boolean {
       console.warn('Invalid selector:', selector, error);
     }
   }
-  
+
   if (!targetElement && elementId) {
     if (elementId.startsWith('#') || !elementId.includes(':')) {
       const id = elementId.startsWith('#') ? elementId.slice(1) : elementId;
@@ -307,36 +308,36 @@ function highlightTargetElement(selector: string, elementId?: string): boolean {
       }
     }
   }
-  
+
   if (!targetElement) {
     // This is now expected on initial tries, so we downgrade from warn to log
     // console.log('Could not find target element yet. Waiting for DOM changes...');
     return false;
   }
-  
+
   targetElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-  
+
   const originalStyle = {
     border: targetElement.style.border,
     boxShadow: targetElement.style.boxShadow,
     outline: targetElement.style.outline,
     backgroundColor: targetElement.style.backgroundColor
   };
-  
+
   targetElement.style.border = '3px solid #ff6b35';
   targetElement.style.boxShadow = '0 0 20px rgba(255, 107, 53, 0.8)';
   targetElement.style.outline = '2px solid rgba(255, 107, 53, 0.3)';
   targetElement.style.backgroundColor = 'rgba(255, 107, 53, 0.1)';
-  
+
   setTimeout(() => {
-    if(targetElement) { // Check if element still exists
+    if (targetElement) { // Check if element still exists
       targetElement.style.border = originalStyle.border;
       targetElement.style.boxShadow = originalStyle.boxShadow;
       targetElement.style.outline = originalStyle.outline;
       targetElement.style.backgroundColor = originalStyle.backgroundColor;
     }
   }, 5000);
-  
+
   return true;
 }
 
@@ -362,7 +363,7 @@ function findAndHighlightOnLoad(selector: string, elementId?: string) {
     }
     return false;
   };
-  
+
   // First attempt, in case the page is static and loads fast
   if (attemptToHighlight()) {
     return;
