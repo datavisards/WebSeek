@@ -166,6 +166,7 @@ function startElementSelection() {
         action: 'element_selected',
         type: target instanceof HTMLImageElement ? 'image' : 'text',
         data, selector, elementId, htmlSnippet,
+        outerHTML: document.documentElement.outerHTML,
         url: window.location.href,
         capturedAt: new Date().toISOString()
       });

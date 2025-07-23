@@ -956,7 +956,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             pageId: message.pageId,
             url: message.pageURL || '',
             selector: message.selector || '',
-            outerHTML: message.outerHTML,
+            htmlSnippet: message.htmlSnippet || '',
             capturedAt: new Date().toISOString()
           },
         }
@@ -980,7 +980,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             pageId: message.pageId,
             url: message.pageURL || '',
             selector: message.selector || '',
-            outerHTML: message.outerHTML,
+            htmlSnippet: message.htmlSnippet || '',
             capturedAt: new Date().toISOString()
           },
         }
@@ -1016,8 +1016,20 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           ? `${currentContent.content} ${newText}`
           : newText;
 
-        // Create embedded text instance
-        const embeddedText: EmbeddedInstance = createEmbeddedTextInstance(combinedText);
+        // Create embedded text instance with web source
+        const embeddedText: EmbeddedInstance = {
+          type: 'text',
+          id: generateId(),
+          source: {
+            type: 'web',
+            pageId: message.pageId,
+            url: message.pageURL || '',
+            selector: message.selector || '',
+            htmlSnippet: message.htmlSnippet || '',
+            capturedAt: new Date().toISOString()
+          },
+          content: combinedText
+        };
 
         // Update the table
         setInstances(prev => prev.map(inst => {
@@ -1078,7 +1090,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           pageId: message.pageId,
           url: message.pageURL || '',
           selector: message.selector || '',
-          outerHTML: message.outerHTML,
+          htmlSnippet: message.htmlSnippet || '',
           capturedAt: new Date().toISOString()
         },
       }

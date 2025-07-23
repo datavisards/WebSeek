@@ -1,5 +1,6 @@
 // TableEditor.tsx
-import React from 'react';
+import React, { useState } from 'react';
+import { browser } from 'wxt/browser';
 import TableGrid from './tablegrid';
 import { TableInstance, Instance } from '../types';
 import './tableeditor.css';
@@ -42,6 +43,72 @@ const TableEditor: React.FC<TableEditorProps> = ({
   onRemoveColumn,
 }) => {
   const [selectedCell, setSelectedCell] = useState<{ row: number, col: number } | null>(null);
+  
+  // Function to navigate to source (similar to instanceview.tsx)
+  const navigateToSource = async (webSource: any) => {
+    if (webSource.url) {
+      // Construct URL with highlighting parameters
+      const url = new URL(webSource.url);
+      if (webSource.selector) {
+        url.searchParams.set('webseek_selector', webSource.selector);
+      }
+      if (webSource.elementId) {
+        url.searchParams.set('webseek_element_id', webSource.elementId);
+      }
+      
+      try {
+        // Check if the target webpage is already open
+        const tabs = await browser.tabs.query({});
+        const targetUrl = new URL(webSource.url);
+        const targetOrigin = targetUrl.origin;
+        const targetPathname = targetUrl.pathname;
+        
+        // Find existing tab with same origin and pathname
+        const existingTab = tabs.find(tab => {
+          if (!tab.url) return false;
+          try {
+            const tabUrl = new URL(tab.url);
+            return tabUrl.origin === targetOrigin && tabUrl.pathname === targetPathname;
+          } catch {
+            return false;
+          }
+        });
+        
+        if (existingTab && existingTab.id) {
+          // Switch to existing tab and update URL with highlighting parameters
+          await browser.tabs.update(existingTab.id, {
+            active: true,
+            url: url.toString()
+          });
+          // Also focus the window containing the tab
+          if (existingTab.windowId) {
+            await browser.windows.update(existingTab.windowId, { focused: true });
+          }
+        } else {
+          // Open in new tab if not found
+          await browser.tabs.create({ url: url.toString() });
+        }
+      } catch (error) {
+        console.error('Error navigating to source:', error);
+        // Fallback to simple window.open
+        window.open(url.toString(), '_blank');
+      }
+    }
+  };
+
+  // Function to get the source of a cell; For embedded cells, it will check the source of the original instance
+  const getCellSource = (table: TableInstance, row: number, col: number) => {
+    const cell = table?.cells[row]?.[col];
+    if (!cell) return null;
+    if (cell.source?.type === 'web') {
+      return cell.source;
+    } else {
+      if (cell.originalId) {
+        return instances.find(inst => inst.id === cell.originalId)?.source || null;
+      }
+    }
+  }
+
   if (!tableId) return null;
 
   const table = instances.find(inst =>
@@ -66,6 +133,21 @@ const TableEditor: React.FC<TableEditorProps> = ({
             Capture to Cell ({selectedCell.row + 1}, {String.fromCharCode(65 + selectedCell.col)})
           </button>
         )}
+        {selectedCell && (() => {
+          // Check if selected cell has web source content
+          const cellSource = getCellSource(table, selectedCell.row, selectedCell.col);
+          if (cellSource?.type === 'web') {
+            return (
+              <button
+                onClick={() => navigateToSource(cellSource as any)}
+                style={{ marginLeft: '10px' }}
+              >
+                Source
+              </button>
+            );
+          }
+          return null;
+        })()}
       </div>
 
       <div className="table-container">
