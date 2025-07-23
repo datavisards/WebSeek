@@ -39,10 +39,21 @@ function generateOptimalSelector(element: HTMLElement): string {
         // If the clicked element is a child of the ASIN container,
         // add its tag and classes for more precision.
         selector += ` ${element.tagName.toLowerCase()}`;
-        if (element.className) {
+        if (element.className && element.className.trim()) {
           const classes = (typeof element.className === 'string') ? element.className.split(' ').filter(c => c.trim()) : [];
           if (classes.length > 0) {
             selector += `.${classes.join('.')}`;
+          }
+        } else {
+          // For elements without classes, use nth-of-type to make selector more specific
+          const parent = element.parentElement;
+          if (parent) {
+            const tagName = element.tagName.toLowerCase();
+            const siblings = Array.from(parent.children).filter(el => el.tagName.toLowerCase() === tagName);
+            if (siblings.length > 1) {
+              const index = siblings.indexOf(element) + 1;
+              selector += `:nth-of-type(${index})`;
+            }
           }
         }
       }
@@ -291,7 +302,28 @@ function highlightTargetElement(selector: string, elementId?: string): boolean {
 
   if (selector) {
     try {
+      // First try the exact selector
       targetElement = document.querySelector(selector) as HTMLElement;
+      
+      // If not found and selector doesn't have nth-of-type, try to find all matching elements
+      // and pick the most appropriate one
+      if (!targetElement && !selector.includes(':nth-of-type')) {
+        const elements = document.querySelectorAll(selector) as NodeListOf<HTMLElement>;
+        if (elements.length > 0) {
+          // For text elements, try to find one with visible text content
+          for (const element of elements) {
+            if (element.innerText && element.innerText.trim() && 
+                element.offsetWidth > 0 && element.offsetHeight > 0) {
+              targetElement = element;
+              break;
+            }
+          }
+          // If no visible text element found, just use the first one
+          if (!targetElement) {
+            targetElement = elements[0];
+          }
+        }
+      }
     } catch (error) {
       console.warn('Invalid selector:', selector, error);
     }
