@@ -10,7 +10,7 @@ interface ParsedSummary {
 
 interface OperationViewProps {
   logs: string[];
-  htmlContexts: Record<string, string>;
+  htmlContexts: Record<string, {pageURL: string, htmlContent: string}>;
 }
 
 const OperationView: React.FC<OperationViewProps> = ({ logs, htmlContexts }) => {

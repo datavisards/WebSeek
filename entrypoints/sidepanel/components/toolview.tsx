@@ -6,7 +6,7 @@ import CodeTab from './codetab';
 
 interface ToolViewProps {
     logs: string[];
-    htmlContexts: Record<string, string>;
+    htmlContexts: Record<string, {pageURL: string, htmlContent: string}>;
     messages: Message[];
     addMessage: (message: Message) => void;
     setMessages: React.Dispatch<React.SetStateAction<Message[]>>;

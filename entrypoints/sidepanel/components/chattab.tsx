@@ -12,7 +12,7 @@ interface ChatTabProps {
     setAgentLoading: React.Dispatch<React.SetStateAction<boolean>>;
     instances: Instance[];
     logs: string[];
-    htmlContexts: Record<string, string>;
+    htmlContexts: Record<string, {pageURL: string, htmlContent: string}>;
     setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
 }
 
@@ -136,6 +136,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
         }
     };
 
+
     const sendMsg = async () => {
         if (!inputValue.trim() || agentLoading) return;
         setIsStopped(false);
@@ -144,6 +145,8 @@ const ChatTab: React.FC<ChatTabProps> = ({
 
         // Add user message to chat
         addMessage({ role: 'user', message: userMessage });
+        
+        
         setAgentLoading(true);
 
         try {

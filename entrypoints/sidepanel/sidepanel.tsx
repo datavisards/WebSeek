@@ -11,7 +11,7 @@ import { contextService } from './context-service';
 
 const SidePanel = () => {
   const [logs, setLogs] = useState<string[]>([]);
-  const [htmlContexts, setHtmlContexts] = useState<Record<string, string>>({});
+  const [htmlContexts, setHtmlContexts] = useState<Record<string, {pageURL: string, htmlContent: string}>>({});
   const [messages, setMessages] = useState<Message[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
   const [instances, setInstances] = useState<Instance[]>([]);

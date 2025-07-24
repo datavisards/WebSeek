@@ -4,11 +4,136 @@ import { Instance, EmbeddedInstance, TextInstance, EmbeddedImageInstance, Embedd
 export const generateId = () => '_' + Math.random().toString(36).substring(2, 9);
 
 /**
+ * A simple, fast hashing function for deterministic ID generation.
+ * Based on cyrb53 - a high-quality, non-cryptographic hash function.
+ */
+const cyrb53 = (str: string, seed = 0): string => {
+    let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+    for (let i = 0, ch; i < str.length; i++) {
+        ch = str.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+    h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
+    h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return "aid-" + (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
+};
+
+/**
+ * A list of known stable attributes to prioritize for signatures.
+ * This can be customized for specific sites.
+ */
+const STABLE_ATTRIBUTES = ['id', 'data-asin', 'data-testid', 'data-csa-c-id', 'name', 'data-cy', 'data-test'];
+
+/**
+ * Generates a highly robust, deterministic signature for an element using a hybrid approach.
+ * @param element The DOM element.
+ * @returns A signature string ready to be hashed.
+ */
+function generateHybridSignature(element: Element): string {
+    // === PRIORITY 1: Check for stable attributes ===
+    for (const attrName of STABLE_ATTRIBUTES) {
+        if (element.hasAttribute(attrName)) {
+            const attrValue = element.getAttribute(attrName);
+            // Return a signature based on the attribute name and value
+            return `attr:${attrName}=${attrValue}`;
+        }
+    }
+
+    // === PRIORITY 2: Check for meaningful content hash ===
+    // We get the text content, but only from the element itself, not its children.
+    let immediateText = '';
+    if (typeof window !== 'undefined' && typeof Node !== 'undefined') {
+        for (const childNode of Array.from(element.childNodes)) {
+            if (childNode.nodeType === Node.TEXT_NODE) {
+                immediateText += childNode.textContent;
+            }
+        }
+    }
+    const normalizedText = immediateText.trim().replace(/\s+/g, ' ');
+
+    // Only use text if it's substantial enough to be unique
+    if (normalizedText.length > 10) { 
+        // We only hash the first 100 chars to keep it efficient and stable
+        const textSnippet = normalizedText.substring(0, 100);
+        const textHash = cyrb53(textSnippet);
+        
+        // We still anchor it to the nearest parent ID for more context
+        const parentAnchor = getNearestParentIdSignature(element.parentElement);
+        return `${parentAnchor.signature}:text-hash=${textHash}`;
+    }
+
+    // === PRIORITY 3 (Fallback): Use the structural path ===
+    // This is our previous, more brittle method, used only when necessary.
+    const parentAnchor = getNearestParentIdSignature(element.parentElement);
+    const structuralPath = getRelativeStructuralPath(element, parentAnchor.element);
+    return `${parentAnchor.signature}:${structuralPath}`;
+}
+
+// Helper function to find the nearest anchor (parent with ID or BODY)
+function getNearestParentIdSignature(startElement: Element | null): { signature: string, element: Element | null } {
+    let current = startElement;
+    while (current && current.tagName !== 'BODY') {
+        if (current.id) {
+            return { signature: `id:${current.id}`, element: current };
+        }
+        current = current.parentElement;
+    }
+    const bodyElement = typeof document !== 'undefined' ? document.body : null;
+    return { signature: 'body', element: bodyElement };
+}
+
+// Helper function to get the path relative to a given anchor element
+function getRelativeStructuralPath(element: Element, anchorElement: Element | null): string {
+    const path: string[] = [];
+    let current: Element | null = element;
+
+    // Stop when we reach the anchor or the body
+    while (current && current !== anchorElement && current.tagName !== 'BODY') {
+        const tagName = current.tagName;
+        let siblingIndex = 0;
+        let sibling = current.previousElementSibling;
+        while (sibling) {
+            if (sibling.tagName === tagName) {
+                siblingIndex++;
+            }
+            sibling = sibling.previousElementSibling;
+        }
+        path.push(`${tagName}[${siblingIndex}]`);
+        current = current.parentElement;
+    }
+    return path.reverse().join('/');
+}
+
+/**
+ * Generates a deterministic, stable ID for any DOM element using the hybrid approach.
+ * This ID will be the same across page reloads for elements with stable attributes or content.
+ * @param element The target DOM element.
+ * @returns A stable ID string like "aid-a1b2c3d4"
+ */
+function generateStableId(element: Element): string {
+    const signature = generateHybridSignature(element);
+    return cyrb53(signature);
+}
+
+/**
  * Find an element based on a Locator object.
  * This replaces the brittle CSS selector string approach.
  */
 export function findElementByLocator(locator: Locator): HTMLElement | null {
+  // Only run in browser environment
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return null;
+  }
+  
   switch (locator.type) {
+    case 'stableId':
+      // First ensure stable IDs are injected into the page
+      injectStableIdsIntoLivePage();
+      return document.querySelector(`[data-aid-id="${locator.value}"]`);
+    
     case 'id':
       return document.getElementById(locator.value);
     
@@ -38,6 +163,9 @@ export function findElementByLocator(locator: Locator): HTMLElement | null {
  */
 export function locatorToSelector(locator: Locator): string {
   switch (locator.type) {
+    case 'stableId':
+      return `[data-aid-id="${locator.value}"]`;
+    
     case 'id':
       return `#${locator.value}`;
     
@@ -73,7 +201,7 @@ function createInstanceSource(input: any): InstanceSource {
     }
     
     // Legacy support: convert sourcePageId to WebCaptureSource
-    if (input.sourcePageId) {
+    if (input.sourcePageId || input.pageId) {
         let locator: Locator;
         
         // Convert legacy selector to new locator format
@@ -83,6 +211,9 @@ function createInstanceSource(input: any): InstanceSource {
                 type: 'css',
                 selector: input.selector
             };
+        } else if (input.locator) {
+            // Use the new locator format if available
+            locator = input.locator;
         } else {
             // If no selector, create a basic css locator
             locator = {
@@ -93,10 +224,10 @@ function createInstanceSource(input: any): InstanceSource {
         
         return {
             type: 'web',
-            pageId: input.sourcePageId,
+            pageId: input.pageId || input.sourcePageId, // Prefer new pageId over legacy sourcePageId
             url: input.url || '',
             locator: locator,
-            htmlSnippet: input.outerHTML,
+            elementId: input.elementId,
             capturedAt: input.capturedAt || new Date().toISOString()
         };
     }
@@ -196,6 +327,155 @@ export const indexToLetters = (index: number): string => {
     return letters;
 };
 
+/**
+ * Injects stable IDs into all elements in a document for reliable element tracking.
+ * Uses deterministic ID generation based on element structure for consistency across reloads.
+ * This creates a bridge between original DOM and cleaned DOM.
+ */
+export const injectStableIds = (doc: Document): Document => {
+    const allElements = doc.querySelectorAll('*');
+    allElements.forEach(el => {
+        // Only inject if the element doesn't already have a stable ID
+        if (!el.hasAttribute('data-aid-id')) {
+            const stableId = generateStableId(el);
+            el.setAttribute('data-aid-id', stableId);
+        }
+    });
+    return doc;
+};
+
+/**
+ * Injects stable IDs into a live page's DOM (for navigation purposes).
+ * Uses deterministic ID generation for consistency across page reloads.
+ */
+export const injectStableIdsIntoLivePage = (): void => {
+    // Only run in browser environment
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+        return;
+    }
+    
+    const allElements = document.querySelectorAll('*');
+    allElements.forEach(el => {
+        // Only inject if the element doesn't already have a stable ID
+        if (!el.hasAttribute('data-aid-id')) {
+            const stableId = generateStableId(el);
+            el.setAttribute('data-aid-id', stableId);
+        }
+    });
+};
+
+/**
+ * Creates a stable ID locator for a given element.
+ * Ensures stable IDs are injected and returns the most reliable locator type.
+ */
+export const createStableIdLocator = (element: HTMLElement): Locator => {
+    // Only run in browser environment
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+        return { type: 'css', selector: 'body' };
+    }
+    
+    // Ensure stable IDs are injected
+    injectStableIdsIntoLivePage();
+    
+    const stableId = element.getAttribute('data-aid-id');
+    if (stableId) {
+        return { type: 'stableId', value: stableId };
+    }
+    
+    // Fallback to other locator types if stable ID is not available
+    if (element.id) {
+        return { type: 'id', value: element.id };
+    }
+    
+    // Check for common data attributes
+    const testId = element.getAttribute('data-testid');
+    if (testId) {
+        return { type: 'attribute', name: 'data-testid', value: testId };
+    }
+    
+    // Fallback to CSS selector
+    const selector = generateCSSSelector(element);
+    return { type: 'css', selector };
+};
+
+/**
+ * Generates a CSS selector for an element (fallback method).
+ */
+const generateCSSSelector = (element: HTMLElement): string => {
+    if (element.id) {
+        return `#${element.id}`;
+    }
+    
+    let selector = element.tagName.toLowerCase();
+    
+    if (element.className) {
+        const classes = element.className.split(' ').filter(c => c.trim());
+        if (classes.length > 0) {
+            selector += '.' + classes.join('.');
+        }
+    }
+    
+    // Add nth-child if needed for uniqueness
+    const parent = element.parentElement;
+    if (parent) {
+        const siblings = Array.from(parent.children).filter(
+            el => el.tagName.toLowerCase() === element.tagName.toLowerCase()
+        );
+        if (siblings.length > 1) {
+            const index = siblings.indexOf(element) + 1;
+            selector += `:nth-of-type(${index})`;
+        }
+    }
+    
+    return selector;
+};
+
+/**
+ * Sets up a MutationObserver to inject stable IDs into dynamically added content.
+ * Uses deterministic ID generation for consistency.
+ * Call this once when the page loads to handle SPAs and dynamic content.
+ */
+export const setupStableIdObserver = (): (() => void) => {
+    // Only run in browser environment
+    if (typeof window === 'undefined' || typeof document === 'undefined' || typeof MutationObserver === 'undefined') {
+        return () => {}; // Return no-op cleanup function
+    }
+    
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    const element = node as Element;
+                    
+                    // Inject stable ID for the new element if it doesn't have one
+                    if (!element.hasAttribute('data-aid-id')) {
+                        const stableId = generateStableId(element);
+                        element.setAttribute('data-aid-id', stableId);
+                    }
+                    
+                    // Inject stable IDs for all descendants
+                    const descendants = element.querySelectorAll('*');
+                    descendants.forEach((descendant) => {
+                        if (!descendant.hasAttribute('data-aid-id')) {
+                            const stableId = generateStableId(descendant);
+                            descendant.setAttribute('data-aid-id', stableId);
+                        }
+                    });
+                }
+            });
+        });
+    });
+    
+    // Start observing
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+    
+    // Return cleanup function
+    return () => observer.disconnect();
+};
+
 export const cleanHTML = (htmlString: string): string => {
     // Define reusable tag sets
     const voidTags = new Set<string>([
@@ -211,7 +491,10 @@ export const cleanHTML = (htmlString: string): string => {
 
     // Parse HTML into DOM
     const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlString, 'text/html');
+    let doc = parser.parseFromString(htmlString, 'text/html');
+
+    // 1. INJECT STABLE IDs as the very first step
+    doc = injectStableIds(doc);
 
     // Remove head element
     if (doc.head) doc.head.remove();
@@ -223,12 +506,13 @@ export const cleanHTML = (htmlString: string): string => {
         elements.forEach(el => el.remove());
     });
 
-    // Remove all attributes except src
+    // 2. Remove all attributes except src and data-aid-id
     const allElements = doc.querySelectorAll('*');
     allElements.forEach(el => {
         const attributes = Array.from(el.attributes);
         attributes.forEach(attr => {
-            if (attr.name !== 'src') {
+            // Keep 'src' and our stable ID 'data-aid-id'
+            if (attr.name !== 'src' && attr.name !== 'data-aid-id') {
                 el.removeAttribute(attr.name);
             }
         });
@@ -335,14 +619,6 @@ export const generateInstanceContext = async (instances: Instance[]): Promise<an
         }
     }
 
-    const getSourceDescription = (source: InstanceSource): string => {
-        if (source.type === 'web') {
-            return `from webpage: ${source.url}`;
-        } else if (source.type === 'manual') {
-            return 'manually created';
-        }
-        return 'unknown source';
-    };
 
     // Helper function to process instances and collect image URLs for imageContext
     const processInstanceForImages = (instance: Instance): void => {
@@ -702,7 +978,6 @@ export const renderMarkdown = (text: string): string => {
  */
 export function ensureValidInstanceIds(instances: any[], existingIds: string[] = []): any[] {
     const usedIds = new Set(existingIds.map(id => id.toLowerCase()));
-    const typeCounters: Record<string, number> = {};
     return instances.map(inst => {
         let id = inst.id;
         // If missing, empty, or duplicate (case-insensitive), generate a new one

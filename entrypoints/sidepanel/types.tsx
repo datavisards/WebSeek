@@ -8,6 +8,7 @@
  * This replaces the brittle CSS selector string.
  */
 export type Locator =
+  | { type: 'stableId'; value: string } // e.g., { type: 'stableId', value: 'aid-123' } - Most reliable locator type
   | { type: 'id'; value: string } // e.g., { type: 'id', value: 'main-content' }
   | { type: 'attribute'; name: string; value: string } // e.g., { type: 'attribute', name: 'data-testid', value: 'login-button' }
   | {
@@ -28,8 +29,6 @@ export interface WebCaptureSource {
   url: string;
   /** A structured locator object to precisely locate the element on the page. */
   locator: Locator;
-  /** A minimal HTML snippet for AI context (max 500 chars). */
-  htmlSnippet?: string;
   /** Unique identifier for the element (id, data-* attribute, or generated). */
   elementId?: string;
   /** ISO timestamp of when the capture was made. */

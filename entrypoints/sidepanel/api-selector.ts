@@ -5,7 +5,7 @@ export const parseLogWithAgent = async (
     selectedLogs: string[],
     instanceContexts: string,
     imageContexts: any[],
-    htmlContexts: Record<string, string>,
+    htmlContexts: Record<string, {pageURL: string, htmlContent: string}>,
     currentInstanceId: string | null = null,
     previousCodeContexts: string[] = [],
     userMessage: string = '',
@@ -24,7 +24,7 @@ export const chatWithAgent = async (
     conversationHistory?: any[],
     instanceContexts?: string,
     imageContexts?: any[],
-    htmlContexts?: Record<string, string>,
+    htmlContexts?: Record<string, {pageURL: string, htmlContent: string}>,
     logs?: string[],
 ) => {
     if (USE_LLM) {

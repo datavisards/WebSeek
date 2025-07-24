@@ -5,7 +5,7 @@ import { generateInstanceContext } from './utils';
 class ContextService {
   private instances: Instance[] = [];
   private messages: Message[] = [];
-  private htmlContexts: Record<string, string> = {};
+  private htmlContexts: Record<string, {pageURL: string, htmlContent: string}> = {};
   private imageContexts: any[] = [];
 
   // Set instances
@@ -29,12 +29,12 @@ class ContextService {
   }
 
   // Set HTML contexts
-  setHtmlContexts(htmlContexts: Record<string, string>): void {
+  setHtmlContexts(htmlContexts: Record<string, {pageURL: string, htmlContent: string}>): void {
     this.htmlContexts = htmlContexts;
   }
 
   // Get HTML contexts
-  getHtmlContexts(): Record<string, string> {
+  getHtmlContexts(): Record<string, {pageURL: string, htmlContent: string}> {
     return this.htmlContexts;
   }
 
@@ -61,32 +61,26 @@ class ContextService {
       console.log("Fetching HTML content for URL:", targetUrl);
       console.log("Cached HTML contexts:", this.htmlContexts);
       
-      // If we have cached HTML for this URL, return it
-      if (this.htmlContexts[targetUrl]) {
+      // Search for HTML context that matches this URL
+      const matchingContext = Object.values(this.htmlContexts).find(context => context.pageURL === targetUrl);
+      if (matchingContext) {
         return {
           success: true,
           url: targetUrl,
-          html: this.htmlContexts[targetUrl],
+          html: matchingContext.htmlContent,
           timestamp: Date.now(),
         };
       }
 
-      // Otherwise, try to fetch it
-      const response = await fetch(targetUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch HTML: ${response.status}`);
-      }
-      
-      const html = await response.text();
-      
-      // Cache the HTML
-      this.htmlContexts[targetUrl] = html;
+      // No matching context found - this should not happen in the new pageId-based system
+      console.warn('No HTML context found for URL:', targetUrl, 'Available contexts:', Object.keys(this.htmlContexts));
       
       return {
-        success: true,
+        success: false,
         url: targetUrl,
-        html: html,
+        html: '',
         timestamp: Date.now(),
+        error: 'No HTML context available for this URL. HTML is now managed via pageId.',
       };
     } catch (error) {
       return {

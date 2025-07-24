@@ -44,8 +44,25 @@ const TableEditor: React.FC<TableEditorProps> = ({
 }) => {
   const [selectedCell, setSelectedCell] = useState<{ row: number, col: number } | null>(null);
   
-  // Function to navigate to source (similar to instanceview.tsx)
+  // Function to navigate to source - open snapshot view if pageId exists, otherwise navigate to URL
   const navigateToSource = async (webSource: any) => {
+    // Prefer snapshot view if pageId and locator are available
+    if (webSource.pageId && webSource.locator) {
+      try {
+        // Construct viewer URL for snapshot
+        const locatorString = encodeURIComponent(JSON.stringify(webSource.locator));
+        const viewerUrl = browser.runtime.getURL('/viewer.html') + `?snapshotId=${webSource.pageId}&locator=${locatorString}`;
+        
+        // Open snapshot viewer in new tab
+        await browser.tabs.create({ url: viewerUrl });
+        return;
+      } catch (error) {
+        console.error('Error opening snapshot viewer:', error);
+        // Fall through to URL navigation fallback
+      }
+    }
+    
+    // Fallback to URL navigation if snapshot view fails or isn't available
     if (webSource.url) {
       // Construct URL with highlighting parameters
       const url = new URL(webSource.url);

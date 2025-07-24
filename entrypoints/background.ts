@@ -2,8 +2,6 @@ import { browser, type Browser } from 'wxt/browser';
 export default defineBackground(() => {
   let selectedTabId: number | null = null;
   let sidePanelPort: Browser.runtime.Port | null = null;
-  const tabToPageId = new Map<number, string>();
-  let nextPageId = 1;
 
   // ALL your browser API code goes here!
   browser.runtime.onConnect.addListener((port) => {
@@ -38,37 +36,22 @@ export default defineBackground(() => {
 
   browser.runtime.onMessage.addListener((message, sender) => {
     console.log('Received message:', message, 'from', sender);
-    if (message.action === 'element_selected' || message.action === 'screenshot_finished') {
+    if (message.action === 'element_selected' || message.action === 'screenshot_finished' || message.action === 'snapshot_ready') {
       if (sidePanelPort) {
         const tabId = selectedTabId;
         if (tabId !== null) {
-          if (!tabToPageId.has(tabId)) {
-            const newPageId = `Page${nextPageId++}`;
-            tabToPageId.set(tabId, newPageId);
-          }
-          const pageId = tabToPageId.get(tabId);
+          // Always use the pageId from content.ts (now always provided)
+          const pageId = message.pageId;
           
           // Create the source object according to the WebCaptureSource interface
-          // Convert selector to locator format
-          let locator;
-          if (message.selector) {
-            locator = {
-              type: 'css' as const,
-              selector: message.selector
-            };
-          } else {
-            locator = {
-              type: 'css' as const,
-              selector: 'body'
-            };
-          }
+          // Always use the locator object from content script
+          const locator = message.locator;
           
           const source = {
             type: 'web' as const,
-            pageId: pageId!,
+            pageId: pageId,
             url: message.url || sender.url || '',
             locator: locator,
-            htmlSnippet: message.htmlSnippet || '',
             elementId: message.elementId || '',
             capturedAt: message.capturedAt || new Date().toISOString()
           };

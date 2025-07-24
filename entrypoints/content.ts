@@ -1,7 +1,110 @@
 import { browser } from 'wxt/browser';
+import { createStableIdLocator, injectStableIdsIntoLivePage, setupStableIdObserver, findElementByLocator } from './sidepanel/utils';
+import type { Locator } from './sidepanel/types';
 
 let highlightElement: HTMLElement | null = null;
 let isSelecting = false;
+
+// Initialize stable ID system
+let stableIdObserverCleanup: (() => void) | null = null;
+
+// Page ID management - generate stable ID for this page
+let currentPageId: string | null = null;
+
+// Generate a stable short pageId for this page
+function generatePageId(): string {
+  if (!currentPageId) {
+    // Generate a short 6-character code using base36
+    currentPageId = Math.random().toString(36).substring(2, 8);
+  }
+  return currentPageId;
+}
+
+// Convert relative URLs to absolute URLs in HTML
+function convertRelativeToAbsoluteUrls(html: string): string {
+  const base = new URL(document.location.href);
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  
+  // Update src attributes
+  const elementsWithSrc = doc.querySelectorAll('[src]');
+  elementsWithSrc.forEach(el => {
+    const src = el.getAttribute('src');
+    if (src) {
+      try {
+        const absoluteUrl = new URL(src, base).href;
+        el.setAttribute('src', absoluteUrl);
+      } catch (error) {
+        console.warn('Failed to convert src URL:', src, error);
+      }
+    }
+  });
+  
+  // Update href attributes
+  const elementsWithHref = doc.querySelectorAll('[href]');
+  elementsWithHref.forEach(el => {
+    const href = el.getAttribute('href');
+    if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+      try {
+        const absoluteUrl = new URL(href, base).href;
+        el.setAttribute('href', absoluteUrl);
+      } catch (error) {
+        console.warn('Failed to convert href URL:', href, error);
+      }
+    }
+  });
+  
+  return doc.documentElement.outerHTML;
+}
+
+// Create and save snapshot with provided pageId
+async function createSnapshot(pageId: string): Promise<boolean> {
+  try {
+    const rawHtml = document.documentElement.outerHTML;
+    const finalHtml = convertRelativeToAbsoluteUrls(rawHtml);
+    
+    const response = await fetch('http://localhost:8000/api/snapshots', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        snapshotId: pageId,
+        htmlContent: finalHtml,
+        originalUrl: document.location.href
+      })
+    });
+    
+    if (response.ok) {
+      console.log('Snapshot created successfully with pageId:', pageId);
+      return true;
+    } else {
+      console.error('Failed to create snapshot:', response.statusText);
+      return false;
+    }
+  } catch (error) {
+    console.error('Error creating snapshot:', error);
+    return false;
+  }
+}
+
+// Set up stable ID system when DOM is ready
+function initializeStableIdSystem() {
+  // Inject initial stable IDs
+  injectStableIdsIntoLivePage();
+  
+  // Set up observer for dynamic content
+  if (!stableIdObserverCleanup) {
+    stableIdObserverCleanup = setupStableIdObserver();
+  }
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeStableIdSystem);
+} else {
+  initializeStableIdSystem();
+}
 
 // --- Helper Functions for Element Selection & Data Generation ---
 
@@ -21,96 +124,13 @@ function generateUniqueElementId(element: HTMLElement): string {
   return `${tag}${classes ? '.' + classes : ''}${text ? ':' + text : ''}`;
 }
 
-// REVISED: This function is now much more robust for sites like Amazon.
-function generateOptimalSelector(element: HTMLElement): string {
-  // Strategy 1: Prioritize stable, unique identifiers.
-  // data-asin is perfect for e-commerce sites.
-  let current: HTMLElement | null = element;
-  while (current && current !== document.body) {
-    const asin = current.getAttribute('data-asin');
-    if (asin && asin.trim() !== '') {
-      // Found a stable product container! This is the best selector.
-      // We return a selector that finds the container and then looks for the specific element type within it.
-      const tag = element.tagName.toLowerCase();
-      // This creates a selector like `[data-asin="B08KTZ8249"] img.s-image`
-      // It's very specific but also very stable.
-      let selector = `[data-asin="${asin}"]`;
-      if (element !== current) {
-        // If the clicked element is a child of the ASIN container,
-        // add its tag and classes for more precision.
-        selector += ` ${element.tagName.toLowerCase()}`;
-        if (element.className && element.className.trim()) {
-          const classes = (typeof element.className === 'string') ? element.className.split(' ').filter(c => c.trim()) : [];
-          if (classes.length > 0) {
-            selector += `.${classes.join('.')}`;
-          }
-        } else {
-          // For elements without classes, use nth-of-type to make selector more specific
-          const parent = element.parentElement;
-          if (parent) {
-            const tagName = element.tagName.toLowerCase();
-            const siblings = Array.from(parent.children).filter(el => el.tagName.toLowerCase() === tagName);
-            if (siblings.length > 1) {
-              const index = siblings.indexOf(element) + 1;
-              selector += `:nth-of-type(${index})`;
-            }
-          }
-        }
-      }
-      return selector;
-    }
-    current = current.parentElement;
-  }
-
-  // Strategy 2: Fallback to IDs or data-attributes if no ASIN container is found.
-  if (element.id) {
-    return `#${element.id.trim().replace(/\s/g, '\\ ')}`;
-  }
-  const dataAttrs = ['data-id', 'data-testid', 'data-test', 'data-cy'];
-  for (const attr of dataAttrs) {
-    const value = element.getAttribute(attr);
-    if (value && document.querySelectorAll(`[${attr}="${value}"]`).length === 1) {
-      return `[${attr}="${value}"]`;
-    }
-  }
-
-  // Strategy 3: Brittle path-based selector as a last resort.
-  const path: string[] = [];
-  current = element;
-  while (current && current !== document.body) {
-    let selectorPart = current.tagName.toLowerCase();
-    const parent = current.parentElement;
-    if (parent) {
-      const siblings = Array.from(parent.children);
-      const tagName = current.tagName;
-      const sameTagSiblings = siblings.filter(el => el.tagName === tagName);
-      if (sameTagSiblings.length > 1) {
-        const index = sameTagSiblings.indexOf(current) + 1;
-        selectorPart += `:nth-of-type(${index})`;
-      }
-    }
-    path.unshift(selectorPart);
-    current = current.parentElement;
-  }
-  return path.join(' > ');
-}
-
-
-function generateHTMLSnippet(element: HTMLElement): string {
-  let snippet = element.outerHTML;
-  if (snippet.length > 500) {
-    const openTagMatch = snippet.match(/^<[^>]*>/);
-    const openTag = openTagMatch ? openTagMatch[0] : '';
-    const closeTag = `</${element.tagName.toLowerCase()}>`;
-    const remainingLength = 500 - openTag.length - closeTag.length - 3;
-    if (remainingLength > 0) {
-      const content = element.innerHTML.substring(0, remainingLength);
-      snippet = `${openTag}${content}...${closeTag}`;
-    } else {
-      snippet = openTag + '...' + closeTag;
-    }
-  }
-  return snippet;
+// Enhanced function that creates stable ID locators instead of CSS selectors
+function generateOptimalLocator(element: HTMLElement): Locator {
+  // Ensure stable IDs are up to date
+  injectStableIdsIntoLivePage();
+  
+  // Use the stable ID locator system
+  return createStableIdLocator(element);
 }
 
 // --- Element Selection Mode (User clicks on page) ---
@@ -138,6 +158,20 @@ function startElementSelection() {
   exitSelectionMode(); // Clean up any previous state
   isSelecting = true;
 
+  // Generate pageId and create snapshot proactively when selection starts
+  const pageId = generatePageId();
+  
+  // Create snapshot with the generated pageId
+  createSnapshot(pageId).then(success => {
+    if (success) {
+      console.log('Snapshot created proactively with pageId:', pageId);
+    } else {
+      console.warn('Failed to create proactive snapshot for pageId:', pageId);
+    }
+  }).catch(error => {
+    console.warn('Error creating proactive snapshot:', error);
+  });
+
   const mouseMoveHandler = (e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -151,22 +185,24 @@ function startElementSelection() {
     highlightElement = target;
   };
 
-  const clickHandler = (clickEvent: MouseEvent) => {
+  const clickHandler = async (clickEvent: MouseEvent) => {
     clickEvent.preventDefault();
     clickEvent.stopPropagation();
 
     const target = clickEvent.target as HTMLElement;
     const data = target.innerText.trim() || (target instanceof HTMLImageElement ? target.src : null);
     if (data) {
-      const selector = generateOptimalSelector(target);
+      const locator = generateOptimalLocator(target);
       const elementId = generateUniqueElementId(target);
-      const htmlSnippet = generateHTMLSnippet(target);
 
+      // Always use the stable pageId generated for this page
+      const pageIdToUse = generatePageId();
+      
       browser.runtime.sendMessage({
         action: 'element_selected',
         type: target instanceof HTMLImageElement ? 'image' : 'text',
-        data, selector, elementId, htmlSnippet,
-        outerHTML: document.documentElement.outerHTML,
+        data, locator, elementId,
+        pageId: pageIdToUse,
         url: window.location.href,
         capturedAt: new Date().toISOString()
       });
@@ -297,6 +333,36 @@ function startScreenshot(): void {
 }
 
 // --- Element Highlighting Logic ---
+
+// New function that can handle both locator objects and selector strings
+function highlightTargetElementByLocator(locator: Locator): boolean {
+  // Ensure stable IDs are available
+  injectStableIdsIntoLivePage();
+  
+  const targetElement = findElementByLocator(locator);
+  
+  if (!targetElement) {
+    return false;
+  }
+
+  // Scroll to element and highlight it
+  targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  
+  // Add highlight styling
+  const originalBorder = targetElement.style.border;
+  const originalBoxSizing = targetElement.style.boxSizing;
+  
+  targetElement.style.border = '3px solid rgba(255, 0, 0, 0.8)';
+  targetElement.style.boxSizing = 'border-box';
+  
+  // Remove highlight after 3 seconds
+  setTimeout(() => {
+    targetElement.style.border = originalBorder;
+    targetElement.style.boxSizing = originalBoxSizing;
+  }, 3000);
+  
+  return true;
+}
 
 function highlightTargetElement(selector: string, elementId?: string): boolean {
   let targetElement: HTMLElement | null = null;

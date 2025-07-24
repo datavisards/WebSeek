@@ -40,14 +40,63 @@ interface InstanceViewProps {
   instances: Instance[];
   setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
   logs: string[];
-  htmlContexts: Record<string, string>;
+  htmlContexts: Record<string, {pageURL: string, htmlContent: string}>;
   onOperation: (message: string) => void;
-  updateHTMLContext: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  updateHTMLContext: React.Dispatch<React.SetStateAction<Record<string, {pageURL: string, htmlContent: string}>>>;
   addMessage: (message: Message) => void;
   setAgentLoading: (loading: boolean) => void;
 }
 
 const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation, updateHTMLContext, addMessage, setAgentLoading }: InstanceViewProps) => {
+  // Cache for HTML content to avoid repeated API calls
+  const htmlCache = useRef<Record<string, string>>({});
+  // Track loading state for HTML content
+  const [htmlLoadingStates, setHtmlLoadingStates] = useState<Record<string, boolean>>({});
+  
+  // Async function to fetch and cache HTML content
+  const fetchHTMLContent = useCallback(async (pageId: string, pageURL: string) => {
+    // Check cache first
+    if (htmlCache.current[pageId]) {
+      updateHTMLContext(prev => ({
+        ...prev,
+        [pageId]: {
+          pageURL: pageURL,
+          htmlContent: htmlCache.current[pageId]
+        }
+      }));
+      return;
+    }
+    
+    // Set loading state
+    setHtmlLoadingStates(prev => ({ ...prev, [pageId]: true }));
+    
+    try {
+      const response = await fetch(`http://localhost:8000/api/snapshots/${pageId}`);
+      if (response.ok) {
+        const snapshotData = await response.json();
+        const cleanedHTML = cleanHTML(snapshotData.htmlContent);
+        
+        // Cache the result
+        htmlCache.current[pageId] = cleanedHTML;
+        
+        updateHTMLContext(prev => ({
+          ...prev,
+          [pageId]: {
+            pageURL: pageURL,
+            htmlContent: cleanedHTML
+          }
+        }));
+        console.log("HTML fetched and cached for pageId:", pageId);
+      } else {
+        console.warn("Failed to fetch snapshot for pageId:", pageId);
+      }
+    } catch (error) {
+      console.error("Error fetching HTML content:", error);
+    } finally {
+      // Clear loading state
+      setHtmlLoadingStates(prev => ({ ...prev, [pageId]: false }));
+    }
+  }, [updateHTMLContext]);
   const instancesRef = useRef<Instance[]>([]);
   // Counters for different instance types
   const [textCount, setTextCount] = useState(0);
@@ -894,19 +943,22 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     bgPort.current = port;
     port.onMessage.addListener((msg) => {
       console.log("UI received FROM BACKGROUND:", msg);
-      // Handle HTML cleaning
-      if (msg.pageURL && msg.outerHTML) {
-        msg.outerHTML = cleanHTML(msg.outerHTML);
-        updateHTMLContext(prev => ({
-          ...prev,
-          [msg.pageURL]: msg.outerHTML
-        }));
+      // Handle HTML content via pageId - fetch asynchronously
+      if (msg.pageURL && msg.pageId) {
+        fetchHTMLContent(msg.pageId, msg.pageURL);
       }
-      console.log("HTML cleaned:", msg.outerHTML);
 
       // Handle messages (msg.action, etc.)
       if (msg.action === 'element_selected') {
         handleElementSelected(msg);
+      } else if (msg.action === 'snapshot_ready') {
+        // Handle snapshot completion - this is when real pageId becomes available
+        if (msg.pageId && msg.url) {
+          console.log('Snapshot ready, real pageId available:', msg.pageId);
+          
+          // Fetch HTML content for the pageId
+          fetchHTMLContent(msg.pageId, msg.url);
+        }
       } else if (msg.action === 'screenshot_finished') {
         handleScreenshotFinished(msg);
       } else if (msg.action === 'selection_canceled') {
@@ -951,12 +1003,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           y,
           width: 100,
           height: 20,
-          source: {
+          source: message.source || {
             type: 'web',
             pageId: message.pageId,
             url: message.pageURL || '',
             locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
-            htmlSnippet: message.htmlSnippet || '',
             capturedAt: new Date().toISOString()
           },
         }
@@ -975,12 +1026,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           y,
           width: 100,
           height: 100,
-          source: {
+          source: message.source || {
             type: 'web',
             pageId: message.pageId,
             url: message.pageURL || '',
             locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
-            htmlSnippet: message.htmlSnippet || '',
             capturedAt: new Date().toISOString()
           },
         }
@@ -1020,12 +1070,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         const embeddedText: EmbeddedInstance = {
           type: 'text',
           id: generateId(),
-          source: {
+          source: message.source || {
             type: 'web',
             pageId: message.pageId,
             url: message.pageURL || '',
             locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
-            htmlSnippet: message.htmlSnippet || '',
             capturedAt: new Date().toISOString()
           },
           content: combinedText
@@ -1051,12 +1100,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         const embeddedImage: EmbeddedInstance = {
           type: 'image',
           id: generateId(),
-          source: {
+          source: message.source || {
             type: 'web',
             pageId: message.pageId,
             url: message.pageURL || '',
             locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
-            htmlSnippet: message.htmlSnippet || '',
             capturedAt: new Date().toISOString()
           },
           src: message.data
@@ -1097,12 +1145,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         y: 0,
         width: message.dimensions.width,
         height: message.dimensions.height,
-        source: {
+        source: message.source || {
           type: 'web',
           pageId: message.pageId,
           url: message.pageURL || '',
           locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
-          htmlSnippet: message.htmlSnippet || '',
           capturedAt: new Date().toISOString()
         },
       }
@@ -1642,6 +1689,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
 
   const handleInfer = async (instance: Instance) => {
     console.log(`Analyzing instance ${instance.id}`);
+    
+    
     let userMsg = `Infer my intent based on the instance ${instance.id} and finish the task.`;
     addMessage({
       "role": "user",
@@ -1916,6 +1965,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   const handleBatchInfer = async () => {
     if (selectedInstanceIds.length === 0) return;
     const selected = instances.filter(inst => selectedInstanceIds.includes(inst.id));
+    
+    
     const userMsg = `Infer my intent based on the following instances: ${selected.map(inst => inst.id).join(', ')}. Finish the task.`;
     
     console.log(`Analyzing batch of ${selected.length} instances: ${selected.map(inst => inst.id).join(', ')}`);
@@ -2336,11 +2387,34 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                             className="contextmenuoption"
                             onClick={async () => {
                               const webSource = instance.source as any;
-                              if (webSource.url) {
-                                // Construct URL with highlighting parameters
+                              if (webSource.pageId && webSource.locator) {
+                                try {
+                                  // Construct viewer URL for snapshot
+                                  const locatorString = encodeURIComponent(JSON.stringify(webSource.locator));
+                                  const viewerUrl = browser.runtime.getURL('/viewer.html') + `?snapshotId=${webSource.pageId}&locator=${locatorString}`;
+                                  
+                                  // Open snapshot viewer in new tab
+                                  await browser.tabs.create({ url: viewerUrl });
+                                } catch (error) {
+                                  console.error('Error opening snapshot viewer:', error);
+                                  // Fallback to original URL if snapshot viewer fails
+                                  if (webSource.url) {
+                                    const url = new URL(webSource.url);
+                                    if (webSource.locator) {
+                                      const { locatorToSelector } = await import('../utils');
+                                      const selector = locatorToSelector(webSource.locator);
+                                      url.searchParams.set('webseek_selector', selector);
+                                    }
+                                    if (webSource.elementId) {
+                                      url.searchParams.set('webseek_element_id', webSource.elementId);
+                                    }
+                                    window.open(url.toString(), '_blank');
+                                  }
+                                }
+                              } else if (webSource.url) {
+                                // Legacy fallback for instances without snapshot
                                 const url = new URL(webSource.url);
                                 if (webSource.locator) {
-                                  // Import the helper function and convert locator to selector
                                   const { locatorToSelector } = await import('../utils');
                                   const selector = locatorToSelector(webSource.locator);
                                   url.searchParams.set('webseek_selector', selector);
@@ -2348,44 +2422,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                                 if (webSource.elementId) {
                                   url.searchParams.set('webseek_element_id', webSource.elementId);
                                 }
-                                
-                                try {
-                                  // Check if the target webpage is already open
-                                  const tabs = await browser.tabs.query({});
-                                  const targetUrl = new URL(webSource.url);
-                                  const targetOrigin = targetUrl.origin;
-                                  const targetPathname = targetUrl.pathname;
-                                  
-                                  // Find existing tab with same origin and pathname
-                                  const existingTab = tabs.find(tab => {
-                                    if (!tab.url) return false;
-                                    try {
-                                      const tabUrl = new URL(tab.url);
-                                      return tabUrl.origin === targetOrigin && tabUrl.pathname === targetPathname;
-                                    } catch {
-                                      return false;
-                                    }
-                                  });
-                                  
-                                  if (existingTab && existingTab.id) {
-                                    // Switch to existing tab and update URL with highlighting parameters
-                                    await browser.tabs.update(existingTab.id, {
-                                      active: true,
-                                      url: url.toString()
-                                    });
-                                    // Also focus the window containing the tab
-                                    if (existingTab.windowId) {
-                                      await browser.windows.update(existingTab.windowId, { focused: true });
-                                    }
-                                  } else {
-                                    // Open in new tab if not found
-                                    await browser.tabs.create({ url: url.toString() });
-                                  }
-                                } catch (error) {
-                                  console.error('Error navigating to source:', error);
-                                  // Fallback to simple window.open
-                                  window.open(url.toString(), '_blank');
-                                }
+                                window.open(url.toString(), '_blank');
                               }
                               closeContextMenu();
                             }}

@@ -19,7 +19,7 @@ export async function parseLogWithAgent(
     selectedLogs: string[],
     instanceContexts: string,
     imageContexts: any[],
-    htmlContexts: Record<string, string>,
+    htmlContexts: Record<string, {pageURL: string, htmlContent: string}>,
     currentInstanceId: string | null = null,
     previousCodeContexts: string[] = [],
 ): Promise<{
@@ -31,17 +31,19 @@ export async function parseLogWithAgent(
         // Extract all unique URLs from selected logs
         const urlRegex = /\bhttps?:\/\/[^\s'"<>]+\b/gi;
         const seenUrls = new Set<string>();
-        const uniqueHtmlContexts: { [url: string]: string } = {};
+        const uniqueHtmlContexts: { [pageId: string]: {pageURL: string, htmlContent: string} } = {};
 
         selectedLogs.forEach(log => {
             const urls = log.match(urlRegex) || [];
             urls.forEach(url => {
                 if (!seenUrls.has(url)) {
                     seenUrls.add(url);
-                    const html = htmlContexts[url];
-                    if (html) {
-                        uniqueHtmlContexts[url] = html;
-                    }
+                    // Find htmlContext entries that match this URL
+                    Object.entries(htmlContexts).forEach(([pageId, contextData]) => {
+                        if (contextData.pageURL === url) {
+                            uniqueHtmlContexts[pageId] = contextData;
+                        }
+                    });
                 }
             });
         });
@@ -81,7 +83,6 @@ export type Locator =
           pageId: string;
           url: string;
           locator: Locator; // Use the new structured locator
-          htmlSnippet?: string;
           elementId?: string;
           capturedAt: string;
         }
@@ -141,33 +142,30 @@ Note:
 - Do not leave any non-optional fields empty for each result instance.
 - When returning one or more instances in the results, assign a meaningful, human-readable, and unique ID to each instance (e.g., 'Annual_report', 'Info_list', etc.), which will be used for rendering.
 - For visualization, use the 'visualization' type and provide a Vega-Lite or similar spec in the 'spec' field.
-- - **Source Assignment:** When generating an instance, you MUST correctly assign its \`source\` field.
+- **Source Assignment:** When generating an instance, you MUST correctly assign its \`source\` field.
   - For a new instance created from scratch (e.g., a summary you write), use a \`ManualSource\`. Example: \`"source": { "type": "manual", "createdAt": "2024-01-01T12:00:00Z" }\`.
   - For new instances created from web content, you MUST generate a \`WebCaptureSource\` object. This includes creating a \`locator\` object.
 # **How to Generate a \`locator\` Object:**
-Instead of a brittle CSS string, you will generate a structured \`locator\` object. Your goal is to choose the most robust strategy to find the element. Follow this order of preference:
+Generate a structured \`locator\` object using these strategies in order of preference:
 
-**1. \`id\` (Highest Priority):** If the element has a unique \`id\`.
-\`{ "type": "id", "value": "main-product-image" }\`
+**1. \`stableId\` (Most Preferred):** Use the hybrid-generated \`data-aid-id\` attribute for maximum reliability.
+\`{ "type": "stableId", "value": "aid-a1b2c3d4" }\`
 
-**2. \`attribute\`:** If the element has another unique attribute like \`data-testid\`, \`data-cy\`, or \`data-id\`.
-\`{ "type": "attribute", "name": "data-testid", "value": "add-to-cart-button" }\`
+**2. \`attribute\` (Fallback):** Use other unique attributes like \`id\` when \`data-aid-id\` is not available.
+\`{ "type": "attribute", "name": "id", "value": "main-content" }\`
 
-**3. \`contextual\` (For elements inside a unique container):** This is the best way to handle items in a list, like products.
-- First, find a stable parent container using an \`id\` or \`attribute\` locator (this is the \`anchor\`).
-- Then, specify the element you want inside that anchor (this is the \`target\`).
-- **Example:** To get the title (\`<h2>\`) of a product in a container marked by \`data-asin\`:
-  \`{ "type": "contextual", "anchor": { "type": "attribute", "name": "data-asin", "value": "B0BLB6W78J" }, "target": { "tag": "h2", "occurrence": 0 } }\` 
-  *(This means "find the element with data-asin='B0BLB6W78J', and inside it, get the first \`h2\` element.")*
+**Note:** The \`data-aid-id\` attributes are generated using a hybrid approach that prioritizes:
+1. **Stable attributes** (id, data-asin, data-testid, etc.) - most reliable
+2. **Content hashing** (for elements with meaningful text) - very stable  
+3. **Structural path** (fallback for container elements) - less stable but necessary
 
-**4. \`css\` (Last Resort):** Only if none of the above strategies work, fall back to a simple CSS selector.
-\`{ "type": "css", "selector": "nav > ul > li:nth-of-type(3)" }\`
+This ensures maximum stability across page reloads for elements that users actually interact with.
 
 ---
 
 ### HTML Contexts (for URLs referenced above):
-${Object.entries(uniqueHtmlContexts).map(([url, html]) =>
-            `URL: ${url}\nHTML:\n\`\`\`html\n${html}\n\`\`\``).join('\n\n')}
+${Object.entries(uniqueHtmlContexts).map(([pageId, contextData]) =>
+            `Page ID: ${pageId}\nPage URL: ${contextData.pageURL}\nHTML:\n\`\`\`html\n${contextData.htmlContent}\n\`\`\``).join('\n\n')}
 
 ---
 
@@ -179,29 +177,29 @@ ${instanceContexts}
 ### Example:
 The user captures a text instance "John Doe" (Text1) from a table on a webpage (page1). You should find the HTML of page1 from the HTML context and locate the table:
 
-<table>
+<table data-asin="B0BLB6W78J" data-aid-id="aid-a1b2c3d4">
     <thead>
         <tr>
-            <th>Name</th>
-            <th>Age</th>
-            <th>Occupation</th>
+            <th data-aid-id="aid-111">Name</th>
+            <th data-aid-id="aid-112">Age</th>
+            <th data-aid-id="aid-113">Occupation</th>
         </tr>
     </thead>
     <tbody>
         <tr>
-            <td>John Doe</td>
-            <td>35</td>
-            <td>Engineer</td>
+            <td data-aid-id="aid-211">John Doe</td>
+            <td data-aid-id="aid-212">35</td>
+            <td data-aid-id="aid-213">Engineer</td>
         </tr>
         <tr>
-            <td>Jane Smith</td>
-            <td>28</td>
-            <td>Data Scientist</td>
+            <td data-aid-id="aid-221">Jane Smith</td>
+            <td data-aid-id="aid-222">28</td>
+            <td data-aid-id="aid-223">Data Scientist</td>
         </tr>
         <tr>
-            <td>Alice Brown</td>
-            <td>42</td>
-            <td>Teacher</td>
+            <td data-aid-id="aid-231">Alice Brown</td>
+            <td data-aid-id="aid-232">42</td>
+            <td data-aid-id="aid-233">Teacher</td>
         </tr>
     </tbody>
 </table>
@@ -230,10 +228,9 @@ Response for this example:
                   "pageId": "Page1",
                   "url": "https://www.amazon.com/s?k=camera&webseek_selector=%5Bdata-asin%3D%22B0F1Y81JH8%22%5D+img.s-image&ref=nav_bb_sb",
                   "locator": {
-                      "type": "css",
-                      "selector": "table > tbody > tr:nth-of-type(1) > td:nth-of-type(1)"
-                  },
-                  "htmlSnippet": "<td>John Doe</td>",
+                    "type": "stableId",
+                    "value": "aid-211"
+                  }
                   "capturedAt": "2025-07-24T09:23:46.687Z"
               }
             }], [{
@@ -250,8 +247,14 @@ Response for this example:
         },
         "id": "Scraped_Names_Table",
         "source": {
-          "type": "manual",
-          "createdAt": "2025-07-24T09:23:46.687Z"
+          "type": "web",
+          "pageId": "Page1",
+          "url": "https://www.amazon.com/s?k=camera&webseek_selector=%5Bdata-asin%3D%22B0F1Y81JH8%22%5D+img.s-image&ref=nav_bb_sb",
+          "locator": {
+            "type": "stableId",
+            "value": "aid-a1b2c3d4"
+          },
+          "capturedAt": "2025-07-24T09:23:46.687Z"
         },
         "originalId": null
       }
@@ -259,14 +262,15 @@ Response for this example:
   ]
 }
 
+
 Now, analyze the provided instance and return the JSON response.
 `.trim();
 
         console.log('Constructed prompt for LLM:', prompt);
-        return {
-            message: 'Processing your request...',
-            instances: []
-        };
+        // return {
+        //     message: 'Processing your request...',
+        //     instances: []
+        // };
 
         // Call the LLM
         const completion = await openai.chat.completions.create({
@@ -324,7 +328,7 @@ export async function chatWithAgent(
     conversationHistory: Message[] = [],
     instanceContexts: string = "",
     imageContexts: any[] = [],
-    htmlContexts: Record<string, string> = {},
+    htmlContexts: Record<string, {pageURL: string, htmlContent: string}> = {},
     logs: string[] = [],
 ): Promise<{
     message: string;
@@ -335,7 +339,7 @@ export async function chatWithAgent(
         // Extract all unique URLs from logs and conversation history
         const urlRegex = /\bhttps?:\/\/[^\s'"<>]+\b/gi;
         const seenUrls = new Set<string>();
-        const uniqueHtmlContexts: { [url: string]: string } = {};
+        const uniqueHtmlContexts: { [pageId: string]: {pageURL: string, htmlContent: string} } = {};
 
         // Check logs for URLs
         logs.forEach(log => {
@@ -343,10 +347,12 @@ export async function chatWithAgent(
             urls.forEach(url => {
                 if (!seenUrls.has(url)) {
                     seenUrls.add(url);
-                    const html = htmlContexts[url];
-                    if (html) {
-                        uniqueHtmlContexts[url] = html;
-                    }
+                    // Find htmlContext entries that match this URL
+                    Object.entries(htmlContexts).forEach(([pageId, contextData]) => {
+                        if (contextData.pageURL === url) {
+                            uniqueHtmlContexts[pageId] = contextData;
+                        }
+                    });
                 }
             });
         });
@@ -357,10 +363,12 @@ export async function chatWithAgent(
             urls.forEach(url => {
                 if (!seenUrls.has(url)) {
                     seenUrls.add(url);
-                    const html = htmlContexts[url];
-                    if (html) {
-                        uniqueHtmlContexts[url] = html;
-                    }
+                    // Find htmlContext entries that match this URL
+                    Object.entries(htmlContexts).forEach(([pageId, contextData]) => {
+                        if (contextData.pageURL === url) {
+                            uniqueHtmlContexts[pageId] = contextData;
+                        }
+                    });
                 }
             });
         });
@@ -416,7 +424,6 @@ export type Locator =
           pageId: string;
           url: string;
           locator: Locator; // Use the new structured locator
-          htmlSnippet?: string;
           elementId?: string;
           capturedAt: string;
         }
@@ -493,27 +500,41 @@ ${userMessage}
 - Be conversational and helpful while maintaining focus on web automation and visualization tasks
 - When returning one or more instances in the results, assign a meaningful, human-readable, and unique ID to each instance (e.g., 'Annual_Report', 'Info_list', 'Sales_Bar_Chart', etc.), which will be used for rendering.
 - For visualization, use the 'visualization' type and provide a Vega-Lite or similar spec in the 'spec' field.
-- - **Source Assignment:** When generating an instance, you MUST correctly assign its \`source\` field.
+- **Source Assignment:** When generating an instance, you MUST correctly assign its \`source\` field.
   - For a new instance created from scratch (e.g., a summary you write), use a \`ManualSource\`. Example: \`"source": { "type": "manual", "createdAt": "2024-01-01T12:00:00Z" }\`.
   - For new instances created from web content, you MUST generate a \`WebCaptureSource\` object. This includes creating a \`locator\` object.
 # **How to Generate a \`locator\` Object:**
-Instead of a brittle CSS string, you will generate a structured \`locator\` object. Your goal is to choose the most robust strategy to find the element. Follow this order of preference:
+Generate a structured \`locator\` object using these strategies in order of preference:
 
-**1. \`id\` (Highest Priority):** If the element has a unique \`id\`.
-\`{ "type": "id", "value": "main-product-image" }\`
+**1. \`stableId\` (Most Preferred):** Use the hybrid-generated \`data-aid-id\` attribute for maximum reliability.
+\`{ "type": "stableId", "value": "aid-a1b2c3d4" }\`
 
-**2. \`attribute\`:** If the element has another unique attribute like \`data-testid\`, \`data-cy\`, or \`data-id\`.
-\`{ "type": "attribute", "name": "data-testid", "value": "add-to-cart-button" }\`
+**2. \`attribute\` (Fallback):** Use other unique attributes like \`id\` when \`data-aid-id\` is not available.
+\`{ "type": "attribute", "name": "id", "value": "main-content" }\`
 
-**3. \`contextual\` (For elements inside a unique container):** This is the best way to handle items in a list, like products.
-- First, find a stable parent container using an \`id\` or \`attribute\` locator (this is the \`anchor\`).
-- Then, specify the element you want inside that anchor (this is the \`target\`).
-- **Example:** To get the title (\`<h2>\`) of a product in a container marked by \`data-asin\`:
-  \`{ "type": "contextual", "anchor": { "type": "attribute", "name": "data-asin", "value": "B0BLB6W78J" }, "target": { "tag": "h2", "occurrence": 0 } }\` 
-  *(This means "find the element with data-asin='B0BLB6W78J', and inside it, get the first \`h2\` element.")*
+**Note:** The \`data-aid-id\` attributes are generated using a hybrid approach that prioritizes:
+1. **Stable attributes** (id, data-asin, data-testid, etc.) - most reliable
+2. **Content hashing** (for elements with meaningful text) - very stable  
+3. **Structural path** (fallback for container elements) - less stable but necessary
 
-**4. \`css\` (Last Resort):** Only if none of the above strategies work, fall back to a simple CSS selector.
-\`{ "type": "css", "selector": "nav > ul > li:nth-of-type(3)" }\`
+This ensures maximum stability across page reloads for elements that users actually interact with.
+
+---
+
+### HTML Contexts (for URLs referenced above):
+${Object.entries(uniqueHtmlContexts).map(([pageId, contextData]) =>
+            `Page ID: ${pageId}\nPage URL: ${contextData.pageURL}\nHTML:\n\`\`\`html\n${contextData.htmlContent}\n\`\`\``).join('\n\n')}
+
+---
+
+### User Message:
+${userMessage}
+
+### Conversation History:
+${conversationText}
+
+### Instance Context:
+${instanceContexts}
 
 Now, respond to the user's message appropriately.`.trim();
 

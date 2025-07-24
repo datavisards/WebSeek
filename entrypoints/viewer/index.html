@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSeek - Snapshot Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+        }
+        
+        .header {
+            background: #fff;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .logo {
+            font-weight: 600;
+            color: #333;
+            font-size: 16px;
+        }
+        
+        .url-info {
+            flex: 1;
+            color: #666;
+            font-size: 14px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 16px;
+        }
+        
+        .error {
+            text-align: center;
+            padding: 40px;
+            color: #d73a49;
+            font-size: 16px;
+            background: #fff;
+            margin: 20px;
+            border-radius: 8px;
+            border: 1px solid #f1b2b2;
+        }
+        
+        #snapshot-frame {
+            width: 100%;
+            height: calc(100vh - 60px);
+            border: none;
+            background: #fff;
+        }
+        
+        .highlight-overlay {
+            position: absolute;
+            pointer-events: none;
+            border: 3px solid #ff6b35;
+            box-shadow: 0 0 20px rgba(255, 107, 53, 0.8);
+            background: rgba(255, 107, 53, 0.1);
+            z-index: 10000;
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">WebSeek Snapshot</div>
+        <div class="url-info" id="url-info">Loading...</div>
+    </div>
+    
+    <div class="loading" id="loading">Loading snapshot...</div>
+    <div class="error" id="error" style="display: none;"></div>
+    
+    <iframe id="snapshot-frame" style="display: none;"></iframe>
+    
+    <script type="module" src="./main.tsx"></script>
+</body>
+</html>
