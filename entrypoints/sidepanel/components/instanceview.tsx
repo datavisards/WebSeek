@@ -31,7 +31,7 @@ const createEmbeddedImageInstance = (src: string, originalId?: string): Embedded
   src,
   originalId
 });
-import { chatWithAgent } from '../apis';
+import { parseLogWithAgent } from '../api-selector';
 import VisualizationRenderer from './visualizationrenderer';
 import VisualizationEditor from './visualizationeditor';
 
@@ -955,7 +955,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             type: 'web',
             pageId: message.pageId,
             url: message.pageURL || '',
-            selector: message.selector || '',
+            locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
             htmlSnippet: message.htmlSnippet || '',
             capturedAt: new Date().toISOString()
           },
@@ -979,7 +979,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             type: 'web',
             pageId: message.pageId,
             url: message.pageURL || '',
-            selector: message.selector || '',
+            locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
             htmlSnippet: message.htmlSnippet || '',
             capturedAt: new Date().toISOString()
           },
@@ -1024,7 +1024,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             type: 'web',
             pageId: message.pageId,
             url: message.pageURL || '',
-            selector: message.selector || '',
+            locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
             htmlSnippet: message.htmlSnippet || '',
             capturedAt: new Date().toISOString()
           },
@@ -1048,7 +1048,19 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     } else if (message.type === 'image') {
       // Only allow images in empty cells
       if (!currentContent) {
-        const embeddedImage: EmbeddedInstance = createEmbeddedImageInstance(message.data);
+        const embeddedImage: EmbeddedInstance = {
+          type: 'image',
+          id: generateId(),
+          source: {
+            type: 'web',
+            pageId: message.pageId,
+            url: message.pageURL || '',
+            locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
+            htmlSnippet: message.htmlSnippet || '',
+            capturedAt: new Date().toISOString()
+          },
+          src: message.data
+        };
 
         // Update the table
         setInstances(prev => prev.map(inst => {
@@ -1089,7 +1101,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           type: 'web',
           pageId: message.pageId,
           url: message.pageURL || '',
-          selector: message.selector || '',
+          locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
           htmlSnippet: message.htmlSnippet || '',
           capturedAt: new Date().toISOString()
         },
@@ -1637,7 +1649,19 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     });
     setAgentLoading(true);
     try {
-      let { message, instances: newInstances } = await chatWithAgent(userMsg);
+      let message: string = "", newInstances: any[] = [];
+      if (import.meta.env.WXT_USE_LLM == "true") {
+        // If using LLM, we need to generate the context first
+        const { imageContext, textContext } = await generateInstanceContext([instance]);
+        let result = await parseLogWithAgent(logs, textContext, imageContext, htmlContexts, instance.id);
+        message = result.message;
+        newInstances = result.instances || [];
+      } else {
+        // If not using LLM, we can directly parse the log
+        let result = await parseLogWithAgent([], '', [], {}, null, [], userMsg);
+        message = result.message;
+        newInstances = result.instances || [];
+      }
       addMessage({
         "role": "agent",
         "message": message
@@ -1902,7 +1926,19 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     });
     setAgentLoading(true);
     try {
-      let { message, instances: newInstances } = await chatWithAgent(userMsg);
+      let message: string = "", newInstances: any[] = [], success: boolean, errorMessage: string | null = null;
+      if (import.meta.env.WXT_USE_LLM == "true") {
+        // If using LLM, we need to generate the context first
+        const { imageContext, textContext } = await generateInstanceContext(selected);
+        let result = await parseLogWithAgent(logs, textContext, imageContext, htmlContexts, selected.map(inst => inst.id).join(', '));
+        message = result.message;
+        newInstances = result.instances || [];
+      } else {
+        // If not using LLM, we can directly parse the log
+        let result = await parseLogWithAgent([], '', [], {}, null, [], userMsg);
+        message = result.message;
+        newInstances = result.instances || [];
+      }
       addMessage({
         "role": "agent",
         "message": message
@@ -2303,8 +2339,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                               if (webSource.url) {
                                 // Construct URL with highlighting parameters
                                 const url = new URL(webSource.url);
-                                if (webSource.selector) {
-                                  url.searchParams.set('webseek_selector', webSource.selector);
+                                if (webSource.locator) {
+                                  // Import the helper function and convert locator to selector
+                                  const { locatorToSelector } = await import('../utils');
+                                  const selector = locatorToSelector(webSource.locator);
+                                  url.searchParams.set('webseek_selector', selector);
                                 }
                                 if (webSource.elementId) {
                                   url.searchParams.set('webseek_element_id', webSource.elementId);

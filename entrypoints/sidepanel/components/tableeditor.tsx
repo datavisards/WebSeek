@@ -49,8 +49,11 @@ const TableEditor: React.FC<TableEditorProps> = ({
     if (webSource.url) {
       // Construct URL with highlighting parameters
       const url = new URL(webSource.url);
-      if (webSource.selector) {
-        url.searchParams.set('webseek_selector', webSource.selector);
+      if (webSource.locator) {
+        // Import the helper function and convert locator to selector
+        const { locatorToSelector } = await import('../utils');
+        const selector = locatorToSelector(webSource.locator);
+        url.searchParams.set('webseek_selector', selector);
       }
       if (webSource.elementId) {
         url.searchParams.set('webseek_element_id', webSource.elementId);

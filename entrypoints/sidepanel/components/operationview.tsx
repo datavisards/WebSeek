@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { parseLogWithAgent } from "../apis_old";
+import { parseLogWithAgent } from "../api-selector";
 import './operationview.css';
 
 interface ParsedSummary {

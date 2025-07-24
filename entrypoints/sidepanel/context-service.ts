@@ -58,6 +58,8 @@ class ContextService {
   }> {
     try {
       const targetUrl = url || window.location.href;
+      console.log("Fetching HTML content for URL:", targetUrl);
+      console.log("Cached HTML contexts:", this.htmlContexts);
       
       // If we have cached HTML for this URL, return it
       if (this.htmlContexts[targetUrl]) {
@@ -146,20 +148,35 @@ class ContextService {
     error?: string;
   }> {
     try {
-      let instancesToProcess = this.instances;
-
-      // If instanceIds is provided and not ['<all>'], filter for specific instances
-      if (instanceIds && !(instanceIds.length === 1 && instanceIds[0] === '<all>')) {
-        instancesToProcess = this.instances.filter(instance => instanceIds.includes(instance.id));
-      } else if (instanceIds && instanceIds.length === 1 && instanceIds[0] === '<all>') {
-        // If instanceIds is ['<all>'], process all instances
-        instancesToProcess = this.instances;
-      }
+      const shouldProcessAll = !instanceIds || (instanceIds.length === 1 && instanceIds[0] === '<all>');
+      const targetIds = shouldProcessAll ? [] : instanceIds;
+      
+      const instancesToProcess = shouldProcessAll ? this.instances : 
+        this.instances.filter(instance => targetIds.includes(instance.id));
 
       const images: any[] = [];
 
-      // Process each instance to extract images
-      for (const instance of instancesToProcess) {
+      // Helper to extract embedded instances
+      const getEmbeddedInstances = (instances: any[]) => {
+        const embedded: any[] = [];
+        for (const instance of instances) {
+          if (instance.type === 'sketch') {
+            embedded.push(...instance.content.filter((item: any) => 
+              item.type === 'instance' && (shouldProcessAll || targetIds.includes(item.instance.id))
+            ).map((item: any) => item.instance));
+          } else if (instance.type === 'table') {
+            embedded.push(...instance.cells.flat().filter((cell: any) => 
+              cell && (shouldProcessAll || targetIds.includes(cell.id))
+            ));
+          }
+        }
+        return embedded;
+      };
+
+      // Process all instances (standalone + embedded)
+      const allInstances = [...instancesToProcess, ...getEmbeddedInstances(shouldProcessAll ? this.instances : instancesToProcess)];
+      
+      for (const instance of allInstances) {
         if (instance.type === 'image') {
           images.push({
             id: instance.id,
@@ -187,7 +204,6 @@ class ContextService {
         }
       }
 
-      // Add any cached image contexts
       images.push(...this.imageContexts);
 
       return {

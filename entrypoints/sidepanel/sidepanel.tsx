@@ -36,6 +36,7 @@ const SidePanel = () => {
 
   useEffect(() => {
     contextService.setHtmlContexts(htmlContexts);
+    console.log("HTML contexts:", htmlContexts);
   }, [htmlContexts]);
 
   // Connect websocket on mount, cleanup on unmount

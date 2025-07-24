@@ -1,7 +1,67 @@
 // import htmlclean from 'htmlclean';
-import { Instance, EmbeddedInstance, TextInstance, EmbeddedImageInstance, EmbeddedSketchInstance, EmbeddedTableInstance, EmbeddedTextInstance, ImageInstance, SketchInstance, TableInstance, SketchItem, VisualizationInstance, InstanceSource, WebCaptureSource, ManualSource } from './types';
+import { Instance, EmbeddedInstance, TextInstance, EmbeddedImageInstance, EmbeddedSketchInstance, EmbeddedTableInstance, EmbeddedTextInstance, ImageInstance, SketchInstance, TableInstance, SketchItem, VisualizationInstance, InstanceSource, WebCaptureSource, ManualSource, Locator, InstanceEvent } from './types';
 
 export const generateId = () => '_' + Math.random().toString(36).substring(2, 9);
+
+/**
+ * Find an element based on a Locator object.
+ * This replaces the brittle CSS selector string approach.
+ */
+export function findElementByLocator(locator: Locator): HTMLElement | null {
+  switch (locator.type) {
+    case 'id':
+      return document.getElementById(locator.value);
+    
+    case 'attribute':
+      // Escape value for use in CSS selector
+      const escapedValue = locator.value.replace(/"/g, '\\"');
+      return document.querySelector(`[${locator.name}="${escapedValue}"]`);
+
+    case 'contextual':
+      const anchorElement = findElementByLocator(locator.anchor);
+      if (!anchorElement) return null;
+      
+      const targetElements = anchorElement.querySelectorAll(locator.target.tag);
+      return (targetElements[locator.target.occurrence || 0] as HTMLElement) || null;
+
+    case 'css':
+      return document.querySelector(locator.selector);
+
+    default:
+      return null;
+  }
+}
+
+/**
+ * Convert a Locator object back to a CSS selector string for backward compatibility.
+ * This is used when we need to pass a selector to existing code that expects strings.
+ */
+export function locatorToSelector(locator: Locator): string {
+  switch (locator.type) {
+    case 'id':
+      return `#${locator.value}`;
+    
+    case 'attribute':
+      // Escape value for use in CSS selector
+      const escapedValue = locator.value.replace(/"/g, '\\"');
+      return `[${locator.name}="${escapedValue}"]`;
+
+    case 'contextual':
+      const anchorSelector = locatorToSelector(locator.anchor);
+      const occurrence = locator.target.occurrence || 0;
+      if (occurrence === 0) {
+        return `${anchorSelector} ${locator.target.tag}`;
+      } else {
+        return `${anchorSelector} ${locator.target.tag}:nth-of-type(${occurrence + 1})`;
+      }
+
+    case 'css':
+      return locator.selector;
+
+    default:
+      return 'body';
+  }
+}
 
 // Helper function to create proper source from legacy sourcePageId or create manual source
 function createInstanceSource(input: any): InstanceSource {
@@ -14,11 +74,28 @@ function createInstanceSource(input: any): InstanceSource {
     
     // Legacy support: convert sourcePageId to WebCaptureSource
     if (input.sourcePageId) {
+        let locator: Locator;
+        
+        // Convert legacy selector to new locator format
+        if (input.selector) {
+            // For legacy selectors, use css fallback
+            locator = {
+                type: 'css',
+                selector: input.selector
+            };
+        } else {
+            // If no selector, create a basic css locator
+            locator = {
+                type: 'css',
+                selector: 'body'
+            };
+        }
+        
         return {
             type: 'web',
             pageId: input.sourcePageId,
             url: input.url || '',
-            selector: input.selector || '',
+            locator: locator,
             htmlSnippet: input.outerHTML,
             capturedAt: input.capturedAt || new Date().toISOString()
         };
@@ -258,150 +335,64 @@ export const generateInstanceContext = async (instances: Instance[]): Promise<an
         }
     }
 
-    const instanceToJSON = (instance: Instance): string => {
-        if (instance.type === 'text') {
-            return JSON.stringify({
-                "type": "text",
-                "text": instance.content
-            });
-        } else if (instance.type === 'image') {
-            const imageIndex = getImageIndex(instance.id, instance.src);
-            return JSON.stringify({
-                "type": "image",
-                "src": "(See the " + (imageIndex == 1 ? 'first' : imageIndex == 2 ? 'second' : imageIndex == 3 ? 'third' : String(imageIndex) + 'th') + " image.)"
-            });
-        } else if (instance.type === 'sketch') {
-            if (!instance.thumbnail) {
-                throw new Error("Sketch thumbnail is required");
-            }
-            const imageIndex = getImageIndex(instance.id, instance.thumbnail);
-            return JSON.stringify({
-                "type": "sketch",
-                "thumbnail": "(See the " + (imageIndex == 1 ? 'first' : imageIndex == 2 ? 'second' : imageIndex == 3 ? 'third' : String(imageIndex) + 'th') + " sketch for the sketch thumbnail.)",
-                "content": instance.content.filter(item => item.type == "instance").map(item => {
-                    if (item.instance.type === 'image') {
-                        if (item.instance.originalId) {
-                            return {
-                                "type": "image",
-                                "src": `(See ${item.instance.originalId} image.)`,
-                                "originalId": item.instance.originalId
-                            };
-                        } else {
-                            imageContext.push({
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": item.instance.src
-                                }
-                            })
-                            let imageIndex = getImageIndex(item.instance.id, item.instance.src);
-                            return {
-                                "type": "image",
-                                "src": `${item.instance.src} (See the ${imageIndex == 1 ? 'first' : imageIndex == 2 ? 'second' : imageIndex == 3 ? 'third' : String(imageIndex) + 'th'} image.)`
-                            };
-                        }
-                    } else if (item.instance.type === 'text') {
-                        return {
-                            "type": "text",
-                            "text": item.instance.content
-                        };
-                    } else if (item.instance.type === 'table') {
-                        return {
-                            "type": "table",
-                            "tables": "(The object is omitted for brevity.)",
-                            "originalId": item.instance.originalId
-                        };
-                    } else if (item.instance.type === 'visualization') {
-                        return {
-                            "type": "visualization",
-                            "id": item.instance.id,
-                            "spec": item.instance.spec,
-                            "thumbnail": item.instance.thumbnail || undefined,
-                            "originalId": item.instance.originalId || undefined
-                        };
-                    }
-                })
-            });
-        } else if (instance.type === 'table') {
-            // Fix: The original code returns an array of Promises (because of async in map), which serializes to [{}] in JSON.stringify.
-            // Solution: Remove async/await from the mapping, and ensure all cell values are serializable synchronously.
+    const getSourceDescription = (source: InstanceSource): string => {
+        if (source.type === 'web') {
+            return `from webpage: ${source.url}`;
+        } else if (source.type === 'manual') {
+            return 'manually created';
+        }
+        return 'unknown source';
+    };
 
-            return JSON.stringify({
-                "type": "table",
-                "table": {
-                    "rows": instance.rows,
-                    "cols": instance.cols,
-                    "cells": instance.cells.map((rowArr, r) => {
-                        return rowArr.map((cell, c) => {
-                            if (!cell) return null;
-                            if (cell.type === 'image') {
-                                if (cell.originalId) {
-                                    return {
-                                        type: 'image',
-                                        src: `(See ${cell.originalId} image.)`,
-                                        originalId: cell.originalId
-                                    }
-                                } else {
-                                    let imageIndex = getImageIndex(cell.id, cell.src);
-                                    return {
-                                        type: 'image',
-                                        src: `${cell.src} (See the ${imageIndex == 1 ? 'first' : imageIndex == 2 ? 'second' : imageIndex == 3 ? 'third' : String(imageIndex) + 'th'} image.)`
-                                    }
-                                }
-                            } else if (cell.type === 'text') {
-                                return {
-                                    type: 'text',
-                                    text: cell.content
-                                }
-                            } else if (cell.type === 'visualization') {
-                                if (cell.originalId) {
-                                    return {
-                                        type: 'visualization',
-                                        spec: `(See ${cell.originalId} visualization.)`,
-                                        originalId: cell.originalId
-                                    }
-                                } else {
-                                    // If thumbnail is missing, just omit it (do not try to await a thumbnail here)
-                                    if (!cell.thumbnail) {
-                                        throw new Error("Visualization thumbnail is required");
-                                    }
-                                    let imageIndex = getImageIndex(cell.id, cell.thumbnail);
-                                    return {
-                                        type: 'visualization',
-                                        spec: cell.spec,
-                                        thumbnail: cell.thumbnail
-                                            ? `(See the ${imageIndex == 1 ? 'first' : imageIndex == 2 ? 'second' : imageIndex == 3 ? 'third' : String(imageIndex) + 'th'} visualization.)`
-                                            : undefined,
-                                        originalId: cell.originalId
-                                    }
-                                }
-                            }
-                            // If cell type is not recognized, return null
-                            return null;
-                        });
-                    })
+    // Helper function to process instances and collect image URLs for imageContext
+    const processInstanceForImages = (instance: Instance): void => {
+        if (instance.type === 'image') {
+            getImageIndex(instance.id, instance.src);
+        } else if (instance.type === 'sketch' && instance.thumbnail) {
+            getImageIndex(instance.id, instance.thumbnail);
+            // Process embedded instances in sketch content
+            instance.content.forEach(item => {
+                if (item.type === 'instance' && item.instance.type === 'image' && !item.instance.originalId) {
+                    getImageIndex(item.instance.id, item.instance.src);
                 }
             });
-        } else if (instance.type === 'visualization') {
-            // For visualization, include id, type, spec, and thumbnail if present
-            return JSON.stringify({
-                type: 'visualization',
-                id: instance.id,
-                spec: instance.spec,
-                thumbnail: instance.thumbnail || undefined,
-                originalId: instance.originalId || undefined,
-                x: instance.x,
-                y: instance.y,
-                width: instance.width,
-                height: instance.height
+        } else if (instance.type === 'table') {
+            // Process embedded instances in table cells
+            instance.cells.forEach(rowArr => {
+                rowArr.forEach(cell => {
+                    if (cell && cell.type === 'image' && !cell.originalId) {
+                        getImageIndex(cell.id, cell.src);
+                    } else if (cell && cell.type === 'visualization' && cell.thumbnail && !cell.originalId) {
+                        getImageIndex(cell.id, cell.thumbnail);
+                    }
+                });
             });
+        } else if (instance.type === 'visualization' && instance.thumbnail) {
+            getImageIndex(instance.id, instance.thumbnail);
         }
-        return '';
+    };
+
+    const instanceToJSON = (instance: Instance): string => {
+        // Process the instance to collect images for imageContext
+        processInstanceForImages(instance);
+        
+        // Use JSON.stringify directly on the instance
+        return JSON.stringify(instance);
     }
 
 
     instances.forEach(instance => {
         textContext += `Instance ID: ${instance.id}\nType: ${instance.type}\nContent: ${instanceToJSON(instance)}\n\n`;
     })
+
+    // Add paragraph linking image IDs to imageContext indices
+    if (imageMap.size > 0) {
+        textContext += "Image Context Reference:\n";
+        Array.from(imageMap.entries()).forEach(([imageId, index]) => {
+            textContext += `Image ID "${imageId}" corresponds to image ${index} in the images you received.\n`;
+        });
+        textContext += "\n";
+    }
 
     return { imageContext, textContext };
 }
@@ -906,11 +897,6 @@ export function mapToObject(obj: any): any {
     }
 }
 
-interface InstanceEvent {
-    action: 'add' | 'remove' | 'update';
-    instance: Instance;
-}
-
 export function updateInstances(
     oldInstances: Instance[], 
     newInstances: InstanceEvent[] | null | undefined, 
@@ -921,23 +907,72 @@ export function updateInstances(
     if (newInstances && newInstances.length > 0) {
         newInstances.forEach(event => {
             // Fill incomplete fields of event.instance
-            event.instance.id = event.instance.id || generateId();
-
+            if (event.instance) {
+                event.instance.id = event.instance.id || generateId();
+                if (event.instance.type == "sketch" && !event.instance.thumbnail) {
+                    // Generate thumbnail for sketch instances without one
+                    const sketchInstance = event.instance as SketchInstance;
+                    createSketchThumbnail(
+                        sketchInstance,
+                        null, // currentStroke
+                        '#000000', // default sketch color
+                        2, // default sketch width
+                        (ctx, text, maxWidth, maxHeight) => { // wrapTextForThumbnail function
+                            const words = text.split(' ');
+                            const lines: string[] = [];
+                            let currentLine = '';
+                            
+                            for (const word of words) {
+                                const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                                const metrics = ctx.measureText(testLine);
+                                if (metrics.width > maxWidth && currentLine) {
+                                    lines.push(currentLine);
+                                    currentLine = word;
+                                } else {
+                                    currentLine = testLine;
+                                }
+                            }
+                            if (currentLine) lines.push(currentLine);
+                            return lines.slice(0, Math.floor(maxHeight / 15)); // Approximate line height
+                        },
+                        400, // default canvas width
+                        300  // default canvas height
+                    ).then(thumbnail => {
+                        (event.instance as SketchInstance).thumbnail = thumbnail;
+                    }).catch(err => {
+                        console.error('Failed to generate sketch thumbnail:', err);
+                    });
+                }
+            }
+            
             if (event.action === "add") {
+                if (!event.instance || !event.instance.id) {
+                    console.error("Instance is missing id in add action");
+                    return;
+                }
                 instancesClone.push(event.instance);
             } else if (event.action === "remove") {
-                let index = instancesClone.findIndex(item => item.id === event.instance.id);
+                if (!event.targetId) {
+                    console.error("Target ID is missing in remove action");
+                    return;
+                }
+                let index = instancesClone.findIndex(item => item.id === event.targetId);
                 if (index === -1) {
-                    console.error(`Failed to delete ${event.instance.id}: Not found`);
+                    console.error(`Failed to delete ${event.targetId}: Not found`);
                 } else {
                     instancesClone.splice(index, 1);
                 }
             } else if (event.action === "update") {
-                let index = instancesClone.findIndex(item => item.id === event.instance.id);
+                if (!event.targetId || !event.instance) {
+                    console.error("Target ID or instance is missing in update action");
+                    return;
+                }
+                let index = instancesClone.findIndex(item => item.id === event.targetId);
                 if (index === -1) {
-                    console.error(`Failed to update ${event.instance.id}: Not found`);
+                    console.error(`Failed to update ${event.targetId}: Not found`);
                 } else {
-                    instancesClone.splice(index, 1, event.instance);
+                    let newInstance = { ...instancesClone[index], ...event.instance };
+                    instancesClone.splice(index, 1, newInstance);
                 }
             } else {
                 console.error(`Unknown action: ${event.action}`);

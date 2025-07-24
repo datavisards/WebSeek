@@ -49,11 +49,25 @@ export default defineBackground(() => {
           const pageId = tabToPageId.get(tabId);
           
           // Create the source object according to the WebCaptureSource interface
+          // Convert selector to locator format
+          let locator;
+          if (message.selector) {
+            locator = {
+              type: 'css' as const,
+              selector: message.selector
+            };
+          } else {
+            locator = {
+              type: 'css' as const,
+              selector: 'body'
+            };
+          }
+          
           const source = {
             type: 'web' as const,
             pageId: pageId!,
             url: message.url || sender.url || '',
-            selector: message.selector || '',
+            locator: locator,
             htmlSnippet: message.htmlSnippet || '',
             elementId: message.elementId || '',
             capturedAt: message.capturedAt || new Date().toISOString()

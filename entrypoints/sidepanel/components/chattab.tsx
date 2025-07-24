@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Message, Instance } from '../types';
-import { chatWithAgent } from '../apis';
+import { chatWithAgent } from '../api-selector';
 import { generateInstanceContext, parseInstance, detectMarkdown, renderMarkdown, ensureValidInstanceIds, generateId, updateInstances } from '../utils';
 import './chattab.css';
 
@@ -148,7 +148,23 @@ const ChatTab: React.FC<ChatTabProps> = ({
 
         try {
             // Call the chat agent
-            const { message, instances: newInstances } = await chatWithAgent(userMessage);
+            // const { message, instances: newInstances } = await chatWithAgent(userMessage);
+            let message: string = "", newInstances: any[] = [];
+            if (import.meta.env.WXT_USE_LLM == "true") {
+                const { imageContext, textContext } = await generateInstanceContext(instances);
+                let result = await chatWithAgent(userMessage,
+                messages,
+                textContext,
+                imageContext,
+                htmlContexts,
+                logs);
+                message = result.message;
+                newInstances = result.instances || [];
+            } else {
+                const result = await chatWithAgent(userMessage);
+                message = result.message;
+                newInstances = result.instances || [];
+            }
 
             // If stopped, do not update UI with agent response
             if (isStopped) return;

@@ -4,6 +4,20 @@
  */
 
 /**
+ * A structured, semantic way to describe an element's location.
+ * This replaces the brittle CSS selector string.
+ */
+export type Locator =
+  | { type: 'id'; value: string } // e.g., { type: 'id', value: 'main-content' }
+  | { type: 'attribute'; name: string; value: string } // e.g., { type: 'attribute', name: 'data-testid', value: 'login-button' }
+  | {
+      type: 'contextual';
+      anchor: Locator; // A unique locator for a parent/container element
+      target: { tag: string; occurrence?: number }; // What to find inside the anchor
+    } // e.g., { type: 'contextual', anchor: { type: 'attribute', name: 'data-asin', value: 'B0BLB6W78J' }, target: { tag: 'h2', occurrence: 0 } }
+  | { type: 'css'; selector: string }; // Fallback for complex cases
+
+/**
  * Describes the source of an instance captured from a webpage.
  */
 export interface WebCaptureSource {
@@ -12,8 +26,8 @@ export interface WebCaptureSource {
   pageId: string;
   /** The public URL of the source webpage for navigation. */
   url: string;
-  /** A CSS selector to precisely locate the element on the page. */
-  selector: string;
+  /** A structured locator object to precisely locate the element on the page. */
+  locator: Locator;
   /** A minimal HTML snippet for AI context (max 500 chars). */
   htmlSnippet?: string;
   /** Unique identifier for the element (id, data-* attribute, or generated). */
@@ -162,4 +176,10 @@ export type Instance = TextInstance | ImageInstance | SketchInstance | TableInst
 export interface Message {
   role: string;
   message: string;
+}
+
+export interface InstanceEvent {
+    action: 'add' | 'remove' | 'update';
+    targetId?: string; // The original ID of the instance being modified or removed
+    instance?: Instance; // The new content of the instance
 }
