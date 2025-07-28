@@ -1,39 +1,20 @@
 import { browser, type Browser } from 'wxt/browser';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Instance, EmbeddedInstance, SketchItem, TextInstance, ImageInstance, SketchInstance, TableInstance, Message, InstanceSource } from '../types';
-import { getInstanceGeometry, cleanHTML, generateInstanceContext, generateId, parseInstance, detectMarkdown, renderMarkdown, createSketchThumbnail, updateInstances } from '../utils';
+import { Instance, EmbeddedInstance, SketchItem, TextInstance, SketchInstance, TableInstance, Message } from '../types';
+import { getInstanceGeometry, generateInstanceContext, generateId, createSketchThumbnail, updateInstances } from '../utils';
 import TextEditor from './texteditor';
 import SketchEditor from './sketcheditor';
 import TrashView from './trashview';
 import TableEditor from './tableeditor';
 import RenameModal from './renamemodal';
-import './instanceview.css';
-
-// Helper function to create manual source for instances created within the app
-const createManualSource = (): InstanceSource => ({
-  type: 'manual',
-  createdAt: new Date().toISOString()
-});
-
-// Helper functions to create embedded instances with proper source
-const createEmbeddedTextInstance = (content: string, originalId?: string): EmbeddedInstance => ({
-  type: 'text',
-  id: generateId(),
-  source: createManualSource(),
-  content,
-  originalId
-});
-
-const createEmbeddedImageInstance = (src: string, originalId?: string): EmbeddedInstance => ({
-  type: 'image',
-  id: generateId(),
-  source: createManualSource(),
-  src,
-  originalId
-});
 import { parseLogWithAgent } from '../api-selector';
-import VisualizationRenderer from './visualizationrenderer';
 import VisualizationEditor from './visualizationeditor';
+import InstanceViewHeader from './InstanceViewHeader';
+import InstanceContextMenu from './InstanceContextMenu';
+import { createEmbeddedTextInstance, createEmbeddedImageInstance, createManualSource } from './instanceview-utils';
+import { useHTMLContent } from './useHTMLContent';
+import { useInputHandlers } from './useInputHandlers';
+import './instanceview.css';
 
 // Props interface for the component
 interface InstanceViewProps {
@@ -48,55 +29,8 @@ interface InstanceViewProps {
 }
 
 const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation, updateHTMLContext, addMessage, setAgentLoading }: InstanceViewProps) => {
-  // Cache for HTML content to avoid repeated API calls
-  const htmlCache = useRef<Record<string, string>>({});
-  // Track loading state for HTML content
-  const [htmlLoadingStates, setHtmlLoadingStates] = useState<Record<string, boolean>>({});
-  
-  // Async function to fetch and cache HTML content
-  const fetchHTMLContent = useCallback(async (pageId: string, pageURL: string) => {
-    // Check cache first
-    if (htmlCache.current[pageId]) {
-      updateHTMLContext(prev => ({
-        ...prev,
-        [pageId]: {
-          pageURL: pageURL,
-          htmlContent: htmlCache.current[pageId]
-        }
-      }));
-      return;
-    }
-    
-    // Set loading state
-    setHtmlLoadingStates(prev => ({ ...prev, [pageId]: true }));
-    
-    try {
-      const response = await fetch(`http://localhost:8000/api/snapshots/${pageId}`);
-      if (response.ok) {
-        const snapshotData = await response.json();
-        const cleanedHTML = cleanHTML(snapshotData.htmlContent);
-        
-        // Cache the result
-        htmlCache.current[pageId] = cleanedHTML;
-        
-        updateHTMLContext(prev => ({
-          ...prev,
-          [pageId]: {
-            pageURL: pageURL,
-            htmlContent: cleanedHTML
-          }
-        }));
-        console.log("HTML fetched and cached for pageId:", pageId);
-      } else {
-        console.warn("Failed to fetch snapshot for pageId:", pageId);
-      }
-    } catch (error) {
-      console.error("Error fetching HTML content:", error);
-    } finally {
-      // Clear loading state
-      setHtmlLoadingStates(prev => ({ ...prev, [pageId]: false }));
-    }
-  }, [updateHTMLContext]);
+  // Custom hooks
+  const { fetchHTMLContent } = useHTMLContent(updateHTMLContext);
   const instancesRef = useRef<Instance[]>([]);
   // Counters for different instance types
   const [textCount, setTextCount] = useState(0);
@@ -202,6 +136,17 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   // Add state for visualization editor
   const [editingVisualizationSpec, setEditingVisualizationSpec] = useState<object | string | null>(null);
 
+  // Input handlers hook
+  const { handleDrop, handlePaste, handleDragOver } = useInputHandlers({
+    instances,
+    setInstances,
+    onOperation,
+    setImageCount,
+    imageCountRef,
+    setTextCount,
+    textCountRef,
+  });
+
   // Update the latest state values
   useEffect(() => {
     textCountRef.current = textCount;
@@ -258,123 +203,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   }, [zoom, pan]);
 
   // Handle drag and drop
-  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const { x, y } = screenToCanvas(event.clientX, event.clientY);
-    const items = event.dataTransfer.items;
-    let handled = false;
-
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.kind === 'file' && item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) {
-          const newId = `Image${imageCountRef.current + 1}`;
-          setImageCount(prev => prev + 1);
-          onOperation(`Created [${newId}](#instance-${newId})`);
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const result = e.target?.result;
-            if (result) {
-              setInstances(prev => [...prev, {
-                // id: generateId(),
-                id: newId,
-                type: 'image',
-                src: result as string,
-                source: createManualSource(),
-                x,
-                y,
-                width: 100,
-                height: 100
-              }]);
-            }
-          };
-          reader.readAsDataURL(file);
-          handled = true;
-        }
-      }
-    }
-
-    if (!handled) {
-      const text = event.dataTransfer.getData('text/plain');
-      if (text) {
-        const newId = `Text${textCountRef.current + 1}`;
-        setTextCount(prev => prev + 1);
-        onOperation(`Created [${text}](#instance-${newId})`);
-        setInstances(prev => [...prev, {
-          id: newId,
-          type: 'text',
-          content: text,
-          source: createManualSource(),
-          x,
-          y,
-          width: 100,
-          height: 20
-        }]);
-      }
-    }
-  };
-
-  // Handle paste events
-  const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const rect = containerRef.current?.getBoundingClientRect();
-    const pasteX = rect ? (rect.width / 2 - pan.x) / zoom : 0;
-    const pasteY = rect ? (rect.height / 2 - pan.y) / zoom : 0;
-
-    const items = event.clipboardData.items;
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) {
-          const newId = `Image${imageCountRef.current + 1}`;
-          setImageCount(prev => prev + 1);
-          onOperation(`Created [${newId}](#instance-${newId})`);
-          const reader = new FileReader();
-          reader.onload = (e) => {
-            const result = e.target?.result;
-            if (result) {
-              setInstances(prev => [...prev, {
-                // id: generateId(),
-                id: newId,
-                type: 'image',
-                src: result as string,
-                source: createManualSource(),
-                x: pasteX,
-                y: pasteY,
-                width: 100,
-                height: 100
-              }]);
-            }
-          };
-          reader.readAsDataURL(file);
-        }
-      } else if (item.type === 'text/plain') {
-        item.getAsString((text) => {
-          const newId = `Text${textCountRef.current + 1}`;
-          setTextCount(prev => prev + 1);
-          onOperation(`Created [${text}](#instance-${newId})`);
-          setInstances(prev => [...prev, {
-            id: newId,
-            type: 'text',
-            content: text,
-            source: createManualSource(),
-            x: pasteX,
-            y: pasteY,
-            width: 100,
-            height: 20
-          }]);
-        });
-      }
-    }
-  };
-
-  // Handle drag over
-  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
-  };
 
   // Handle mouse down for panning
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -731,7 +559,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       thumbnail: ''
     };
     setInstances(prev => [...prev, newSketch]);
-    setAvailableInstances(prev => instances.filter(inst => inst.type !== 'sketch'));
+    setAvailableInstances(instances.filter(inst => inst.type !== 'sketch'));
     setEditingSketchId(newSketch.id);
   };
 
@@ -1170,6 +998,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     setDeletedInstances(prev => [...prev, instanceToDelete]);
     setSelectedInstanceId(null);
   }, []);
+
+  const handleDelete = useCallback((instance: Instance) => {
+    setInstances(prev => prev.filter(inst => inst.id !== instance.id));
+    setDeletedInstances(prev => [...prev, instance]);
+    if (selectedInstanceId === instance.id) {
+      setSelectedInstanceId(null);
+    }
+  }, [selectedInstanceId]);
 
   // Restore an instance from trash
   const restoreInstance = useCallback((instanceId: string) => {
@@ -1930,7 +1766,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     const selected = instances.filter(inst => selectedInstanceIds.includes(inst.id));
     const rows = selected.length;
     const cols = 1;
-    const cells = selected.map((inst, idx) => {
+    const cells = selected.map((inst) => {
       let embedded: EmbeddedInstance | null = null;
       if (inst.type === 'text') {
         embedded = createEmbeddedTextInstance(inst.content, inst.id);
@@ -1977,7 +1813,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     });
     setAgentLoading(true);
     try {
-      let message: string = "", newInstances: any[] = [], success: boolean, errorMessage: string | null = null;
+      let message: string = "", newInstances: any[] = [];
       if (import.meta.env.WXT_USE_LLM == "true") {
         // If using LLM, we need to generate the context first
         const { imageContext, textContext } = await generateInstanceContext(selected);
@@ -2027,7 +1863,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         }
       }
     };
-    // ... existing code ...
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isCaptureEnabled, mode, selectedInstanceIds]);
 
   // Add global click handler to close dropdowns when clicking outside
@@ -2179,264 +2019,32 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         ) : (
           // Default Instance View
           <>
-            <div className="view-title-container">
-              <h3 style={{ margin: 0 }}>Instances</h3>
-              {/* Web Tools Dropdown */}
-              <div style={{ display: 'inline-block', position: 'relative' }}>
-                <button
-                  onClick={e => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    setWebToolsOpen(v => !v);
-                  }}
-                  disabled={!isCaptureEnabled}
-                  style={{ minWidth: 90 }}
-                >
-                  Web Tools ▾
-                </button>
-                {webToolsOpen && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '110%',
-                      left: 0,
-                      background: 'white',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px',
-                      boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-                      zIndex: 1000,
-                      minWidth: '120px',
-                    }}
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <div
-                      className="contextmenuoption"
-                      onClick={() => {
-                        handleCaptureStart();
-                        setWebToolsOpen(false);
-                      }}
-                      style={{ color: isCaptureEnabled ? undefined : '#ccc', pointerEvents: isCaptureEnabled ? 'auto' : 'none' }}
-                    >
-                      Capture
-                    </div>
-                    <div
-                      className="contextmenuoption"
-                      onClick={() => {
-                        handleScreenshotStart();
-                        setWebToolsOpen(false);
-                      }}
-                      style={{ color: isCaptureEnabled ? undefined : '#ccc', pointerEvents: isCaptureEnabled ? 'auto' : 'none' }}
-                    >
-                      Screenshot
-                    </div>
-                  </div>
-                )}
-              </div>
-              {/* Instance Tools Dropdown */}
-              <div style={{ display: 'inline-block', position: 'relative' }}>
-                <button
-                  onClick={e => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    setInstanceToolsOpen(v => !v);
-                  }}
-                  style={{ minWidth: 110 }}
-                >
-                  Instance Tools ▾
-                </button>
-                {instanceToolsOpen && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '110%',
-                      left: 0,
-                      background: 'white',
-                      border: '1px solid #ddd',
-                      borderRadius: '4px',
-                      boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-                      zIndex: 1000,
-                      minWidth: '140px',
-                    }}
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <div
-                      className="contextmenuoption"
-                      onClick={() => {
-                        handleCreateSketch();
-                        setInstanceToolsOpen(false);
-                      }}
-                    >
-                      Sketch
-                    </div>
-                    <div
-                      className="contextmenuoption"
-                      onClick={() => {
-                        handleCreateTable();
-                        setInstanceToolsOpen(false);
-                      }}
-                    >
-                      Table
-                    </div>
-                    <div
-                      className="contextmenuoption"
-                      onClick={() => {
-                        handleCreateVisualization();
-                        setInstanceToolsOpen(false);
-                      }}
-                    >
-                      Visualization
-                    </div>
-                  </div>
-                )}
-              </div>
-              <button
-                onClick={() => handleModeSwitch(mode === 'hand' ? 'select' : 'hand')}
-                style={{
-                  background: mode === 'select' ? '#0078ff' : undefined,
-                  color: mode === 'select' ? 'white' : undefined,
-                  borderRadius: 4,
-                  marginLeft: 12
-                }}
-                title={mode === 'select' ? 'Switch to Hand Tool' : 'Switch to Selection Tool'}
-              >
-                {mode === 'select' ? 'Selection Mode' : 'Hand Tool'}
-              </button>
-            </div>
-            {contextMenu.visible && (
-              <div
-                style={{
-                  position: 'fixed',
-                  top: contextMenu.position.y,
-                  left: contextMenu.position.x,
-                  background: 'white',
-                  border: '1px solid #ddd',
-                  borderRadius: '4px',
-                  boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-                  zIndex: 2000,
-                  minWidth: '140px',
-                }}
-                onClick={closeContextMenu}
-              >
-                {/* Multi-selection context menu */}
-                {contextMenu.multi ? (
-                  <>
-                    <div
-                      className="contextmenuoption"
-                      onClick={() => {
-                        handleBatchDelete();
-                        closeContextMenu();
-                      }}
-                    >
-                      Delete Selected
-                    </div>
-                    <div
-                      className="contextmenuoption"
-                      onClick={() => {
-                        handleBatchCreateSketch();
-                        closeContextMenu();
-                      }}
-                    >
-                      Create Sketch from Selected
-                    </div>
-                    <div
-                      className="contextmenuoption"
-                      onClick={() => {
-                        handleBatchCreateTable();
-                        closeContextMenu();
-                      }}
-                    >
-                      Create Table from Selected
-                    </div>
-                    <div
-                      className="contextmenuoption"
-                      onClick={() => {
-                        handleBatchInfer();
-                        closeContextMenu();
-                      }}
-                    >
-                      Infer on Selected
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div
-                      className="contextmenuoption"
-                      onClick={() => {
-                        const instance = instances.find(i => i.id === contextMenu.instanceId);
-                        if (instance) handleRename(instance);
-                        closeContextMenu();
-                      }}
-                    >
-                      Rename
-                    </div>
-                    <div
-                      className="contextmenuoption"
-                      onClick={() => {
-                        const instance = instances.find(i => i.id === contextMenu.instanceId);
-                        if (instance) handleInfer(instance);
-                        closeContextMenu();
-                      }}
-                    >
-                      Infer
-                    </div>
-                    {(() => {
-                      const instance = instances.find(i => i.id === contextMenu.instanceId);
-                      if (instance?.source.type === 'web') {
-                        return (
-                          <div
-                            className="contextmenuoption"
-                            onClick={async () => {
-                              const webSource = instance.source as any;
-                              if (webSource.pageId && webSource.locator) {
-                                try {
-                                  // Construct viewer URL for snapshot
-                                  const locatorString = encodeURIComponent(JSON.stringify(webSource.locator));
-                                  const viewerUrl = browser.runtime.getURL('/viewer.html') + `?snapshotId=${webSource.pageId}&locator=${locatorString}`;
-                                  
-                                  // Open snapshot viewer in new tab
-                                  await browser.tabs.create({ url: viewerUrl });
-                                } catch (error) {
-                                  console.error('Error opening snapshot viewer:', error);
-                                  // Fallback to original URL if snapshot viewer fails
-                                  if (webSource.url) {
-                                    const url = new URL(webSource.url);
-                                    if (webSource.locator) {
-                                      const { locatorToSelector } = await import('../utils');
-                                      const selector = locatorToSelector(webSource.locator);
-                                      url.searchParams.set('webseek_selector', selector);
-                                    }
-                                    if (webSource.elementId) {
-                                      url.searchParams.set('webseek_element_id', webSource.elementId);
-                                    }
-                                    window.open(url.toString(), '_blank');
-                                  }
-                                }
-                              } else if (webSource.url) {
-                                // Legacy fallback for instances without snapshot
-                                const url = new URL(webSource.url);
-                                if (webSource.locator) {
-                                  const { locatorToSelector } = await import('../utils');
-                                  const selector = locatorToSelector(webSource.locator);
-                                  url.searchParams.set('webseek_selector', selector);
-                                }
-                                if (webSource.elementId) {
-                                  url.searchParams.set('webseek_element_id', webSource.elementId);
-                                }
-                                window.open(url.toString(), '_blank');
-                              }
-                              closeContextMenu();
-                            }}
-                          >
-                            Go to Source
-                          </div>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </>
-                )}
-              </div>
-            )}
+            <InstanceViewHeader
+              webToolsOpen={webToolsOpen}
+              setWebToolsOpen={setWebToolsOpen}
+              instanceToolsOpen={instanceToolsOpen}
+              setInstanceToolsOpen={setInstanceToolsOpen}
+              isCaptureEnabled={isCaptureEnabled}
+              mode={mode}
+              handleCaptureStart={handleCaptureStart}
+              handleScreenshotStart={handleScreenshotStart}
+              handleCreateSketch={handleCreateSketch}
+              handleCreateTable={handleCreateTable}
+              handleCreateVisualization={handleCreateVisualization}
+              handleModeSwitch={handleModeSwitch}
+            />
+            <InstanceContextMenu
+              contextMenu={contextMenu}
+              instances={instances}
+              closeContextMenu={closeContextMenu}
+              handleRename={handleRename}
+              handleInfer={handleInfer}
+              handleDelete={handleDelete}
+              handleBatchDelete={handleBatchDelete}
+              handleBatchCreateSketch={handleBatchCreateSketch}
+              handleBatchCreateTable={handleBatchCreateTable}
+              handleBatchInfer={handleBatchInfer}
+            />
             <div
               className="view-content"
               style={{
@@ -2511,7 +2119,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
                     onMouseDown={mode === 'select' ? (e => {
                       if (e.button === 0) handleInstanceSelectClick(e, instance.id);
                     }) : (e => handleInstanceMouseDown(e, instance.id))}
-                    onDoubleClick={e => handleInstanceDoubleClick(instance)}
+                    onDoubleClick={() => handleInstanceDoubleClick(instance)}
                     onContextMenu={e => handleInstanceContextMenu(e, instance.id)}
                   >
                     <div

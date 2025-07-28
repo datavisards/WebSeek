@@ -15,6 +15,8 @@ const openai = new OpenAI({
     apiKey: import.meta.env.WXT_OPENROUTER_KEY,
     dangerouslyAllowBrowser: true
 });
+
+const model_name = "anthropic/claude-sonnet-4";
 export async function parseLogWithAgent(
     selectedLogs: string[],
     instanceContexts: string,
@@ -274,7 +276,7 @@ Now, analyze the provided instance and return the JSON response.
 
         // Call the LLM
         const completion = await openai.chat.completions.create({
-            model: "anthropic/claude-sonnet-4",
+            model: model_name,
             messages: [
                 {
                     role: "user",
@@ -542,7 +544,7 @@ Now, respond to the user's message appropriately.`.trim();
 
         // Call the LLM
         const completion = await openai.chat.completions.create({
-            model: "anthropic/claude-sonnet-4",
+            model: model_name,
             messages: [
                 {
                     role: "user",
@@ -578,8 +580,8 @@ Now, respond to the user's message appropriately.`.trim();
 
         // Return structured result
         return {
-            message: jsonContent.response || 'Sorry, I encountered an error while processing your request. Please try again.',
-            instances: jsonContent.results || []
+            message: jsonContent.message || 'Sorry, I encountered an error while processing your request. Please try again.',
+            instances: jsonContent.instances || []
         };
     } catch (error) {
         console.error('Error in chat with agent:', error);

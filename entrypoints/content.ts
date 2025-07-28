@@ -57,8 +57,25 @@ function convertRelativeToAbsoluteUrls(html: string): string {
   return doc.documentElement.outerHTML;
 }
 
-// Create and save snapshot with provided pageId
+// Track snapshot creation status to avoid duplicates
+const snapshotCreationStatus = new Map<string, 'creating' | 'created' | 'failed'>();
+
+// Create and save snapshot with provided pageId (with duplicate prevention)
 async function createSnapshot(pageId: string): Promise<boolean> {
+  // Check if we're already creating or have created this snapshot
+  const currentStatus = snapshotCreationStatus.get(pageId);
+  if (currentStatus === 'creating') {
+    console.log('Snapshot already being created for pageId:', pageId);
+    // Wait for the existing creation to complete
+    return await waitForSnapshotCreation(pageId);
+  } else if (currentStatus === 'created') {
+    console.log('Snapshot already exists for pageId:', pageId);
+    return true;
+  }
+
+  // Mark as creating
+  snapshotCreationStatus.set(pageId, 'creating');
+
   try {
     const rawHtml = document.documentElement.outerHTML;
     const finalHtml = convertRelativeToAbsoluteUrls(rawHtml);
@@ -77,15 +94,37 @@ async function createSnapshot(pageId: string): Promise<boolean> {
     
     if (response.ok) {
       console.log('Snapshot created successfully with pageId:', pageId);
+      snapshotCreationStatus.set(pageId, 'created');
       return true;
     } else {
       console.error('Failed to create snapshot:', response.statusText);
+      snapshotCreationStatus.set(pageId, 'failed');
       return false;
     }
   } catch (error) {
     console.error('Error creating snapshot:', error);
+    snapshotCreationStatus.set(pageId, 'failed');
     return false;
   }
+}
+
+// Wait for snapshot creation to complete
+async function waitForSnapshotCreation(pageId: string, timeoutMs: number = 10000): Promise<boolean> {
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < timeoutMs) {
+    const status = snapshotCreationStatus.get(pageId);
+    if (status === 'created') {
+      return true;
+    } else if (status === 'failed') {
+      return false;
+    }
+    // Wait 100ms before checking again
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  
+  console.warn('Timeout waiting for snapshot creation:', pageId);
+  return false;
 }
 
 // Set up stable ID system when DOM is ready

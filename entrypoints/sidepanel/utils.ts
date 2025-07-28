@@ -314,6 +314,7 @@ export function extractJSONFromResponse(response: string) {
             throw new Error("No JSON found in the response");
         }
     } catch (error: any) {
+        console.log("Error extracting JSON from response:", error.message || error);
         return null;
     }
 }
@@ -500,11 +501,23 @@ export const cleanHTML = (htmlString: string): string => {
     if (doc.head) doc.head.remove();
 
     // Remove unwanted tags
-    const tagsToRemove = ['script', 'svg', 'noscript', 'style', 'header', 'nav', 'input'];
+    const tagsToRemove = ['script', 'noscript', 'style'];
     tagsToRemove.forEach(tag => {
         const elements = doc.querySelectorAll(tag);
         elements.forEach(el => el.remove());
     });
+
+    // Remove tracking pixels and analytics images
+    doc.querySelectorAll('img').forEach(img => {
+        const src = img.getAttribute('src') || '';
+        if (src.includes('sync') || src.includes('.php') || src.includes('serving') || 
+            src.includes('analytics') || src.includes('tracking') || src.includes('beacon')) {
+            img.remove();
+        }
+    });
+
+    // Remove external stylesheets that can trigger network requests
+    doc.querySelectorAll('link[rel="stylesheet"]').forEach(link => link.remove());
 
     // 2. Remove all attributes except src and data-aid-id
     const allElements = doc.querySelectorAll('*');
