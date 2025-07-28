@@ -16,9 +16,9 @@ const openai = new OpenAI({
     dangerouslyAllowBrowser: true
 });
 
-const model_name = "anthropic/claude-sonnet-4";
+const model_name = "google/gemini-2.5-flash-lite";
 export async function parseLogWithAgent(
-    selectedLogs: string[],
+    logs: string[],
     instanceContexts: string,
     imageContexts: any[],
     htmlContexts: Record<string, {pageURL: string, htmlContent: string}>,
@@ -35,7 +35,7 @@ export async function parseLogWithAgent(
         const seenUrls = new Set<string>();
         const uniqueHtmlContexts: { [pageId: string]: {pageURL: string, htmlContent: string} } = {};
 
-        selectedLogs.forEach(log => {
+        logs.forEach(log => {
             const urls = log.match(urlRegex) || [];
             urls.forEach(url => {
                 if (!seenUrls.has(url)) {
@@ -51,7 +51,7 @@ export async function parseLogWithAgent(
         });
 
         // Join logs and previous contexts into strings
-        const logsText = selectedLogs.join('\n');
+        const logsText = logs.join('\n');
         // const previousCodeText = previousCodeContexts.length
         //     ? previousCodeContexts.join('\n\n')
         //     : 'None';

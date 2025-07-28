@@ -1526,11 +1526,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
   const handleInfer = async (instance: Instance) => {
     console.log(`Analyzing instance ${instance.id}`);
     
-    
+    // Create instances checkpoint before inference
+    const checkpoint = JSON.parse(JSON.stringify(instances));
     let userMsg = `Infer my intent based on the instance ${instance.id} and finish the task.`;
     addMessage({
       "role": "user",
-      "message": userMsg
+      "message": userMsg,
+      "id": generateId(),
+      "instancesCheckpoint": checkpoint
     });
     setAgentLoading(true);
     try {
@@ -1549,7 +1552,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       }
       addMessage({
         "role": "agent",
-        "message": message
+        "message": message,
+        "id": generateId(),
+        "isRetrying": false
       });
       // update the instances
       updateInstances(instances, newInstances, setInstances);      
@@ -1807,9 +1812,13 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     
     console.log(`Analyzing batch of ${selected.length} instances: ${selected.map(inst => inst.id).join(', ')}`);
     
+    // Create instances checkpoint before batch inference
+    const checkpoint = JSON.parse(JSON.stringify(instances));
     addMessage({
       "role": "user",
-      "message": userMsg
+      "message": userMsg,
+      "id": generateId(),
+      "instancesCheckpoint": checkpoint
     });
     setAgentLoading(true);
     try {
@@ -1828,7 +1837,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       }
       addMessage({
         "role": "agent",
-        "message": message
+        "message": message,
+        "id": generateId(),
+        "isRetrying": false
       });
       // update the instances
       updateInstances(instances, newInstances, setInstances);

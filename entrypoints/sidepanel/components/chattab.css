@@ -213,3 +213,50 @@
 .autocomplete-item.selected {
     background-color: #f0f0f0;
 }
+
+/* Retry functionality styles */
+.message-content-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.retry-button {
+    position: absolute;
+    top: 4px;
+    right: -30px;
+    background: none;
+    border: none;
+    font-size: 16px;
+    color: #666;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+.message-bubble:hover .retry-button {
+    opacity: 1;
+}
+
+.retry-button:hover:not(:disabled) {
+    color: #4a90e2;
+    background-color: rgba(74, 144, 226, 0.1);
+}
+
+.retry-button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.retry-loading-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: #666;
+}
+
+.retry-loading-indicator .loading-dot {
+    width: 6px;
+    height: 6px;
+}

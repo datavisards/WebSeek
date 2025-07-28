@@ -35,6 +35,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const [isStopped, setIsStopped] = useState(false);
+    const [isRetrying, setIsRetrying] = useState(false);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -137,15 +138,26 @@ const ChatTab: React.FC<ChatTabProps> = ({
     };
 
 
-    const sendMsg = async () => {
-        if (!inputValue.trim() || agentLoading) return;
-        setIsStopped(false);
-        const userMessage = inputValue.trim();
-        setInputValue('');
-
-        // Add user message to chat
-        addMessage({ role: 'user', message: userMessage });
+    const sendMsg = async (retryMessageId?: string) => {
+        const userMessage = retryMessageId ? 
+            messages.find(m => m.id === retryMessageId && m.role === 'user')?.message || '' :
+            inputValue.trim();
         
+        if (!userMessage || agentLoading) return;
+        setIsStopped(false);
+        
+        if (!retryMessageId) {
+            setInputValue('');
+            // Create instances checkpoint before sending user message
+            const checkpoint = JSON.parse(JSON.stringify(instances));
+            // Add user message to chat with checkpoint
+            addMessage({ 
+                role: 'user', 
+                message: userMessage,
+                id: generateId(),
+                instancesCheckpoint: checkpoint
+            });
+        }
         
         setAgentLoading(true);
 
@@ -173,7 +185,12 @@ const ChatTab: React.FC<ChatTabProps> = ({
             if (isStopped) return;
 
             // Add agent response to chat
-            addMessage({ role: 'agent', message: message });
+            addMessage({ 
+                role: 'agent', 
+                message: message,
+                id: generateId(),
+                isRetrying: false
+            });
 
             // Update the instances
             updateInstances(instances, newInstances, setInstances);
@@ -182,7 +199,9 @@ const ChatTab: React.FC<ChatTabProps> = ({
                 console.error('Error in chat:', error);
                 addMessage({
                     role: 'agent',
-                    message: 'Sorry, I encountered an error while processing your request. Please try again.'
+                    message: 'Sorry, I encountered an error while processing your request. Please try again.',
+                    id: generateId(),
+                    isRetrying: false
                 });
             }
         } finally {
@@ -195,17 +214,117 @@ const ChatTab: React.FC<ChatTabProps> = ({
         sendMsg();
     };
 
-    const renderMessage = (message: string, role: string) => {
-        // Only apply markdown rendering to agent messages
-        if (role === 'agent' && detectMarkdown(message)) {
-            return (
-                <div
-                    className="markdown-content"
-                    dangerouslySetInnerHTML={{ __html: renderMarkdown(message) }}
-                />
-            );
+    const handleRetry = async (agentMessageId: string) => {
+        // Find the agent message and corresponding user message
+        const agentMessageIndex = messages.findIndex(m => m.id === agentMessageId);
+        if (agentMessageIndex === -1) return;
+        
+        // Find the user message that triggered this agent response
+        let userMessageIndex = agentMessageIndex - 1;
+        while (userMessageIndex >= 0 && messages[userMessageIndex].role !== 'user') {
+            userMessageIndex--;
         }
-        return message;
+        
+        if (userMessageIndex === -1) return;
+        
+        const userMessage = messages[userMessageIndex];
+        
+        // Set the agent message to retrying state
+        setMessages(prev => 
+            prev.map(m => 
+                m.id === agentMessageId 
+                    ? { ...m, isRetrying: true, message: '' }
+                    : m
+            )
+        );
+        
+        // Restore instances to checkpoint if available
+        if (userMessage.instancesCheckpoint) {
+            setInstances(userMessage.instancesCheckpoint);
+        }
+        
+        setIsRetrying(true);
+        setAgentLoading(true);
+        setIsStopped(false);
+        
+        try {
+            let message: string = "", newInstances: any[] = [];
+            if (import.meta.env.WXT_USE_LLM == "true") {
+                const { imageContext, textContext } = await generateInstanceContext(userMessage.instancesCheckpoint || instances);
+                let result = await chatWithAgent(userMessage.message,
+                    messages.slice(0, userMessageIndex), // Only include conversation up to the retry point
+                    textContext,
+                    imageContext,
+                    htmlContexts,
+                    logs);
+                message = result.message;
+                newInstances = result.instances || [];
+            } else {
+                const result = await chatWithAgent(userMessage.message);
+                message = result.message;
+                newInstances = result.instances || [];
+            }
+            
+            // If stopped, do not update UI with agent response
+            if (isStopped) return;
+            
+            // Update the retrying message with new response
+            setMessages(prev => 
+                prev.map(m => 
+                    m.id === agentMessageId 
+                        ? { ...m, isRetrying: false, message: message }
+                        : m
+                )
+            );
+            
+            // Update the instances
+            updateInstances(instances, newInstances, setInstances);
+        } catch (error) {
+            if (!isStopped) {
+                console.error('Error in retry:', error);
+                setMessages(prev => 
+                    prev.map(m => 
+                        m.id === agentMessageId 
+                            ? { ...m, isRetrying: false, message: 'Sorry, I encountered an error while processing your request. Please try again.' }
+                            : m
+                    )
+                );
+            }
+        } finally {
+            setIsRetrying(false);
+            setAgentLoading(false);
+        }
+    };
+
+    const renderMessage = (msg: Message, index: number) => {
+        const messageContent = msg.role === 'agent' && detectMarkdown(msg.message) ? (
+            <div
+                className="markdown-content"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.message) }}
+            />
+        ) : msg.message;
+        
+        return (
+            <div className="message-content-wrapper">
+                {msg.isRetrying ? (
+                    <div className="retry-loading-indicator">
+                        <div className="loading-dot"></div>
+                        <div className="loading-dot"></div>
+                        <div className="loading-dot"></div>
+                    </div>
+                ) : messageContent}
+                {msg.role === 'agent' && !msg.isRetrying && msg.message && (
+                    <button 
+                        className="retry-button"
+                        onClick={() => handleRetry(msg.id!)}
+                        title="Retry this response"
+                        disabled={agentLoading}
+                    >
+                        ↻
+                    </button>
+                )}
+            </div>
+        );
     };
 
     return (
@@ -216,14 +335,14 @@ const ChatTab: React.FC<ChatTabProps> = ({
                 ) : (
                     messages.map((msg, index) => (
                         <div
-                            key={index}
+                            key={msg.id || index}
                             className={`message-bubble ${msg.role === 'user' ? 'user' : 'agent'}`}
                         >
-                            {renderMessage(msg.message, msg.role)}
+                            {renderMessage(msg, index)}
                         </div>
                     ))
                 )}
-                {agentLoading && (
+                {agentLoading && !isRetrying && (
                     <div className="message-bubble agent loading-indicator">
                         <div className="loading-dot"></div>
                         <div className="loading-dot"></div>

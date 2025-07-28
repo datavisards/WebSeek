@@ -175,6 +175,9 @@ export type Instance = TextInstance | ImageInstance | SketchInstance | TableInst
 export interface Message {
   role: string;
   message: string;
+  id?: string;
+  isRetrying?: boolean;
+  instancesCheckpoint?: Instance[];
 }
 
 export interface InstanceEvent {
