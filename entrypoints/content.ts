@@ -232,7 +232,6 @@ function startElementSelection() {
     const data = target.innerText.trim() || (target instanceof HTMLImageElement ? target.src : null);
     if (data) {
       const locator = generateOptimalLocator(target);
-      const elementId = generateUniqueElementId(target);
 
       // Always use the stable pageId generated for this page
       const pageIdToUse = generatePageId();
@@ -240,10 +239,8 @@ function startElementSelection() {
       browser.runtime.sendMessage({
         action: 'element_selected',
         type: target instanceof HTMLImageElement ? 'image' : 'text',
-        data, locator, elementId,
-        pageId: pageIdToUse,
-        url: window.location.href,
-        capturedAt: new Date().toISOString()
+        data, locator,
+        pageId: pageIdToUse
       });
     }
     exitSelectionMode();
@@ -345,9 +342,7 @@ function startScreenshot(): void {
         dimensions: {
           width: cropWidth,
           height: cropHeight
-        },
-        url: window.location.href,
-        capturedAt: new Date().toISOString()
+        }
       };
 
       if (typeof browser !== 'undefined') {

@@ -10,6 +10,7 @@ const openai = new OpenAI({
 const backendBaseURL = "http://localhost:8000/api"
 
 export async function chatWithAgent(
+  chatType: 'chat' | 'infer',
   userMessage: string,
 ): Promise<{
   message: string;
@@ -48,8 +49,4 @@ export async function chatWithAgent(
       instances: [],
     };
   }
-}
-
-export async function parseLogWithAgent(userMessage: string) {
-  return chatWithAgent(userMessage);
 }

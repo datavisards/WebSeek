@@ -5,23 +5,24 @@ interface InstanceContextMenuProps {
   contextMenu: {
     visible: boolean;
     position: { x: number; y: number };
-    instanceId?: string | null;
+    instanceIds: string[];
     multi?: boolean;
   };
   instances: Instance[];
+  htmlContext: Record<string, {pageURL: string, htmlContent: string}>;
   closeContextMenu: () => void;
   handleRename: (instance: Instance) => void;
-  handleInfer: (instance: Instance) => void;
+  handleInfer: (instanceIds: string[]) => void;
   handleDelete: (instance: Instance) => void;
   handleBatchDelete: () => void;
   handleBatchCreateSketch: () => void;
   handleBatchCreateTable: () => void;
-  handleBatchInfer: () => void;
 }
 
 const InstanceContextMenu: React.FC<InstanceContextMenuProps> = ({
   contextMenu,
   instances,
+  htmlContext,
   closeContextMenu,
   handleRename,
   handleInfer,
@@ -29,7 +30,6 @@ const InstanceContextMenu: React.FC<InstanceContextMenuProps> = ({
   handleBatchDelete,
   handleBatchCreateSketch,
   handleBatchCreateTable,
-  handleBatchInfer,
 }) => {
   if (!contextMenu.visible) return null;
 
@@ -80,7 +80,7 @@ const InstanceContextMenu: React.FC<InstanceContextMenuProps> = ({
           <div
             className="contextmenuoption"
             onClick={() => {
-              handleBatchInfer();
+              handleInfer(contextMenu.instanceIds);
               closeContextMenu();
             }}
           >
@@ -92,7 +92,7 @@ const InstanceContextMenu: React.FC<InstanceContextMenuProps> = ({
           <div
             className="contextmenuoption"
             onClick={() => {
-              const instance = instances.find(i => i.id === contextMenu.instanceId);
+              const instance = instances.find(i => i.id === contextMenu.instanceIds[0]);
               if (instance) handleRename(instance);
               closeContextMenu();
             }}
@@ -102,8 +102,7 @@ const InstanceContextMenu: React.FC<InstanceContextMenuProps> = ({
           <div
             className="contextmenuoption"
             onClick={() => {
-              const instance = instances.find(i => i.id === contextMenu.instanceId);
-              if (instance) handleInfer(instance);
+              handleInfer(contextMenu.instanceIds);
               closeContextMenu();
             }}
           >
@@ -112,7 +111,7 @@ const InstanceContextMenu: React.FC<InstanceContextMenuProps> = ({
           <div
             className="contextmenuoption"
             onClick={() => {
-              const instance = instances.find(i => i.id === contextMenu.instanceId);
+              const instance = instances.find(i => i.id === contextMenu.instanceIds[0]);
               if (instance) handleDelete(instance);
               closeContextMenu();
             }}
@@ -120,7 +119,7 @@ const InstanceContextMenu: React.FC<InstanceContextMenuProps> = ({
             Delete
           </div>
           {(() => {
-            const instance = instances.find(i => i.id === contextMenu.instanceId);
+            const instance = instances.find(i => i.id === contextMenu.instanceIds[0]);
             if (instance?.source.type === 'web') {
               return (
                 <div
@@ -138,30 +137,30 @@ const InstanceContextMenu: React.FC<InstanceContextMenuProps> = ({
                         await (window as any).browser?.tabs?.create({ url: viewerUrl });
                       } catch (error) {
                         console.error('Error opening snapshot viewer:', error);
-                        if (webSource.url) {
-                          const url = new URL(webSource.url);
+                        // Get URL from htmlContext using pageId
+                        const pageContext = htmlContext[webSource.pageId];
+                        if (pageContext?.pageURL) {
+                          const url = new URL(pageContext.pageURL);
                           if (webSource.locator) {
                             const { locatorToSelector } = await import('../utils');
                             const selector = locatorToSelector(webSource.locator);
                             url.searchParams.set('webseek_selector', selector);
                           }
-                          if (webSource.elementId) {
-                            url.searchParams.set('webseek_element_id', webSource.elementId);
-                          }
                           window.open(url.toString(), '_blank');
                         }
                       }
-                    } else if (webSource.url) {
-                      const url = new URL(webSource.url);
-                      if (webSource.locator) {
-                        const { locatorToSelector } = await import('../utils');
-                        const selector = locatorToSelector(webSource.locator);
-                        url.searchParams.set('webseek_selector', selector);
+                    } else {
+                      // Get URL from htmlContext using pageId for direct navigation
+                      const pageContext = htmlContext[webSource.pageId];
+                      if (pageContext?.pageURL) {
+                        const url = new URL(pageContext.pageURL);
+                        if (webSource.locator) {
+                          const { locatorToSelector } = await import('../utils');
+                          const selector = locatorToSelector(webSource.locator);
+                          url.searchParams.set('webseek_selector', selector);
+                        }
+                        window.open(url.toString(), '_blank');
                       }
-                      if (webSource.elementId) {
-                        url.searchParams.set('webseek_element_id', webSource.elementId);
-                      }
-                      window.open(url.toString(), '_blank');
                     }
                     closeContextMenu();
                   }}

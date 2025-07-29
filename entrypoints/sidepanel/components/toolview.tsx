@@ -6,7 +6,7 @@ import CodeTab from './codetab';
 
 interface ToolViewProps {
     logs: string[];
-    htmlContexts: Record<string, {pageURL: string, htmlContent: string}>;
+    htmlContext: Record<string, {pageURL: string, htmlContent: string}>;
     messages: Message[];
     addMessage: (message: Message) => void;
     setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
@@ -18,7 +18,7 @@ interface ToolViewProps {
 
 const ToolView: React.FC<ToolViewProps> = ({
     logs,
-    htmlContexts,
+    htmlContext,
     messages,
     addMessage,
     setMessages,
@@ -59,8 +59,7 @@ const ToolView: React.FC<ToolViewProps> = ({
                         agentLoading={agentLoading}
                         setAgentLoading={setAgentLoading}
                         instances={instances}
-                        logs={logs}
-                        htmlContexts={htmlContexts}
+                        htmlContext={htmlContext}
                         setInstances={setInstances}
                     />
                 )}

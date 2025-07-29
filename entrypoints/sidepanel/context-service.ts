@@ -5,8 +5,8 @@ import { generateInstanceContext } from './utils';
 class ContextService {
   private instances: Instance[] = [];
   private messages: Message[] = [];
-  private htmlContexts: Record<string, {pageURL: string, htmlContent: string}> = {};
-  private imageContexts: any[] = [];
+  private htmlContext: Record<string, {pageURL: string, htmlContent: string}> = {};
+  private imageContext: any[] = [];
 
   // Set instances
   setInstances(instances: Instance[]): void {
@@ -29,23 +29,23 @@ class ContextService {
   }
 
   // Set HTML contexts
-  setHtmlContexts(htmlContexts: Record<string, {pageURL: string, htmlContent: string}>): void {
-    this.htmlContexts = htmlContexts;
+  setHtmlContexts(htmlContext: Record<string, {pageURL: string, htmlContent: string}>): void {
+    this.htmlContext = htmlContext;
   }
 
   // Get HTML contexts
   getHtmlContexts(): Record<string, {pageURL: string, htmlContent: string}> {
-    return this.htmlContexts;
+    return this.htmlContext;
   }
 
   // Set image contexts
-  setImageContexts(imageContexts: any[]): void {
-    this.imageContexts = imageContexts;
+  setimageContext(imageContext: any[]): void {
+    this.imageContext = imageContext;
   }
 
   // Get image contexts
-  getImageContexts(): any[] {
-    return this.imageContexts;
+  getimageContext(): any[] {
+    return this.imageContext;
   }
 
   // Get HTML content for a specific URL or current page
@@ -59,10 +59,10 @@ class ContextService {
     try {
       const targetUrl = url || window.location.href;
       console.log("Fetching HTML content for URL:", targetUrl);
-      console.log("Cached HTML contexts:", this.htmlContexts);
+      console.log("Cached HTML contexts:", this.htmlContext);
       
       // Search for HTML context that matches this URL
-      const matchingContext = Object.values(this.htmlContexts).find(context => context.pageURL === targetUrl);
+      const matchingContext = Object.values(this.htmlContext).find(context => context.pageURL === targetUrl);
       if (matchingContext) {
         return {
           success: true,
@@ -73,7 +73,7 @@ class ContextService {
       }
 
       // No matching context found - this should not happen in the new pageId-based system
-      console.warn('No HTML context found for URL:', targetUrl, 'Available contexts:', Object.keys(this.htmlContexts));
+      console.warn('No HTML context found for URL:', targetUrl, 'Available contexts:', Object.keys(this.htmlContext));
       
       return {
         success: false,
@@ -112,7 +112,7 @@ class ContextService {
       }
 
       // Generate context for the instances
-      const instanceContexts = await generateInstanceContext(instancesToReturn);
+      const instanceContext = await generateInstanceContext(instancesToReturn);
 
       return {
         success: true,
@@ -120,7 +120,7 @@ class ContextService {
           id: instance.id,
           type: instance.type,
           content: instance,
-          context: instanceContexts[instance.id] || '',
+          context: instanceContext[instance.id] || '',
         })),
         timestamp: Date.now(),
       };
@@ -198,7 +198,7 @@ class ContextService {
         }
       }
 
-      images.push(...this.imageContexts);
+      images.push(...this.imageContext);
 
       return {
         success: true,
@@ -289,8 +289,8 @@ class ContextService {
   clear(): void {
     this.instances = [];
     this.messages = [];
-    this.htmlContexts = {};
-    this.imageContexts = [];
+    this.htmlContext = {};
+    this.imageContext = [];
   }
 }
 

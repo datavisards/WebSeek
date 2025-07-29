@@ -7,7 +7,6 @@ import SketchEditor from './sketcheditor';
 import TrashView from './trashview';
 import TableEditor from './tableeditor';
 import RenameModal from './renamemodal';
-import { parseLogWithAgent } from '../api-selector';
 import VisualizationEditor from './visualizationeditor';
 import InstanceViewHeader from './InstanceViewHeader';
 import InstanceContextMenu from './InstanceContextMenu';
@@ -15,20 +14,23 @@ import { createEmbeddedTextInstance, createEmbeddedImageInstance, createManualSo
 import { useHTMLContent } from './useHTMLContent';
 import { useInputHandlers } from './useInputHandlers';
 import './instanceview.css';
+import { message } from 'vega-lite/types_unstable/log/index.js';
+import { chatWithAgent } from '../api-selector';
 
 // Props interface for the component
 interface InstanceViewProps {
   instances: Instance[];
   setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
   logs: string[];
-  htmlContexts: Record<string, {pageURL: string, htmlContent: string}>;
+  htmlContext: Record<string, {pageURL: string, htmlContent: string}>;
+  messages: Message[];
   onOperation: (message: string) => void;
   updateHTMLContext: React.Dispatch<React.SetStateAction<Record<string, {pageURL: string, htmlContent: string}>>>;
   addMessage: (message: Message) => void;
   setAgentLoading: (loading: boolean) => void;
 }
 
-const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation, updateHTMLContext, addMessage, setAgentLoading }: InstanceViewProps) => {
+const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, onOperation, updateHTMLContext, addMessage, setAgentLoading }: InstanceViewProps) => {
   // Custom hooks
   const { fetchHTMLContent } = useHTMLContent(updateHTMLContext);
   const instancesRef = useRef<Instance[]>([]);
@@ -76,9 +78,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     initialCanvasY: number;
   } | null>(null);
   // Instance context menu state
-  const [contextMenu, setContextMenu] = useState({
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    instanceIds: string[];
+    position: { x: number; y: number };
+    multi: boolean;
+  }>({
     visible: false,
-    instanceId: null as string | null,
+    instanceIds: [],
     position: { x: 0, y: 0 },
     multi: false
   });
@@ -834,9 +841,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           source: message.source || {
             type: 'web',
             pageId: message.pageId,
-            url: message.pageURL || '',
-            locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
-            capturedAt: new Date().toISOString()
+            locator: message.locator || 'unknown'
           },
         }
       ]);
@@ -857,9 +862,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           source: message.source || {
             type: 'web',
             pageId: message.pageId,
-            url: message.pageURL || '',
-            locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
-            capturedAt: new Date().toISOString()
+            locator: message.locator || 'unknown'
           },
         }
       ]);
@@ -901,9 +904,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           source: message.source || {
             type: 'web',
             pageId: message.pageId,
-            url: message.pageURL || '',
-            locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
-            capturedAt: new Date().toISOString()
+            locator: message.locator || 'unknown'
           },
           content: combinedText
         };
@@ -931,9 +932,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           source: message.source || {
             type: 'web',
             pageId: message.pageId,
-            url: message.pageURL || '',
-            locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
-            capturedAt: new Date().toISOString()
+            locator: message.locator || 'unknown'
           },
           src: message.data
         };
@@ -976,9 +975,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
         source: message.source || {
           type: 'web',
           pageId: message.pageId,
-          url: message.pageURL || '',
-          locator: message.selector ? { type: 'css', selector: message.selector } : { type: 'css', selector: 'body' },
-          capturedAt: new Date().toISOString()
+          locator: message.locator || 'unknown'
         },
       }
     ]);
@@ -1501,37 +1498,73 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
 
   const handleInstanceContextMenu = (e: React.MouseEvent, instanceId: string) => {
     e.preventDefault();
-    // In selection mode, if the instance is in the selection, show multi-select menu
-    if (mode === 'select' && selectedInstanceIds.includes(instanceId) && selectedInstanceIds.length > 1) {
-      setContextMenu({
-        visible: true,
-        instanceId: null,
-        position: { x: e.clientX, y: e.clientY },
-        multi: true
-      });
-    } else {
-      setContextMenu({
-        visible: true,
-        instanceId,
-        position: { x: e.clientX, y: e.clientY },
-        multi: false
-      });
+    console.log("Context menu triggered for instance ID:", instanceId);
+    let instanceIds: string[] = [instanceId]; // Instances to handle in context menu
+
+    // If we are in the select mode, use the selected instance IDs
+    if (mode === 'select' && selectedInstanceIds.includes(instanceId)) {
+      instanceIds = selectedInstanceIds;
     }
+
+    console.log("Context menu instances:", instanceIds);
+    if (!instanceIds || instanceIds.length === 0) {
+      console.warn("No instances selected for context menu");
+      return;
+    }
+    // Make sure the instances corresponding to the instanceIds exist
+    const selectedInstances = instances.filter(inst => instanceIds.includes(inst.id));
+    if (selectedInstances.length === 0) {
+      console.warn("No valid instances found for context menu");
+      return;
+    }
+
+    setContextMenu({
+      visible: true,
+      instanceIds: instanceIds,
+      position: { x: e.clientX, y: e.clientY },
+      multi: instanceIds.length > 1
+    });
   };
 
   const closeContextMenu = () => {
     setContextMenu({ ...contextMenu, visible: false });
   };
 
-  const handleInfer = async (instance: Instance) => {
-    console.log(`Analyzing instance ${instance.id}`);
+  // Generate operation logs from instance changes
+  const generateOperationLogs = (oldInstances: Instance[], newInstanceEvents: any[]): string[] => {
+    const logs: string[] = [];
     
+    newInstanceEvents.forEach(event => {
+      if (event.action === 'add' && event.instance) {
+        logs.push(`Created ${event.instance.type} "${event.instance.id}"`);
+      } else if (event.action === 'update' && event.instance && event.originalId) {
+        logs.push(`Updated ${event.instance.type} "${event.originalId}"`);
+      } else if (event.action === 'remove' && event.originalId) {
+        const oldInstance = oldInstances.find(inst => inst.id === event.originalId);
+        if (oldInstance) {
+          logs.push(`Removed ${oldInstance.type} "${event.originalId}"`);
+        }
+      }
+    });
+    
+    return logs;
+  };
+
+  const handleInfer = async (instanceIds: string[]) => {
+    console.log(`Analyzing instances ${instanceIds.join(', ')}`);
+    let targetInstances = instances.filter(inst => instanceIds.includes(inst.id));
+    if (targetInstances.length === 0) {
+      console.warn("No instances found for inference");
+      return;
+    }
+
     // Create instances checkpoint before inference
     const checkpoint = JSON.parse(JSON.stringify(instances));
-    let userMsg = `Infer my intent based on the instance ${instance.id} and finish the task.`;
+    let userMsg = `Infer my intent based on the instances ${instanceIds.join(', ')} and finish the task.`;
     addMessage({
       "role": "user",
       "message": userMsg,
+      "chatType": "infer",
       "id": generateId(),
       "instancesCheckpoint": checkpoint
     });
@@ -1540,21 +1573,29 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
       let message: string = "", newInstances: any[] = [];
       if (import.meta.env.WXT_USE_LLM == "true") {
         // If using LLM, we need to generate the context first
-        const { imageContext, textContext } = await generateInstanceContext([instance]);
-        let result = await parseLogWithAgent(logs, textContext, imageContext, htmlContexts, instance.id);
+        const { imageContext, textContext } = await generateInstanceContext(targetInstances);
+        // let result = await parseLogWithAgent(logs, textContext, imageContext, htmlContext, instance.id);
+        let result = await chatWithAgent('infer', userMsg, messages, textContext, imageContext, htmlContext);
         message = result.message;
         newInstances = result.instances || [];
       } else {
         // If not using LLM, we can directly parse the log
-        let result = await parseLogWithAgent([], '', [], {}, null, [], userMsg);
+        // let result = await parseLogWithAgent([], '', [], {}, null, [], userMsg);
+        let result = await chatWithAgent('infer', userMsg);
         message = result.message;
         newInstances = result.instances || [];
       }
+      
+      // Generate operation logs before updating instances
+      const operationLogs = generateOperationLogs(instances, newInstances);
+      
       addMessage({
         "role": "agent",
         "message": message,
+        "chatType": "infer",
         "id": generateId(),
-        "isRetrying": false
+        "isRetrying": false,
+        "operations": operationLogs
       });
       // update the instances
       updateInstances(instances, newInstances, setInstances);      
@@ -1802,54 +1843,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
     setSelectedInstanceIds([]);
   };
 
-  // Batch LLM inference
-  const handleBatchInfer = async () => {
-    if (selectedInstanceIds.length === 0) return;
-    const selected = instances.filter(inst => selectedInstanceIds.includes(inst.id));
-    
-    
-    const userMsg = `Infer my intent based on the following instances: ${selected.map(inst => inst.id).join(', ')}. Finish the task.`;
-    
-    console.log(`Analyzing batch of ${selected.length} instances: ${selected.map(inst => inst.id).join(', ')}`);
-    
-    // Create instances checkpoint before batch inference
-    const checkpoint = JSON.parse(JSON.stringify(instances));
-    addMessage({
-      "role": "user",
-      "message": userMsg,
-      "id": generateId(),
-      "instancesCheckpoint": checkpoint
-    });
-    setAgentLoading(true);
-    try {
-      let message: string = "", newInstances: any[] = [];
-      if (import.meta.env.WXT_USE_LLM == "true") {
-        // If using LLM, we need to generate the context first
-        const { imageContext, textContext } = await generateInstanceContext(selected);
-        let result = await parseLogWithAgent(logs, textContext, imageContext, htmlContexts, selected.map(inst => inst.id).join(', '));
-        message = result.message;
-        newInstances = result.instances || [];
-      } else {
-        // If not using LLM, we can directly parse the log
-        let result = await parseLogWithAgent([], '', [], {}, null, [], userMsg);
-        message = result.message;
-        newInstances = result.instances || [];
-      }
-      addMessage({
-        "role": "agent",
-        "message": message,
-        "id": generateId(),
-        "isRetrying": false
-      });
-      // update the instances
-      updateInstances(instances, newInstances, setInstances);
-    } finally {
-      setAgentLoading(false);
-    }
-    setSelectedInstanceIds([]);
-    closeContextMenu();
-  };
-
   // Update keyboard handler for batch delete
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -2004,6 +1997,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
           <TableEditor
             tableId={editingTableId}
             instances={instances}
+            htmlContext={htmlContext}
             onSaveTable={saveTable}
             onCancel={cancelTableEdit}
             onAddToTable={handleAddToTable}
@@ -2047,6 +2041,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
             <InstanceContextMenu
               contextMenu={contextMenu}
               instances={instances}
+              htmlContext={htmlContext}
               closeContextMenu={closeContextMenu}
               handleRename={handleRename}
               handleInfer={handleInfer}
@@ -2054,7 +2049,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContexts, onOperation
               handleBatchDelete={handleBatchDelete}
               handleBatchCreateSketch={handleBatchCreateSketch}
               handleBatchCreateTable={handleBatchCreateTable}
-              handleBatchInfer={handleBatchInfer}
             />
             <div
               className="view-content"

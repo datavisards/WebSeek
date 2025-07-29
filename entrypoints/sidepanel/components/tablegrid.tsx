@@ -62,16 +62,44 @@ const TableGrid: React.FC<TableGridProps> = ({
       return !cell || cell.type === 'text';
     });
     if (!canSort) return table.cells;
+    
+    // Check if all non-empty values in the column can be converted to numbers
+    const columnValues = table.cells.map(row => {
+      const cell = row[sortColumn];
+      return cell && cell.type === 'text' ? cell.content.trim() : '';
+    }).filter(val => val !== '');
+    
+    const isNumericColumn = columnValues.length > 0 && columnValues.every(val => {
+      const num = Number(val);
+      return !isNaN(num) && isFinite(num);
+    });
+    
     // Pair each row with its index for stable sort
     const paired = table.cells.map((row, idx) => ({ row, idx }));
     paired.sort((a, b) => {
       const cellA = a.row[sortColumn];
       const cellB = b.row[sortColumn];
-      const valA = cellA && cellA.type === 'text' ? cellA.content : '';
-      const valB = cellB && cellB.type === 'text' ? cellB.content : '';
-      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-      return a.idx - b.idx;
+      const valA = cellA && cellA.type === 'text' ? cellA.content.trim() : '';
+      const valB = cellB && cellB.type === 'text' ? cellB.content.trim() : '';
+      
+      // Handle empty values - sort them to the end
+      if (valA === '' && valB === '') return a.idx - b.idx;
+      if (valA === '') return sortDirection === 'asc' ? 1 : -1;
+      if (valB === '') return sortDirection === 'asc' ? -1 : 1;
+      
+      if (isNumericColumn) {
+        // Numeric sorting
+        const numA = Number(valA);
+        const numB = Number(valB);
+        if (numA < numB) return sortDirection === 'asc' ? -1 : 1;
+        if (numA > numB) return sortDirection === 'asc' ? 1 : -1;
+        return a.idx - b.idx;
+      } else {
+        // String sorting
+        if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+        if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+        return a.idx - b.idx;
+      }
     });
     return paired.map(p => p.row);
   }, [table.cells, sortColumn, sortDirection]);

@@ -128,67 +128,16 @@ export function findElementByLocator(locator: Locator): HTMLElement | null {
     return null;
   }
   
-  switch (locator.type) {
-    case 'stableId':
-      // First ensure stable IDs are injected into the page
-      injectStableIdsIntoLivePage();
-      return document.querySelector(`[data-aid-id="${locator.value}"]`);
-    
-    case 'id':
-      return document.getElementById(locator.value);
-    
-    case 'attribute':
-      // Escape value for use in CSS selector
-      const escapedValue = locator.value.replace(/"/g, '\\"');
-      return document.querySelector(`[${locator.name}="${escapedValue}"]`);
-
-    case 'contextual':
-      const anchorElement = findElementByLocator(locator.anchor);
-      if (!anchorElement) return null;
-      
-      const targetElements = anchorElement.querySelectorAll(locator.target.tag);
-      return (targetElements[locator.target.occurrence || 0] as HTMLElement) || null;
-
-    case 'css':
-      return document.querySelector(locator.selector);
-
-    default:
-      return null;
-  }
+  // First ensure stable IDs are injected into the page
+  injectStableIdsIntoLivePage();
+  return document.querySelector(`[data-aid-id="${locator}"]`);
 }
 
 /**
- * Convert a Locator object back to a CSS selector string for backward compatibility.
- * This is used when we need to pass a selector to existing code that expects strings.
+ * Convert a Locator string to a CSS selector string for backward compatibility.
  */
 export function locatorToSelector(locator: Locator): string {
-  switch (locator.type) {
-    case 'stableId':
-      return `[data-aid-id="${locator.value}"]`;
-    
-    case 'id':
-      return `#${locator.value}`;
-    
-    case 'attribute':
-      // Escape value for use in CSS selector
-      const escapedValue = locator.value.replace(/"/g, '\\"');
-      return `[${locator.name}="${escapedValue}"]`;
-
-    case 'contextual':
-      const anchorSelector = locatorToSelector(locator.anchor);
-      const occurrence = locator.target.occurrence || 0;
-      if (occurrence === 0) {
-        return `${anchorSelector} ${locator.target.tag}`;
-      } else {
-        return `${anchorSelector} ${locator.target.tag}:nth-of-type(${occurrence + 1})`;
-      }
-
-    case 'css':
-      return locator.selector;
-
-    default:
-      return 'body';
-  }
+  return `[data-aid-id="${locator}"]`;
 }
 
 // Helper function to create proper source from legacy sourcePageId or create manual source
@@ -205,37 +154,24 @@ function createInstanceSource(input: any): InstanceSource {
         let locator: Locator;
         
         // Convert legacy selector to new locator format
-        if (input.selector) {
-            // For legacy selectors, use css fallback
-            locator = {
-                type: 'css',
-                selector: input.selector
-            };
-        } else if (input.locator) {
-            // Use the new locator format if available
+        if (input.locator) {
+            // Use the locator if available
             locator = input.locator;
         } else {
-            // If no selector, create a basic css locator
-            locator = {
-                type: 'css',
-                selector: 'body'
-            };
+            // If no locator, use a fallback
+            locator = 'unknown';
         }
         
         return {
             type: 'web',
             pageId: input.pageId || input.sourcePageId, // Prefer new pageId over legacy sourcePageId
-            url: input.url || '',
-            locator: locator,
-            elementId: input.elementId,
-            capturedAt: input.capturedAt || new Date().toISOString()
+            locator: locator
         };
     }
     
     // Default to manual source
     return {
-        type: 'manual',
-        createdAt: new Date().toISOString()
+        type: 'manual'
     };
 }
 
@@ -372,7 +308,7 @@ export const injectStableIdsIntoLivePage = (): void => {
 export const createStableIdLocator = (element: HTMLElement): Locator => {
     // Only run in browser environment
     if (typeof window === 'undefined' || typeof document === 'undefined') {
-        return { type: 'css', selector: 'body' };
+        return 'body';
     }
     
     // Ensure stable IDs are injected
@@ -380,56 +316,14 @@ export const createStableIdLocator = (element: HTMLElement): Locator => {
     
     const stableId = element.getAttribute('data-aid-id');
     if (stableId) {
-        return { type: 'stableId', value: stableId };
+        return stableId;
     }
     
-    // Fallback to other locator types if stable ID is not available
-    if (element.id) {
-        return { type: 'id', value: element.id };
-    }
-    
-    // Check for common data attributes
-    const testId = element.getAttribute('data-testid');
-    if (testId) {
-        return { type: 'attribute', name: 'data-testid', value: testId };
-    }
-    
-    // Fallback to CSS selector
-    const selector = generateCSSSelector(element);
-    return { type: 'css', selector };
+    // If no stable ID is available, we should still try to generate one
+    // or return a fallback stable ID
+    return 'unknown';
 };
 
-/**
- * Generates a CSS selector for an element (fallback method).
- */
-const generateCSSSelector = (element: HTMLElement): string => {
-    if (element.id) {
-        return `#${element.id}`;
-    }
-    
-    let selector = element.tagName.toLowerCase();
-    
-    if (element.className) {
-        const classes = element.className.split(' ').filter(c => c.trim());
-        if (classes.length > 0) {
-            selector += '.' + classes.join('.');
-        }
-    }
-    
-    // Add nth-child if needed for uniqueness
-    const parent = element.parentElement;
-    if (parent) {
-        const siblings = Array.from(parent.children).filter(
-            el => el.tagName.toLowerCase() === element.tagName.toLowerCase()
-        );
-        if (siblings.length > 1) {
-            const index = siblings.indexOf(element) + 1;
-            selector += `:nth-of-type(${index})`;
-        }
-    }
-    
-    return selector;
-};
 
 /**
  * Sets up a MutationObserver to inject stable IDs into dynamically added content.
@@ -1191,6 +1085,7 @@ export function updateInstances(
     setInstances: (instances: Instance[]) => void
 ): void {
     // If there are structured results, update the instances
+    console.log("Old instances:", oldInstances);
     let instancesClone = structuredClone(oldInstances);
     if (newInstances && newInstances.length > 0) {
         newInstances.forEach(event => {
@@ -1251,15 +1146,19 @@ export function updateInstances(
                     instancesClone.splice(index, 1);
                 }
             } else if (event.action === "update") {
-                if (!event.targetId || !event.instance) {
-                    console.error("Target ID or instance is missing in update action");
+                if (!event.instance) {
+                    console.error("Target instance is missing in update action");
                     return;
                 }
-                let index = instancesClone.findIndex(item => item.id === event.targetId);
+                let targetId = event.targetId || event.instance.id;
+                let index = instancesClone.findIndex(item => item.id === targetId);
                 if (index === -1) {
-                    console.error(`Failed to update ${event.targetId}: Not found`);
+                    console.error(`Failed to update ${targetId}: Not found`);
                 } else {
+                    console.log("Old:", instancesClone[index]);
+                    console.log("New:", event.instance);
                     let newInstance = { ...instancesClone[index], ...event.instance };
+                    console.log("Result", newInstance);
                     instancesClone.splice(index, 1, newInstance);
                 }
             } else {
@@ -1267,6 +1166,7 @@ export function updateInstances(
             }
         });
     }
+    console.log("Updated instances:", instancesClone);
     setInstances(instancesClone);
 }
 

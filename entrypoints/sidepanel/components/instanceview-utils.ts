@@ -3,8 +3,7 @@ import { generateId } from '../utils';
 
 // Helper function to create manual source for instances created within the app
 export const createManualSource = (): InstanceSource => ({
-  type: 'manual',
-  createdAt: new Date().toISOString()
+  type: 'manual'
 });
 
 // Helper functions to create embedded instances with proper source

@@ -55,30 +55,8 @@
         if (!locator || !iframeDocument) return null;
         
         try {
-            switch (locator.type) {
-                case 'stableId':
-                    return iframeDocument.querySelector(`[data-aid-id="${locator.value}"]`);
-                
-                case 'id':
-                    return iframeDocument.getElementById(locator.value);
-                
-                case 'attribute':
-                    const escapedValue = locator.value.replace(/"/g, '\\"');
-                    return iframeDocument.querySelector(`[${locator.name}="${escapedValue}"]`);
-                
-                case 'contextual':
-                    const anchorElement = findElementByLocator(locator.anchor, iframeDocument);
-                    if (!anchorElement) return null;
-                    
-                    const targetElements = anchorElement.querySelectorAll(locator.target.tag);
-                    return targetElements[locator.target.occurrence || 0] || null;
-                
-                case 'css':
-                    return iframeDocument.querySelector(locator.selector);
-                
-                default:
-                    return null;
-            }
+            // Locator is now just a stable ID string
+            return iframeDocument.querySelector(`[data-aid-id="${locator}"]`);
         } catch (error) {
             console.warn('Error finding element by locator:', error);
             return null;

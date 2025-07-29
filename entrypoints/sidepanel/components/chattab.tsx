@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Message, Instance } from '../types';
 import { chatWithAgent } from '../api-selector';
-import { generateInstanceContext, parseInstance, detectMarkdown, renderMarkdown, ensureValidInstanceIds, generateId, updateInstances } from '../utils';
+import { generateInstanceContext, detectMarkdown, renderMarkdown, generateId, updateInstances } from '../utils';
 import './chattab.css';
 
 interface ChatTabProps {
@@ -11,8 +11,7 @@ interface ChatTabProps {
     agentLoading: boolean;
     setAgentLoading: React.Dispatch<React.SetStateAction<boolean>>;
     instances: Instance[];
-    logs: string[];
-    htmlContexts: Record<string, {pageURL: string, htmlContent: string}>;
+    htmlContext: Record<string, { pageURL: string, htmlContent: string }>;
     setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
 }
 
@@ -23,8 +22,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
     agentLoading,
     setAgentLoading,
     instances,
-    logs,
-    htmlContexts,
+    htmlContext,
     setInstances
 }) => {
     const [inputValue, setInputValue] = useState('');
@@ -137,59 +135,96 @@ const ChatTab: React.FC<ChatTabProps> = ({
         }
     };
 
+    // Generate operation logs from instance changes
+    const generateOperationLogs = (oldInstances: Instance[], newInstanceEvents: any[]): string[] => {
+        const logs: string[] = [];
+        
+        newInstanceEvents.forEach(event => {
+            if (event.action === 'add' && event.instance) {
+                logs.push(`Created ${event.instance.type} "${event.instance.id}"`);
+            } else if (event.action === 'update' && event.instance && event.originalId) {
+                logs.push(`Updated ${event.instance.type} "${event.originalId}"`);
+            } else if (event.action === 'remove' && event.originalId) {
+                const oldInstance = oldInstances.find(inst => inst.id === event.originalId);
+                if (oldInstance) {
+                    logs.push(`Removed ${oldInstance.type} "${event.originalId}"`);
+                }
+            }
+        });
+        
+        return logs;
+    };
+
+    // Common function to call the LLM API
+    const callLLMApi = async (
+        chatType: 'chat' | 'infer',
+        userMessage: string, 
+        conversationHistory: Message[], 
+        currentInstances: Instance[]
+    ): Promise<{ message: string; instances: any[] }> => {
+        let message: string = "", newInstances: any[] = [];
+        
+        if (import.meta.env.WXT_USE_LLM == "true") {
+            const { imageContext, textContext } = await generateInstanceContext(currentInstances);
+            let result = await chatWithAgent(chatType, userMessage,
+                conversationHistory,
+                textContext,
+                imageContext,
+                htmlContext
+            );
+            message = result.message;
+            newInstances = result.instances || [];
+        } else {
+            const result = await chatWithAgent(chatType, userMessage);
+            message = result.message;
+            newInstances = result.instances || [];
+        }
+        
+        return { message, instances: newInstances };
+    };
 
     const sendMsg = async (retryMessageId?: string) => {
-        const userMessage = retryMessageId ? 
+        const userMessage = retryMessageId ?
             messages.find(m => m.id === retryMessageId && m.role === 'user')?.message || '' :
             inputValue.trim();
-        
+
         if (!userMessage || agentLoading) return;
         setIsStopped(false);
-        
+
+        let conversationHistory = structuredClone(messages);
+
         if (!retryMessageId) {
             setInputValue('');
             // Create instances checkpoint before sending user message
             const checkpoint = JSON.parse(JSON.stringify(instances));
             // Add user message to chat with checkpoint
-            addMessage({ 
-                role: 'user', 
+            addMessage({
+                role: 'user',
                 message: userMessage,
+                chatType: 'chat',
                 id: generateId(),
                 instancesCheckpoint: checkpoint
             });
         }
-        
+
         setAgentLoading(true);
 
         try {
-            // Call the chat agent
-            // const { message, instances: newInstances } = await chatWithAgent(userMessage);
-            let message: string = "", newInstances: any[] = [];
-            if (import.meta.env.WXT_USE_LLM == "true") {
-                const { imageContext, textContext } = await generateInstanceContext(instances);
-                let result = await chatWithAgent(userMessage,
-                messages,
-                textContext,
-                imageContext,
-                htmlContexts,
-                logs);
-                message = result.message;
-                newInstances = result.instances || [];
-            } else {
-                const result = await chatWithAgent(userMessage);
-                message = result.message;
-                newInstances = result.instances || [];
-            }
+            const { message, instances: newInstances } = await callLLMApi('chat', userMessage, conversationHistory, instances);
 
             // If stopped, do not update UI with agent response
             if (isStopped) return;
 
-            // Add agent response to chat
-            addMessage({ 
-                role: 'agent', 
+            // Generate operation logs before updating instances
+            const operationLogs = generateOperationLogs(instances, newInstances);
+
+            // Add agent response to chat with operation logs
+            addMessage({
+                role: 'agent',
                 message: message,
                 id: generateId(),
-                isRetrying: false
+                isRetrying: false,
+                operations: operationLogs
             });
 
             // Update the instances
@@ -218,73 +253,69 @@ const ChatTab: React.FC<ChatTabProps> = ({
         // Find the agent message and corresponding user message
         const agentMessageIndex = messages.findIndex(m => m.id === agentMessageId);
         if (agentMessageIndex === -1) return;
-        
+
         // Find the user message that triggered this agent response
         let userMessageIndex = agentMessageIndex - 1;
         while (userMessageIndex >= 0 && messages[userMessageIndex].role !== 'user') {
             userMessageIndex--;
         }
-        
+
         if (userMessageIndex === -1) return;
-        
+
         const userMessage = messages[userMessageIndex];
-        
+        console.log("Retrying user message:", userMessage);
+
         // Set the agent message to retrying state
-        setMessages(prev => 
-            prev.map(m => 
-                m.id === agentMessageId 
+        setMessages(prev =>
+            prev.map(m =>
+                m.id === agentMessageId
                     ? { ...m, isRetrying: true, message: '' }
                     : m
             )
         );
-        
+
         // Restore instances to checkpoint if available
+        const currentInstances = userMessage.instancesCheckpoint || instances;
         if (userMessage.instancesCheckpoint) {
             setInstances(userMessage.instancesCheckpoint);
         }
-        
+
         setIsRetrying(true);
         setAgentLoading(true);
         setIsStopped(false);
-        
+
         try {
-            let message: string = "", newInstances: any[] = [];
-            if (import.meta.env.WXT_USE_LLM == "true") {
-                const { imageContext, textContext } = await generateInstanceContext(userMessage.instancesCheckpoint || instances);
-                let result = await chatWithAgent(userMessage.message,
-                    messages.slice(0, userMessageIndex), // Only include conversation up to the retry point
-                    textContext,
-                    imageContext,
-                    htmlContexts,
-                    logs);
-                message = result.message;
-                newInstances = result.instances || [];
-            } else {
-                const result = await chatWithAgent(userMessage.message);
-                message = result.message;
-                newInstances = result.instances || [];
-            }
-            
+            // Call the LLM API with retry context
+            const { message, instances: newInstances } = await callLLMApi(
+                userMessage.chatType || 'chat',
+                userMessage.message,
+                messages.slice(0, userMessageIndex), // Only include conversation up to the retry point
+                currentInstances
+            );
+
             // If stopped, do not update UI with agent response
             if (isStopped) return;
-            
-            // Update the retrying message with new response
-            setMessages(prev => 
-                prev.map(m => 
-                    m.id === agentMessageId 
-                        ? { ...m, isRetrying: false, message: message }
+
+            // Generate operation logs before updating instances
+            const operationLogs = generateOperationLogs(currentInstances, newInstances);
+
+            // Update the retrying message with new response and operation logs
+            setMessages(prev =>
+                prev.map(m =>
+                    m.id === agentMessageId
+                        ? { ...m, isRetrying: false, message: message, operations: operationLogs }
                         : m
                 )
             );
-            
+
             // Update the instances
-            updateInstances(instances, newInstances, setInstances);
+            updateInstances(currentInstances, newInstances, setInstances);
         } catch (error) {
             if (!isStopped) {
                 console.error('Error in retry:', error);
-                setMessages(prev => 
-                    prev.map(m => 
-                        m.id === agentMessageId 
+                setMessages(prev =>
+                    prev.map(m =>
+                        m.id === agentMessageId
                             ? { ...m, isRetrying: false, message: 'Sorry, I encountered an error while processing your request. Please try again.' }
                             : m
                     )
@@ -296,14 +327,14 @@ const ChatTab: React.FC<ChatTabProps> = ({
         }
     };
 
-    const renderMessage = (msg: Message, index: number) => {
+    const renderMessage = (msg: Message) => {
         const messageContent = msg.role === 'agent' && detectMarkdown(msg.message) ? (
             <div
                 className="markdown-content"
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.message) }}
             />
         ) : msg.message;
-        
+
         return (
             <div className="message-content-wrapper">
                 {msg.isRetrying ? (
@@ -314,7 +345,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
                     </div>
                 ) : messageContent}
                 {msg.role === 'agent' && !msg.isRetrying && msg.message && (
-                    <button 
+                    <button
                         className="retry-button"
                         onClick={() => handleRetry(msg.id!)}
                         title="Retry this response"
@@ -338,7 +369,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
                             key={msg.id || index}
                             className={`message-bubble ${msg.role === 'user' ? 'user' : 'agent'}`}
                         >
-                            {renderMessage(msg, index)}
+                            {renderMessage(msg)}
                         </div>
                     ))
                 )}

@@ -4,19 +4,9 @@
  */
 
 /**
- * A structured, semantic way to describe an element's location.
- * This replaces the brittle CSS selector string.
+ * Simple locator using stable ID (AID) to identify elements.
  */
-export type Locator =
-  | { type: 'stableId'; value: string } // e.g., { type: 'stableId', value: 'aid-123' } - Most reliable locator type
-  | { type: 'id'; value: string } // e.g., { type: 'id', value: 'main-content' }
-  | { type: 'attribute'; name: string; value: string } // e.g., { type: 'attribute', name: 'data-testid', value: 'login-button' }
-  | {
-      type: 'contextual';
-      anchor: Locator; // A unique locator for a parent/container element
-      target: { tag: string; occurrence?: number }; // What to find inside the anchor
-    } // e.g., { type: 'contextual', anchor: { type: 'attribute', name: 'data-asin', value: 'B0BLB6W78J' }, target: { tag: 'h2', occurrence: 0 } }
-  | { type: 'css'; selector: string }; // Fallback for complex cases
+export type Locator = string; // Stable ID (AID)
 
 /**
  * Describes the source of an instance captured from a webpage.
@@ -25,14 +15,8 @@ export interface WebCaptureSource {
   type: 'web';
   /** The internal ID of the page record where the full HTML is stored. */
   pageId: string;
-  /** The public URL of the source webpage for navigation. */
-  url: string;
   /** A structured locator object to precisely locate the element on the page. */
   locator: Locator;
-  /** Unique identifier for the element (id, data-* attribute, or generated). */
-  elementId?: string;
-  /** ISO timestamp of when the capture was made. */
-  capturedAt: string;
 }
 
 /**
@@ -40,8 +24,6 @@ export interface WebCaptureSource {
  */
 export interface ManualSource {
   type: 'manual';
-  /** ISO timestamp of when the instance was created. */
-  createdAt: string;
 }
 
 /**
@@ -175,13 +157,15 @@ export type Instance = TextInstance | ImageInstance | SketchInstance | TableInst
 export interface Message {
   role: string;
   message: string;
+  chatType?: 'chat' | 'infer';
   id?: string;
   isRetrying?: boolean;
   instancesCheckpoint?: Instance[];
+  operations?: string[]; // Brief operation logs like "Created table Table1", "Updated instance X"
 }
 
 export interface InstanceEvent {
-    action: 'add' | 'remove' | 'update';
-    targetId?: string; // The original ID of the instance being modified or removed
-    instance?: Instance; // The new content of the instance
+  action: 'add' | 'remove' | 'update';
+  targetId?: string; // The original ID of the instance being modified or removed; NOT OPTIONAL FOR 'update' and 'remove' ACTIONS
+  instance?: Instance; // The new content of the instance; NOT OPTIONAL FOR 'add' and 'update' ACTIONS
 }

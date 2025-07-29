@@ -50,10 +50,7 @@ export default defineBackground(() => {
           const source = {
             type: 'web' as const,
             pageId: pageId,
-            url: message.url || sender.url || '',
-            locator: locator,
-            elementId: message.elementId || '',
-            capturedAt: message.capturedAt || new Date().toISOString()
+            locator: locator
           };
           
           sidePanelPort.postMessage({

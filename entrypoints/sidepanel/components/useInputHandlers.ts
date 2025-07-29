@@ -41,10 +41,12 @@ export const useInputHandlers = ({
             const newInstance: ImageInstance = {
               type: 'image',
               id: newId,
-              source: { type: 'manual', createdAt: new Date().toISOString() },
+              source: { type: 'manual' },
               src: result,
-              position: { x: x + i * 20, y: y + i * 20 },
-              size: { width: 200, height: 150 }
+              x: x + i * 20,
+              y: y + i * 20,
+              width: 200,
+              height: 150
             };
             setInstances(prev => [...prev, newInstance]);
             setImageCount(prev => prev + 1);
@@ -74,10 +76,12 @@ export const useInputHandlers = ({
               const newInstance: ImageInstance = {
                 type: 'image',
                 id: newId,
-                source: { type: 'manual', createdAt: new Date().toISOString() },
+                source: { type: 'manual' },
                 src: result,
-                position: { x: 50, y: 50 },
-                size: { width: 200, height: 150 }
+                x: 50,
+                y: 50,
+                width: 200,
+                height: 150
               };
               setInstances(prev => [...prev, newInstance]);
               setImageCount(prev => prev + 1);
@@ -94,10 +98,12 @@ export const useInputHandlers = ({
             const newInstance: TextInstance = {
               type: 'text',
               id: newId,
-              source: { type: 'manual', createdAt: new Date().toISOString() },
+              source: { type: 'manual' },
               content: text,
-              position: { x: 50, y: 50 },
-              size: { width: 300, height: 100 }
+              x: 50,
+              y: 50,
+              width: 300,
+              height: 100
             };
             setInstances(prev => [...prev, newInstance]);
             setTextCount(prev => prev + 1);

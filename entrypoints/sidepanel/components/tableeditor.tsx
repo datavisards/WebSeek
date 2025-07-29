@@ -8,6 +8,7 @@ import './tableeditor.css';
 interface TableEditorProps {
   tableId: string | null;
   instances: Instance[];
+  htmlContext: Record<string, {pageURL: string, htmlContent: string}>;
   onSaveTable: () => void;
   onCancel: () => void;
   onAddToTable: (instance: Instance, row: number, col: number) => void;
@@ -27,6 +28,7 @@ interface TableEditorProps {
 const TableEditor: React.FC<TableEditorProps> = ({
   tableId,
   instances,
+  htmlContext,
   onSaveTable,
   onCancel,
   onAddToTable,
@@ -63,23 +65,22 @@ const TableEditor: React.FC<TableEditorProps> = ({
     }
     
     // Fallback to URL navigation if snapshot view fails or isn't available
-    if (webSource.url) {
+    // Get URL from htmlContext using pageId
+    const pageContext = htmlContext[webSource.pageId];
+    if (pageContext?.pageURL) {
       // Construct URL with highlighting parameters
-      const url = new URL(webSource.url);
+      const url = new URL(pageContext.pageURL);
       if (webSource.locator) {
         // Import the helper function and convert locator to selector
         const { locatorToSelector } = await import('../utils');
         const selector = locatorToSelector(webSource.locator);
         url.searchParams.set('webseek_selector', selector);
       }
-      if (webSource.elementId) {
-        url.searchParams.set('webseek_element_id', webSource.elementId);
-      }
       
       try {
         // Check if the target webpage is already open
         const tabs = await browser.tabs.query({});
-        const targetUrl = new URL(webSource.url);
+        const targetUrl = new URL(pageContext.pageURL);
         const targetOrigin = targetUrl.origin;
         const targetPathname = targetUrl.pathname;
         
@@ -113,6 +114,8 @@ const TableEditor: React.FC<TableEditorProps> = ({
         // Fallback to simple window.open
         window.open(url.toString(), '_blank');
       }
+    } else {
+      console.warn('No URL found for pageId:', webSource.pageId, 'Available contexts:', Object.keys(htmlContext));
     }
   };
 

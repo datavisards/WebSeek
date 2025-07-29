@@ -1,6 +1,5 @@
 // sidepanel.tsx
 import React, { useState, useEffect } from 'react';
-import OperationView from './components/operationview.tsx';
 import InstanceView from './components/instanceview.tsx';
 import { Instance } from './types.tsx';
 import './sidepanel.css';
@@ -11,7 +10,7 @@ import { contextService } from './context-service';
 
 const SidePanel = () => {
   const [logs, setLogs] = useState<string[]>([]);
-  const [htmlContexts, setHtmlContexts] = useState<Record<string, {pageURL: string, htmlContent: string}>>({});
+  const [htmlContext, setHtmlContexts] = useState<Record<string, {pageURL: string, htmlContent: string}>>({});
   const [messages, setMessages] = useState<Message[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -35,9 +34,9 @@ const SidePanel = () => {
   }, [messages]);
 
   useEffect(() => {
-    contextService.setHtmlContexts(htmlContexts);
-    console.log("HTML contexts:", htmlContexts);
-  }, [htmlContexts]);
+    contextService.setHtmlContexts(htmlContext);
+    console.log("HTML contexts:", htmlContext);
+  }, [htmlContext]);
 
   // Connect websocket on mount, cleanup on unmount
   useEffect(() => {
@@ -49,9 +48,9 @@ const SidePanel = () => {
 
   return (
     <div className="side-panel">
-      {/* <OperationView logs={logs} htmlContexts={htmlContexts}/> */}
-      <InstanceView instances={instances} setInstances={setInstances} logs={logs} htmlContexts={htmlContexts} onOperation={addLog} updateHTMLContext={setHtmlContexts} addMessage={addMessage} setAgentLoading={setAgentLoading}/>
-      <ToolView logs={logs} htmlContexts={htmlContexts} messages={messages} addMessage={addMessage} setMessages={setMessages} agentLoading={agentLoading} setAgentLoading={setAgentLoading} instances={instances} setInstances={setInstances}></ToolView>
+      {/* <OperationView logs={logs} htmlContext={htmlContext}/> */}
+      <InstanceView instances={instances} setInstances={setInstances} logs={logs} htmlContext={htmlContext} messages={messages} onOperation={addLog} updateHTMLContext={setHtmlContexts} addMessage={addMessage} setAgentLoading={setAgentLoading}/>
+      <ToolView logs={logs} htmlContext={htmlContext} messages={messages} addMessage={addMessage} setMessages={setMessages} agentLoading={agentLoading} setAgentLoading={setAgentLoading} instances={instances} setInstances={setInstances}></ToolView>
     </div>
   );
 };
