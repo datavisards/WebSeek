@@ -1,7 +1,8 @@
 // SketchEditor.tsx
 import React, { useState, useRef, useEffect, forwardRef } from 'react';
-import { Instance, SketchInstance, SketchItem, TableInstance } from '../types';
+import { Instance, SketchInstance, SketchItem, TableInstance, ProactiveSuggestion } from '../types';
 import TableGrid from './tablegrid';
+import GhostInstance from './GhostInstance';
 import './sketcheditor.css';
 
 interface SketchEditorProps {
@@ -33,6 +34,7 @@ interface SketchEditorProps {
   handleEmbeddedMouseMove: (event: React.MouseEvent<HTMLDivElement>) => void;
   handleEmbeddedMouseUp: (event: React.MouseEvent<HTMLDivElement>) => void;
   draggingEmbeddedId: string | null;
+  currentSuggestion?: ProactiveSuggestion;
 }
 
 const SketchEditor = forwardRef<HTMLCanvasElement, SketchEditorProps>(({
@@ -53,7 +55,8 @@ const SketchEditor = forwardRef<HTMLCanvasElement, SketchEditorProps>(({
   handleEmbeddedResizerMouseDown,
   handleEmbeddedMouseMove,
   handleEmbeddedMouseUp,
-  draggingEmbeddedId
+  draggingEmbeddedId,
+  currentSuggestion
 }, ref) => {
   // Start drawing
   const startDrawing = (e: React.MouseEvent) => {
@@ -396,6 +399,16 @@ const SketchEditor = forwardRef<HTMLCanvasElement, SketchEditorProps>(({
             </div>
           ))}
         </div>
+        
+        {/* Render ghost instances for proactive suggestions */}
+        {currentSuggestion && currentSuggestion.instances.map((instanceEvent, index) => (
+          <div key={`ghost-${index}`} style={{ position: 'absolute', top: '50%', left: '60%', transform: 'translate(-50%, -50%)', zIndex: 1000, pointerEvents: 'none' }}>
+            <GhostInstance
+              instanceEvent={instanceEvent}
+              existingInstances={instances}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );

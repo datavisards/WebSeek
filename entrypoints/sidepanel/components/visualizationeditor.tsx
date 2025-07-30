@@ -1,7 +1,8 @@
 // visualizationeditor.tsx
 import React, { useState, useEffect } from 'react';
 import VisualizationRenderer from './visualizationrenderer';
-import { Instance } from '../types';
+import { Instance, ProactiveSuggestion } from '../types';
+import GhostInstance from './GhostInstance';
 import './visualizationeditor.css'; // Import the new CSS file
 
 interface VisualizationEditorProps {
@@ -9,6 +10,7 @@ interface VisualizationEditorProps {
   onSave: (spec: object, imageUrl: string) => void;
   onCancel: () => void;
   availableInstances: Instance[];
+  currentSuggestion?: ProactiveSuggestion;
 }
 
 const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
@@ -16,6 +18,7 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
   onSave,
   onCancel,
   availableInstances,
+  currentSuggestion,
 }) => {
   const [spec, setSpec] = useState(
     typeof initialSpec === 'string'
@@ -83,7 +86,7 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
   };
 
   return (
-    <div className="view-container">
+    <div className="view-container" style={{ position: 'relative' }}>
       <div className="view-title-container">
         <h3 style={{ margin: 0 }}>Edit Visualization (Vega-Lite)</h3>
         <div className="vis-editor-actions">
@@ -166,6 +169,16 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
            </div>
         </div>
       </main>
+      
+      {/* Render ghost instances for proactive suggestions */}
+      {currentSuggestion && currentSuggestion.instances.map((instanceEvent, index) => (
+        <div key={`ghost-${index}`} style={{ position: 'absolute', top: '50%', left: '60%', transform: 'translate(-50%, -50%)', zIndex: 1000, pointerEvents: 'none' }}>
+          <GhostInstance
+            instanceEvent={instanceEvent}
+            existingInstances={availableInstances}
+          />
+        </div>
+      ))}
     </div>
   );
 };

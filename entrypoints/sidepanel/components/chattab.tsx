@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { Message, Instance } from '../types';
+import { Message, Instance, ChatType } from '../types';
 import { chatWithAgent } from '../api-selector';
 import { generateInstanceContext, detectMarkdown, renderMarkdown, generateId, updateInstances } from '../utils';
+import { contextService } from '../context-service';
+import { proactiveService } from '../proactive-service';
 import './chattab.css';
 
 interface ChatTabProps {
@@ -13,6 +15,7 @@ interface ChatTabProps {
     instances: Instance[];
     htmlContext: Record<string, { pageURL: string, htmlContent: string }>;
     setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
+    logs: string[];
 }
 
 const ChatTab: React.FC<ChatTabProps> = ({
@@ -23,7 +26,8 @@ const ChatTab: React.FC<ChatTabProps> = ({
     setAgentLoading,
     instances,
     htmlContext,
-    setInstances
+    setInstances,
+    logs
 }) => {
     const [inputValue, setInputValue] = useState('');
     const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -131,6 +135,8 @@ const ChatTab: React.FC<ChatTabProps> = ({
                     e.preventDefault();
                     selectAutocompleteItem(autoCompleteList[autoCompleteIndex]);
                 }
+                // Always trigger user activity when Tab is pressed
+                proactiveService.triggerActivity('user_action');
                 break;
         }
     };
@@ -157,7 +163,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
 
     // Common function to call the LLM API
     const callLLMApi = async (
-        chatType: 'chat' | 'infer',
+        chatType: ChatType,
         userMessage: string, 
         conversationHistory: Message[], 
         currentInstances: Instance[]
@@ -166,11 +172,13 @@ const ChatTab: React.FC<ChatTabProps> = ({
         
         if (import.meta.env.WXT_USE_LLM == "true") {
             const { imageContext, textContext } = await generateInstanceContext(currentInstances);
+            const logs = contextService.getLogs();
             let result = await chatWithAgent(chatType, userMessage,
                 conversationHistory,
                 textContext,
                 imageContext,
-                htmlContext
+                htmlContext,
+                logs
             );
             message = result.message;
             newInstances = result.instances || [];

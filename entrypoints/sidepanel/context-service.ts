@@ -7,6 +7,7 @@ class ContextService {
   private messages: Message[] = [];
   private htmlContext: Record<string, {pageURL: string, htmlContent: string}> = {};
   private imageContext: any[] = [];
+  private logs: string[] = [];
 
   // Set instances
   setInstances(instances: Instance[]): void {
@@ -26,6 +27,16 @@ class ContextService {
   // Get messages
   getMessages(): Message[] {
     return this.messages;
+  }
+
+  // Set logs
+  setLogs(logs: string[]): void {
+    this.logs = logs;
+  }
+
+  // Get logs
+  getLogs(): string[] {
+    return this.logs;
   }
 
   // Set HTML contexts

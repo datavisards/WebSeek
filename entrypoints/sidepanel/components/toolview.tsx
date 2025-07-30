@@ -61,6 +61,7 @@ const ToolView: React.FC<ToolViewProps> = ({
                         instances={instances}
                         htmlContext={htmlContext}
                         setInstances={setInstances}
+                        logs={logs}
                     />
                 )}
                 {activeTab === 'code' && (

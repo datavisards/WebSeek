@@ -10,12 +10,14 @@ import RenameModal from './renamemodal';
 import VisualizationEditor from './visualizationeditor';
 import InstanceViewHeader from './InstanceViewHeader';
 import InstanceContextMenu from './InstanceContextMenu';
+import GhostInstance from './GhostInstance';
 import { createEmbeddedTextInstance, createEmbeddedImageInstance, createManualSource } from './instanceview-utils';
 import { useHTMLContent } from './useHTMLContent';
 import { useInputHandlers } from './useInputHandlers';
 import './instanceview.css';
 import { message } from 'vega-lite/types_unstable/log/index.js';
 import { chatWithAgent } from '../api-selector';
+import { ProactiveSuggestion } from '../types';
 
 // Props interface for the component
 interface InstanceViewProps {
@@ -28,9 +30,10 @@ interface InstanceViewProps {
   updateHTMLContext: React.Dispatch<React.SetStateAction<Record<string, {pageURL: string, htmlContent: string}>>>;
   addMessage: (message: Message) => void;
   setAgentLoading: (loading: boolean) => void;
+  currentSuggestion?: ProactiveSuggestion; // For ghost preview rendering
 }
 
-const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, onOperation, updateHTMLContext, addMessage, setAgentLoading }: InstanceViewProps) => {
+const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, onOperation, updateHTMLContext, addMessage, setAgentLoading, currentSuggestion }: InstanceViewProps) => {
   // Custom hooks
   const { fetchHTMLContent } = useHTMLContent(updateHTMLContext);
   const instancesRef = useRef<Instance[]>([]);
@@ -568,6 +571,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     setInstances(prev => [...prev, newSketch]);
     setAvailableInstances(instances.filter(inst => inst.type !== 'sketch'));
     setEditingSketchId(newSketch.id);
+    onOperation(`Open sketch editor to create a new sketch "${newId}"`);
   };
 
   // Add an instance to the sketch
@@ -677,6 +681,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   // Cancel sketch creation
   const handleCancelSketch = () => {
     if (!editingSketchId) return;
+    onOperation(`Cancel sketch creation for "${editingSketchId}"`);
     setInstances(prev => prev.filter(inst => inst.id !== editingSketchId));
     setEditingSketchId(null);
   };
@@ -990,6 +995,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     const instanceToDelete = instancesRef.current.find(inst => inst.id === instanceId);
     if (!instanceToDelete) return;
 
+    onOperation(`Delete ${instanceToDelete.type} "${instanceId}"`);
     // Set all state updates together
     setInstances(prev => prev.filter(inst => inst.id !== instanceId));
     setDeletedInstances(prev => [...prev, instanceToDelete]);
@@ -1009,6 +1015,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     const instanceToRestore = deletedInstancesRef.current.find(inst => inst.id === instanceId);
     if (!instanceToRestore) return;
 
+    onOperation(`Restore ${instanceToRestore.type} "${instanceId}" from trash`);
     // Update states
     setDeletedInstances(prev => prev.filter(inst => inst.id !== instanceId));
     setInstances(prev => [...prev, instanceToRestore]);
@@ -1076,6 +1083,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     if (instance.type === 'text') {
       setEditingTextId(instance.id);
       setEditingTextContent(instance.content);
+      onOperation(`Edit text "${instance.id}" by editing the embedded text content`);
     } else if (instance.type === 'image' || instance.type === 'sketch') {
       let newId = `Sketch${sketchCount + 1}`;
       setSketchCount(prev => prev + 1);
@@ -1115,6 +1123,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
       setInstances(prev => [...prev, newSketch]);
       setEditingSketchId(newSketch.id);
       setAvailableInstances(prev => prev.filter(inst => inst.id !== instance.id && inst.type !== 'sketch'));
+      onOperation(`Edit ${instance.type} "${instance.id}" by editing the embedded ${instance.type} in sketch "${newSketch.id}"`);
     } else if (instance.type === 'table') {
       let newTable = structuredClone(instance) as TableInstance;
       newTable.id = generateId();
@@ -1122,9 +1131,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
       setInstances(prev => [...prev, newTable]);
       setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
       setEditingTableId(newTable.id);
+      onOperation(`Edit table "${instance.id}" by editing the embedded table "${newTable.id}"`);
     } else if (instance.type === 'visualization') {
       setEditingVisualizationSpec(instance.spec);
       setAvailableInstances(instances.filter(inst => inst.type !== 'visualization'));
+      onOperation(`Edit visualization "${instance.id}" by editing the embedded visualization spec`);
     }
   }
 
@@ -1150,7 +1161,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     ]);
     const newDisplay = editingTextContent;
 
-    onOperation(`Edited [${originalDisplay}](#instance-${original.id}) into [${newDisplay}](#instance-${newTextId})`);
+    onOperation(`Save text editing of "${original.id}" changing value from "${originalDisplay}" to "${newDisplay}" creating new text "${newTextId}"`);
 
     setEditingTextId(null);
   };
@@ -1297,12 +1308,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     setEditingTableId(newId);
     setInstances(prev => [...prev, newTable]);
     setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
+    onOperation(`Opened table editor to created a new table with ID "${newId}"`);
   };
 
   // Handle adding to table cell (for both click and drag-and-drop)
   const handleAddToTable = useCallback((instance: Instance, row: number, col: number) => {
     if (!editingTableId) return;
     console.log("Adding to table cell", instance, row, col);
+    onOperation(`Add ${instance.type} "${instance.id}" to table cell (${row + 1}, ${String.fromCharCode(65 + col)}) in table "${editingTableId}"`);
 
     let embedded: EmbeddedInstance | null = null;
 
@@ -1338,6 +1351,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   const removeCellContent = (row: number, col: number) => {
     console.log(row, col, "Removing cell content");
     if (!editingTableId) return;
+    onOperation(`Remove content from table cell (${row + 1}, ${String.fromCharCode(65 + col)}) in table "${editingTableId}"`);
     setInstances(prev => prev.map(inst => {
       if (inst.id === editingTableId && inst.type === 'table') {
         const newCells = [...inst.cells];
@@ -1376,15 +1390,16 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     }
 
     if (originalInstanceId) {
-      onOperation(`Created [${newId}](#instance-${newId}) from [${originalInstanceId}](#instance-${originalInstanceId})` + (withstr ? ` with ${withstr}` : ''));
+      onOperation(`Saved and closed the table editor. Created [${newId}](#instance-${newId}) from [${originalInstanceId}](#instance-${originalInstanceId})` + (withstr ? ` with ${withstr}` : ''));
     } else {
-      onOperation(`Created [${newId}](#instance-${newId})` + (withstr ? ` with ${withstr}` : ''));
+      onOperation(`Saved and closed the table editor. Created [${newId}](#instance-${newId})` + (withstr ? ` with ${withstr}` : ''));
     }
     setEditingTableId(null);
   };
 
   const cancelTableEdit = () => {
     if (!editingTableId) return;
+    onOperation(`Cancelled table editing for "${editingTableId}" and closed the table editor`);
     setInstances(prev => prev.filter(inst => inst.id !== editingTableId));
     setEditingTableId(null);
   };
@@ -1409,6 +1424,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   // Handle adding a row to the table
   const handleAddRow = (position: 'before' | 'after', rowIndex: number) => {
     if (!editingTableId) return;
+    onOperation(`Add row ${position} row ${rowIndex + 1} in table "${editingTableId}"`);
 
     setInstances(prev => prev.map(inst => {
       if (inst.id === editingTableId && inst.type === 'table') {
@@ -1431,6 +1447,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   // Handle removing a row from the table
   const handleRemoveRow = (rowIndex: number) => {
     if (!editingTableId) return;
+    onOperation(`Remove row ${rowIndex + 1} from table "${editingTableId}"`);
 
     setInstances(prev => prev.map(inst => {
       if (inst.id === editingTableId && inst.type === 'table') {
@@ -1452,6 +1469,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   // Handle adding a column to the table
   const handleAddColumn = (position: 'before' | 'after', colIndex: number) => {
     if (!editingTableId) return;
+    onOperation(`Add column ${position} column ${String.fromCharCode(65 + colIndex)} in table "${editingTableId}"`);
 
     setInstances(prev => prev.map(inst => {
       if (inst.id === editingTableId && inst.type === 'table') {
@@ -1476,6 +1494,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   // Handle removing a column from the table
   const handleRemoveColumn = (colIndex: number) => {
     if (!editingTableId) return;
+    onOperation(`Remove column ${String.fromCharCode(65 + colIndex)} from table "${editingTableId}"`);
 
     setInstances(prev => prev.map(inst => {
       if (inst.id === editingTableId && inst.type === 'table') {
@@ -1575,7 +1594,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
         // If using LLM, we need to generate the context first
         const { imageContext, textContext } = await generateInstanceContext(targetInstances);
         // let result = await parseLogWithAgent(logs, textContext, imageContext, htmlContext, instance.id);
-        let result = await chatWithAgent('infer', userMsg, messages, textContext, imageContext, htmlContext);
+        let result = await chatWithAgent('infer', userMsg, messages, textContext, imageContext, htmlContext, logs);
         message = result.message;
         newInstances = result.instances || [];
       } else {
@@ -1607,6 +1626,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
 
   const handleRename = (instance: Instance) => {
     setRenamingInstance(instance);
+    onOperation(`Open rename modal to rename ${instance.type} "${instance.id}"`);
   };
 
   const updateInstanceReferences = useCallback((oldId: string, newId: string) => {
@@ -1680,6 +1700,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
 
     // Update state with the fully updated instance tree
     setInstances(updatedInstances);
+    onOperation(`Rename instance "${oldId}" to "${newId}"`);
 
     // Update component state variables that reference the instance
     if (selectedInstanceId === oldId) setSelectedInstanceId(newId);
@@ -1723,6 +1744,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     setMode(newMode);
     setSelectionBox(null);
     setSelectedInstanceIds([]);
+    onOperation(`Switch to ${newMode} mode`);
   };
 
   // Handle mouse down for selection mode
@@ -1765,6 +1787,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   // Batch delete selected
   const handleBatchDelete = () => {
     if (selectedInstanceIds.length === 0) return;
+    onOperation(`Delete batch selection: ${selectedInstanceIds.map(id => `"${id}"`).join(', ')}`);
     setInstances(prev => prev.filter(inst => !selectedInstanceIds.includes(inst.id)));
     setDeletedInstances(prev => [
       ...prev,
@@ -1908,6 +1931,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     };
     setEditingVisualizationSpec(defaultSpec);
     setAvailableInstances(instances.filter(inst => inst.type === 'table' || inst.type === 'text' || inst.type === 'image'));
+    onOperation(`Open visualization editor to create a new visualization with default bar chart template`);
   };
 
   // Add save/cancel handlers for VisualizationEditor
@@ -1934,6 +1958,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     onOperation(`Created [${newId}](#instance-${newId}) as visualization`);
   };
   const handleCancelVisualization = () => {
+    onOperation(`Cancel visualization creation`);
     setEditingVisualizationSpec(null);
     setAvailableInstances([]);
   };
@@ -1977,6 +2002,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
             handleEmbeddedMouseMove={handleEmbeddedMouseMove}
             handleEmbeddedMouseUp={handleEmbeddedMouseUp}
             draggingEmbeddedId={draggingEmbeddedId}
+            currentSuggestion={currentSuggestion}
           />
         ) : showTrash ? (
           // Trash View
@@ -1991,6 +2017,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
             editingTextContent={editingTextContent}
             onSave={handleSaveText}
             onCancel={() => setEditingTextId(null)}
+            currentSuggestion={currentSuggestion}
           />
         ) : editingTableId ? (
           // Table Editor View
@@ -2012,6 +2039,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
             onRemoveRow={handleRemoveRow}
             onAddColumn={handleAddColumn}
             onRemoveColumn={handleRemoveColumn}
+            currentSuggestion={currentSuggestion}
           />
         ) : editingVisualizationSpec ? (
           // Visualization Editor View
@@ -2020,6 +2048,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
             onSave={handleSaveVisualization}
             onCancel={handleCancelVisualization}
             availableInstances={availableInstances}
+            currentSuggestion={currentSuggestion}
           />
         ) : (
           // Default Instance View
@@ -2315,6 +2344,15 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
                       </>
                     )}
                   </div>
+                ))}
+                
+                {/* Render ghost instances for proactive suggestions */}
+                {currentSuggestion && currentSuggestion.instances.map((instanceEvent, index) => (
+                  <GhostInstance
+                    key={`ghost-${index}`}
+                    instanceEvent={instanceEvent}
+                    existingInstances={instances}
+                  />
                 ))}
               </div>
             </div>

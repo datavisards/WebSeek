@@ -2,7 +2,8 @@
 import React, { useState } from 'react';
 import { browser } from 'wxt/browser';
 import TableGrid from './tablegrid';
-import { TableInstance, Instance } from '../types';
+import { TableInstance, Instance, ProactiveSuggestion } from '../types';
+import GhostInstance from './GhostInstance';
 import './tableeditor.css';
 
 interface TableEditorProps {
@@ -23,6 +24,7 @@ interface TableEditorProps {
   onRemoveRow?: (rowIndex: number) => void;
   onAddColumn?: (position: 'before' | 'after', colIndex: number) => void;
   onRemoveColumn?: (colIndex: number) => void;
+  currentSuggestion?: ProactiveSuggestion;
 }
 
 const TableEditor: React.FC<TableEditorProps> = ({
@@ -43,6 +45,7 @@ const TableEditor: React.FC<TableEditorProps> = ({
   onRemoveRow,
   onAddColumn,
   onRemoveColumn,
+  currentSuggestion,
 }) => {
   const [selectedCell, setSelectedCell] = useState<{ row: number, col: number } | null>(null);
   
@@ -142,7 +145,7 @@ const TableEditor: React.FC<TableEditorProps> = ({
   if (!table) return null;
 
   return (
-    <div className="view-container">
+    <div className="view-container" style={{ position: 'relative' }}>
       <div className="view-title-container">
         <h3 style={{ margin: 0 }}>Edit Table</h3>
         <button onClick={onSaveTable}>Save</button>
@@ -173,7 +176,7 @@ const TableEditor: React.FC<TableEditorProps> = ({
         })()}
       </div>
 
-      <div className="table-container">
+      <div className="table-container" style={{ position: 'relative' }}>
         <TableGrid
           table={table}
           instances={instances}
@@ -187,6 +190,31 @@ const TableEditor: React.FC<TableEditorProps> = ({
           onAddColumn={onAddColumn}
           onRemoveColumn={onRemoveColumn}
         />
+        
+        {/* Render ghost instances for proactive suggestions - positioned to overlay the table */}
+        {currentSuggestion && currentSuggestion.instances.map((instanceEvent, index) => {
+          // Use consistent positioning based on table grid structure
+          const headerWidth = 50; // Row header width (matches tablegrid.tsx)
+          const headerHeight = 30; // Column header height (matches tablegrid.tsx)
+          
+          return (
+            <div 
+              key={`ghost-${index}`} 
+              style={{ 
+                position: 'absolute',
+                top: `${headerHeight + 10}px`, // Column header height + padding
+                left: `${headerWidth + 10}px`, // Row header width + padding
+                zIndex: 1000,
+                pointerEvents: 'none'
+              }}
+            >
+              <GhostInstance
+                instanceEvent={instanceEvent}
+                existingInstances={instances}
+              />
+            </div>
+          );
+        })}
       </div>
 
       <div className="available-instances">

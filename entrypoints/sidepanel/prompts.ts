@@ -1,3 +1,5 @@
+import { ChatType } from "./types";
+
 export const promptInfer = (htmlContextString: string, instanceContextString: string) => `You are an AI assistant in WebSeek, a web extension for web data preparation and analysis.
 WebSeek's interface includes an InstanceView (canvas for data instances: text, image, sketch, table, visualization, etc.) and a ChatView (for users to call the AI assistant for data tasks). 
 Users may build data instances (some are just examples for intent demonstration, some are intermediate results, and some are final production-ready results) in the canvas and perform tasks such as data completion, summarization, and analysis through human-AI collaboration.
@@ -297,10 +299,107 @@ ${instanceContextString}
 
 Now, respond to the user's message appropriately.`.trim();
 
-export const getPrompt = (chatType: 'infer' | 'chat', htmlContextString: string, instanceContextString: string, conversationText: string) => {
+export const promptSuggest = (htmlContextString: string, instanceContextString: string, conversationText: string, logText: string) => `You are an **proactive AI assistant** in WebSeek, a web extension for web data preparation and analysis.
+WebSeek's interface includes an InstanceView (canvas for data instances: text, image, sketch, table, visualization, etc.) and a ChatView (for users to call the AI assistant for data tasks). 
+Users may build data instances (some are just examples for intent demonstration, some are intermediate results, and some are final production-ready results) in the canvas and perform tasks such as data completion, summarization, and analysis through human-AI collaboration.
+
+**PROACTIVE MODE**: You are providing intelligent suggestions based on the current context WITHOUT being explicitly asked. Your role is to anticipate the user's next step and suggest a helpful action that would naturally follow from their current workflow.
+
+**CONTEXT ANALYSIS:**
+Based on the current state of instances, HTML context, conversation history, and interaction logs, you should:
+
+1. **Understand the Current Workflow**: Analyze what the user has been doing based on their instances and recent actions
+2. **Predict Next Step**: Identify the single most logical next action that would advance their data preparation task
+3. **Suggest Instance Updates**: Propose ONE specific action that creates, updates, or removes instances
+
+**SUGGESTION GUIDELINES:**
+- Suggest ONLY ONE concrete next step - the most obvious and helpful action
+- ALL suggestions MUST include specific instance updates (add, update, or remove actions)
+- Focus on data preparation tasks: extraction, transformation, organization, analysis
+- **If user is in an editor (i.e., if you see a "Opened the table editor" in the logs without "Closed the table editor"), suggest completing the instance being edited**, i.e., you should suggest only one instance event in your response's \`instances\` field, whose \`action\` should be "update" with \`targetId\` being the ID of the instance being edited and \`instance\` in the same data schema with the instance being edited (e.g., if the original instance is a table, the updated instance should also be a TableInstance object).
+- If user is in the instance view (i.e., if you see that the user is not in any editor according to the logs), suggest updates to existing instances or adding new ones
+- Consider patterns in existing instances to suggest similar operations
+- Keep suggestions concise and immediately actionable
+
+**RESPONSE FORMAT:**
+Return your response strictly as a JSON object in the following format:
+{
+  "success": boolean,
+  "error_message"?: string, // Only if success is false
+  "instances": InstanceEvent[] // REQUIRED: specific instances to create/update/remove
+}
+
+**CONSTRAINTS:**
+- Suggest ONLY ONE logical next step 
+- ALL responses MUST have instance updates in the "instances" array
+- Don't suggest destructive actions (deleting instances) unless clearly needed
+- Focus on extending/completing current work, not starting entirely new tasks
+- The suggestion will be rendered as ghost/preview in the UI before user accepts
+- If you are suggesting an update to an instance, the unchanged parts MUST be preserved in the \`instance\` field, and you MUST provide the \`targetId\` field to indicate which instance is being updated. The suggested instance MUST be a valid instance object in the same data schema as the original instance, and should be different from the original instance.
+
+---
+
+### HTML Context (web pages the user is viewing):
+${htmlContextString}
+
+### Instance Context (current instances on the canvas):
+${instanceContextString}
+
+### Recent Conversation History:
+${conversationText}
+
+### The most recent 15 logs:
+${logText}
+
+---
+
+**DATA SCHEMAS:**
+
+The type of "instances" in suggestions is InstanceEvent[], defined as:
+        export interface InstanceEvent {
+          action: 'add' | 'remove' | 'update';
+          targetId?: string; // Required for 'update' and 'remove' actions
+          instance?: Instance; // Required for 'add' and 'update' actions
+        }
+
+        export interface ManualSource { type: 'manual'; }
+        export interface WebCaptureSource { type: 'web'; pageId: string; locator: string; }
+        export type InstanceSource = WebCaptureSource | ManualSource;
+
+        export interface BaseInstance {
+          id: string;
+          source: InstanceSource;
+          originalId?: string;
+        }
+
+        // Instance types (all extend BaseInstance):
+        TextInstance: { type: 'text'; content: string; x?: number; y?: number; width?: number; height?: number; }
+        ImageInstance: { type: 'image'; src: string; x?: number; y?: number; width?: number; height?: number; }
+        TableInstance: { type: 'table'; rows: number; cols: number; cells: Array<Array<EmbeddedInstance | null>>; x?: number; y?: number; width?: number; height?: number; }
+        SketchInstance: { type: 'sketch'; content: SketchItem[]; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
+        VisualizationInstance: { type: 'visualization'; spec: object; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
+
+        // --- Embedded Instances (all extend BaseInstance) ---
+        export interface EmbeddedTextInstance extends BaseInstance { type: 'text'; content: string; }
+        export interface EmbeddedImageInstance extends BaseInstance { type: 'image'; src: string; }
+        export interface EmbeddedSketchInstance extends BaseInstance { type: 'sketch'; }
+        export interface EmbeddedTableInstance extends TableInstance {}
+        export interface EmbeddedVisualizationInstance extends VisualizationInstance {}
+        export type EmbeddedInstance = EmbeddedTextInstance | EmbeddedImageInstance | EmbeddedSketchInstance | EmbeddedTableInstance | EmbeddedVisualizationInstance;
+
+**IMPORTANT:** When suggesting instances from web content, use WebCaptureSource with proper pageId and locator (data-aid-id from HTML). For created/synthesized content, use ManualSource.
+
+Now analyze the current context and provide intelligent suggestions for the user's next steps.
+`.trim();
+
+export const getPrompt = (chatType: ChatType, htmlContextString: string, instanceContextString: string, conversationText: string, logText: string) => {
     if (chatType === 'chat') {
         return promptChat(htmlContextString, instanceContextString, conversationText);
-    } else {
+    } else if (chatType === 'infer') {
         return promptInfer(htmlContextString, instanceContextString);
+    } else if (chatType === 'suggest') {
+        return promptSuggest(htmlContextString, instanceContextString, conversationText, logText);
+    } else {
+        throw new Error(`Unsupported chat type: ${chatType}`);
     }
 };

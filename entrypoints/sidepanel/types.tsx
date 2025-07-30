@@ -152,12 +152,13 @@ export interface VisualizationInstance extends BaseInstance {
 /** The main union type for all standalone instances. */
 export type Instance = TextInstance | ImageInstance | SketchInstance | TableInstance | VisualizationInstance;
 
-// --- Other types (unchanged) ---
+// --- Other types ---
 
+export type ChatType = 'chat' | 'infer' | 'suggest';
 export interface Message {
   role: string;
   message: string;
-  chatType?: 'chat' | 'infer';
+  chatType?: ChatType;
   id?: string;
   isRetrying?: boolean;
   instancesCheckpoint?: Instance[];
@@ -169,3 +170,11 @@ export interface InstanceEvent {
   targetId?: string; // The original ID of the instance being modified or removed; NOT OPTIONAL FOR 'update' and 'remove' ACTIONS
   instance?: Instance; // The new content of the instance; NOT OPTIONAL FOR 'add' and 'update' ACTIONS
 }
+
+// Proactive suggestion - reuse existing chatWithAgent response format
+export interface ProactiveSuggestion {
+  message: string; // Brief description of what this suggestion will do
+  instances: InstanceEvent[]; // Instance updates to apply
+  id: string; // Unique identifier for tracking
+}
+

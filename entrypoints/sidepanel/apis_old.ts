@@ -6,7 +6,8 @@ import {
     EmbeddedImageInstance,
     EmbeddedSketchInstance,
     EmbeddedTableInstance,
-    Message
+    Message,
+    ChatType
 } from './types';
 import { extractJSONFromResponse } from './utils';
 import { getPrompt, promptChat, promptInfer } from './prompts';
@@ -17,16 +18,20 @@ const openai = new OpenAI({
     dangerouslyAllowBrowser: true
 });
 
-const model_name = "google/gemini-2.5-flash";
+const model_name = {
+    "chat": "google/gemini-2.5-flash",
+    "infer": "google/gemini-2.5-flash",
+    "suggest": "google/gemini-2.5-flash",
+};
 
 export async function chatWithAgent(
-    chatType: 'chat' | 'infer',
+    chatType: ChatType,
     userMessage: string,
     conversationHistory: Message[] = [],
     instanceContext: string = "",
     imageContext: any[] = [],
     htmlContext: Record<string, {pageURL: string, htmlContent: string}> = {},
-    // logs: string[] = [],
+    logs: string[] = [],
 ): Promise<{
     message: string;
     instances?: any[];
@@ -40,7 +45,7 @@ export async function chatWithAgent(
             `Page ID: ${pageId}\nPage URL: ${contextData.pageURL}\nHTML:\n\`\`\`html\n${contextData.htmlContent}\n\`\`\``).join('\n\n')
 
         // Format conversation history including operations
-        const conversationText = conversationHistory
+        let conversationText = conversationHistory
             .map(msg => {
                 let text = `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.message}`;
                 // Add operation logs for assistant messages if they exist
@@ -50,9 +55,18 @@ export async function chatWithAgent(
                 return text;
             })
             .join('\n');
+        if (conversationText == '') {
+            conversationText = 'No conversation history.';
+        }
+
+        // Construct log text
+        let logText = logs.length > 0 ? `${logs.slice(-15).map((log, index) => `${index + 1}. ${log}`).join('\n')}` : 'No logs available.';
+        
+        console.log('DEBUG: Logs array:', logs);
+        console.log('DEBUG: Log text:', logText);
 
         // Construct system prompt
-        const systemPrompt = getPrompt(chatType, htmlContextString, instanceContext, conversationText);
+        const systemPrompt = getPrompt(chatType, htmlContextString, instanceContext, conversationText, logText);
 
         console.log('System prompt:', systemPrompt);
         console.log('User message:', userMessage);
@@ -65,7 +79,7 @@ export async function chatWithAgent(
 
         // Call the LLM
         const completion = await openai.chat.completions.create({
-            model: model_name,
+            model: model_name[chatType],
             messages: [
                 {
                     role: "system",

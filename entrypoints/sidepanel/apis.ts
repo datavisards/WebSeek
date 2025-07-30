@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import axios from 'axios';
+import { ChatType } from './types';
 
 const openai = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1",
@@ -10,7 +11,7 @@ const openai = new OpenAI({
 const backendBaseURL = "http://localhost:8000/api"
 
 export async function chatWithAgent(
-  chatType: 'chat' | 'infer',
+  chatType: ChatType,
   userMessage: string,
 ): Promise<{
   message: string;

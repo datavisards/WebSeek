@@ -1,0 +1,234 @@
+/* GhostInstance.css */
+
+.ghost-instance {
+  pointer-events: none;
+  z-index: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.ghost-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+  backdrop-filter: blur(1px);
+}
+
+/* Ghost add instances */
+.ghost-add .ghost-content {
+  background: rgba(34, 197, 94, 0.25);
+  border: 2px dashed rgba(34, 197, 94, 0.7);
+  opacity: 0.95;
+}
+
+/* Ghost update instances */
+.ghost-update .ghost-content {
+  background: rgba(59, 130, 246, 0.25);
+  border: 2px dashed rgba(59, 130, 246, 0.7);
+  opacity: 0.95;
+}
+
+/* Ghost remove instances */
+.ghost-remove .ghost-content {
+  background: rgba(239, 68, 68, 0.25);
+  border: 2px dashed rgba(239, 68, 68, 0.7);
+  opacity: 0.95;
+}
+
+/* Content styling */
+.ghost-text-content {
+  padding: 4px;
+  margin: 0;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.ghost-image-content {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.7;
+}
+
+.ghost-table-content {
+  width: 100%;
+  height: 100%;
+  padding: 2px;
+}
+
+.ghost-table-grid {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+  height: 100%;
+}
+
+.ghost-table-cell {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  font-size: 8px;
+  padding: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghost-sketch-content,
+.ghost-viz-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ghost-sketch-thumb,
+.ghost-viz-thumb {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  opacity: 0.7;
+}
+
+.ghost-sketch-placeholder,
+.ghost-viz-placeholder {
+  font-size: 14px;
+  color: rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+
+.ghost-unknown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+/* Overlay with action information */
+.ghost-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.ghost-instance:hover .ghost-overlay {
+  opacity: 1;
+}
+
+.ghost-action-label {
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.ghost-hint {
+  background: rgba(255, 255, 255, 0.9);
+  color: #374151;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.ghost-hint kbd {
+  background: rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+  padding: 1px 3px;
+  font-size: 8px;
+  font-family: monospace;
+}
+
+/* ID label */
+.ghost-id-label {
+  position: absolute;
+  top: -16px;
+  left: -5px;
+  background: rgba(139, 92, 246, 0.9);
+  color: white;
+  font-size: 9px;
+  font-weight: 500;
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  z-index: 501;
+}
+
+/* Deletion overlay */
+.deletion-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(239, 68, 68, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #dc2626;
+}
+
+.deletion-icon {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+.deletion-text {
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: #dc2626;
+}
+
+/* Animation */
+@keyframes ghostAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+}
+
+.ghost-instance {
+  animation: ghostAppear 0.3s ease-out;
+}
+
+/* Pulsing effect to draw attention */
+@keyframes ghostPulse {
+  0%, 100% {
+    opacity: 0.95;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+.ghost-instance:not(:hover) {
+  animation: ghostPulse 2s infinite;
+}
