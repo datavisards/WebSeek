@@ -151,7 +151,6 @@ const SidePanel = () => {
     <div 
       className="side-panel"
     >
-      {/* <OperationView logs={logs} htmlContext={htmlContext}/> */}
       <InstanceView 
         instances={instances} 
         setInstances={setInstances} 
@@ -181,11 +180,6 @@ const SidePanel = () => {
       <SuggestionIndicator
         isVisible={isGeneratingSuggestions || suggestions.length > 0}
         isGenerating={isGeneratingSuggestions}
-      />
-      
-      <ProactiveSettings
-        isOpen={showSettings}
-        onClose={() => setShowSettings(false)}
       />
     </div>
   );

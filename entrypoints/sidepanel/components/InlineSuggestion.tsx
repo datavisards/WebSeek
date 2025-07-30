@@ -134,7 +134,7 @@ const InlineSuggestion: React.FC<InlineSuggestionProps> = ({
           <div className={`suggestion-content ${action}`}>
             {renderInstanceContent(existingContent)}
           </div>
-          <div className={`suggestion-indicator ${action}`}>×</div>
+          <div className={`suggestion-mark ${action}`}>×</div>
           <div className="suggestion-controls">
             <kbd>Tab</kbd> accept • <kbd>Esc</kbd> dismiss
           </div>
@@ -174,7 +174,7 @@ const InlineSuggestion: React.FC<InlineSuggestionProps> = ({
                 }
               })}
             </div>
-            <div className={`suggestion-indicator ${action}`}>↻</div>
+            <div className={`suggestion-mark ${action}`}>↻</div>
             <div className="suggestion-controls">
               <kbd>Tab</kbd> accept • <kbd>Esc</kbd> dismiss
             </div>
@@ -192,7 +192,7 @@ const InlineSuggestion: React.FC<InlineSuggestionProps> = ({
                 {renderInstanceContent(instance)}
               </div>
             </div>
-            <div className={`suggestion-indicator ${action}`}>↻</div>
+            <div className={`suggestion-mark ${action}`}>↻</div>
             <div className="suggestion-controls">
               <kbd>Tab</kbd> accept • <kbd>Esc</kbd> dismiss
             </div>
@@ -207,7 +207,6 @@ const InlineSuggestion: React.FC<InlineSuggestionProps> = ({
           <div className={`suggestion-content ${action}`}>
             {renderInstanceContent(instance)}
           </div>
-          <div className={`suggestion-indicator ${action}`}>+</div>
           <div className="suggestion-controls">
             <kbd>Tab</kbd> accept • <kbd>Esc</kbd> dismiss
           </div>
