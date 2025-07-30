@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import { browser } from 'wxt/browser';
 import TableGrid from './tablegrid';
 import { TableInstance, Instance, ProactiveSuggestion } from '../types';
-import GhostInstance from './GhostInstance';
 import './tableeditor.css';
 
 interface TableEditorProps {
@@ -189,32 +188,20 @@ const TableEditor: React.FC<TableEditorProps> = ({
           onRemoveRow={onRemoveRow}
           onAddColumn={onAddColumn}
           onRemoveColumn={onRemoveColumn}
+          currentSuggestion={currentSuggestion}
+          onAcceptSuggestion={() => {
+            // Handle accepting the suggestion
+            if (currentSuggestion) {
+              console.log('Accepting suggestion:', currentSuggestion);
+              // TODO: Apply the suggestion to the table
+            }
+          }}
+          onDismissSuggestion={() => {
+            // Handle dismissing the suggestion
+            console.log('Dismissing suggestion');
+            // TODO: Clear the current suggestion
+          }}
         />
-        
-        {/* Render ghost instances for proactive suggestions - positioned to overlay the table */}
-        {currentSuggestion && currentSuggestion.instances.map((instanceEvent, index) => {
-          // Use consistent positioning based on table grid structure
-          const headerWidth = 50; // Row header width (matches tablegrid.tsx)
-          const headerHeight = 30; // Column header height (matches tablegrid.tsx)
-          
-          return (
-            <div 
-              key={`ghost-${index}`} 
-              style={{ 
-                position: 'absolute',
-                top: `${headerHeight + 10}px`, // Column header height + padding
-                left: `${headerWidth + 10}px`, // Row header width + padding
-                zIndex: 1000,
-                pointerEvents: 'none'
-              }}
-            >
-              <GhostInstance
-                instanceEvent={instanceEvent}
-                existingInstances={instances}
-              />
-            </div>
-          );
-        })}
       </div>
 
       <div className="available-instances">

@@ -1170,4 +1170,47 @@ export function updateInstances(
     setInstances(instancesClone);
 }
 
-export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance, mapToObject, updateInstances };
+/**
+ * Compares two instances for content equality, ignoring source differences
+ * This is used for suggestion logic to avoid treating instances as different
+ * when only their source metadata differs (e.g., different locators)
+ */
+export function areInstancesContentEqual(instance1: Instance | EmbeddedInstance | null, instance2: Instance | EmbeddedInstance | null): boolean {
+  if (!instance1 && !instance2) return true;
+  if (!instance1 || !instance2) return false;
+  if (instance1.type !== instance2.type) return false;
+  
+  switch (instance1.type) {
+    case 'text':
+      return (instance1 as any).content === (instance2 as any).content;
+    case 'image':
+      return (instance1 as any).src === (instance2 as any).src;
+    case 'sketch':
+      // For sketches, compare content-related properties, not source
+      return (instance1 as any).data === (instance2 as any).data || 
+             (instance1 as any).thumbnail === (instance2 as any).thumbnail;
+    case 'table':
+      // For tables, compare structure and cell content
+      const table1 = instance1 as any;
+      const table2 = instance2 as any;
+      if (table1.rows !== table2.rows || table1.cols !== table2.cols) return false;
+      
+      // Compare each cell content
+      for (let r = 0; r < table1.rows; r++) {
+        for (let c = 0; c < table1.cols; c++) {
+          const cell1 = table1.cells?.[r]?.[c];
+          const cell2 = table2.cells?.[r]?.[c];
+          if (!areInstancesContentEqual(cell1, cell2)) return false;
+        }
+      }
+      return true;
+    case 'visualization':
+      // For visualizations, compare data and config
+      return (instance1 as any).data === (instance2 as any).data && 
+             (instance1 as any).config === (instance2 as any).config;
+    default:
+      return true; // Assume equal for unknown types
+  }
+}
+
+export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance, mapToObject, updateInstances, areInstancesContentEqual };

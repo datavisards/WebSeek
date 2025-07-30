@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { TableInstance, Instance, EmbeddedInstance } from '../types';
-import { getInstanceGeometry, indexToLetters } from '../utils';
+import { TableInstance, Instance, EmbeddedInstance, ProactiveSuggestion, InstanceEvent } from '../types';
+import { getInstanceGeometry, indexToLetters, areInstancesContentEqual } from '../utils';
+import InlineSuggestion from './InlineSuggestion';
 import './tablegrid.css';
 
 interface TableGridProps {
@@ -16,6 +17,9 @@ interface TableGridProps {
   onRemoveRow?: (rowIndex: number) => void;
   onAddColumn?: (position: 'before' | 'after', colIndex: number) => void;
   onRemoveColumn?: (colIndex: number) => void;
+  currentSuggestion?: ProactiveSuggestion;
+  onAcceptSuggestion?: () => void;
+  onDismissSuggestion?: () => void;
 }
 
 const TableGrid: React.FC<TableGridProps> = ({
@@ -30,7 +34,10 @@ const TableGrid: React.FC<TableGridProps> = ({
   onAddRow,
   onRemoveRow,
   onAddColumn,
-  onRemoveColumn
+  onRemoveColumn,
+  currentSuggestion,
+  onAcceptSuggestion,
+  onDismissSuggestion
 }) => {
   const cellWidth = Math.max(50, Math.min(200, getInstanceGeometry(table).width / table.cols));
   const cellHeight = Math.max(50, Math.min(200, getInstanceGeometry(table).height / table.rows));
@@ -52,6 +59,87 @@ const TableGrid: React.FC<TableGridProps> = ({
   // Add sort state after other useStates
   const [sortColumn, setSortColumn] = useState<number | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+
+  // Helper function to find suggestion for a specific cell
+  const getSuggestionForCell = (row: number, col: number): InstanceEvent | null => {
+    if (!currentSuggestion) return null;
+    
+    // First, check if this is a table update suggestion
+    const tableUpdateEvent = currentSuggestion.instances.find(event => 
+      event.instance?.type === 'table' && event.action === 'update'
+    );
+    
+    if (tableUpdateEvent && tableUpdateEvent.instance?.type === 'table') {
+      // Handle table update - compare cell by cell
+      const suggestedTable = tableUpdateEvent.instance as any;
+      const currentCell = table.cells[row]?.[col];
+      const suggestedCell = suggestedTable.cells?.[row]?.[col];
+      
+      // If there's no suggested cell but current cell exists, it's a remove
+      if (!suggestedCell && currentCell) {
+        return {
+          action: 'remove',
+          targetId: currentCell.id
+        };
+      }
+      
+      // If there's a suggested cell but no current cell, it's an add
+      if (suggestedCell && !currentCell) {
+        return {
+          action: 'add',
+          instance: suggestedCell
+        };
+      }
+      
+      // If both exist, check if they're different (update)
+      if (suggestedCell && currentCell) {
+        // Only show update suggestion if cells are actually different (ignoring source differences)
+        if (!areInstancesContentEqual(suggestedCell, currentCell)) {
+          return {
+            action: 'update',
+            targetId: currentCell.id,
+            instance: suggestedCell
+          };
+        }
+      }
+      
+      return null; // No changes for this cell
+    }
+    
+    // Fallback to original logic for non-table suggestions
+    return currentSuggestion.instances.find(event => {
+      if (event.action === 'remove') {
+        // For remove actions, check if targeting this cell's content
+        const cell = table.cells[row]?.[col];
+        return cell && cell.id === event.targetId;
+      } else if (event.instance) {
+        // For add/update actions, check position
+        const geometry = getInstanceGeometry(event.instance);
+        const cellX = col * cellWidth;
+        const cellY = row * cellHeight;
+        return geometry.x >= cellX && geometry.x < cellX + cellWidth &&
+               geometry.y >= cellY && geometry.y < cellY + cellHeight;
+      }
+      return false;
+    }) || null;
+  };
+
+  // Handle keyboard controls for suggestions
+  const handleSuggestionKeyDown = (e: React.KeyboardEvent, row: number, col: number) => {
+    const suggestion = getSuggestionForCell(row, col);
+    if (!suggestion) return false;
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      onAcceptSuggestion?.();
+      return true;
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      onDismissSuggestion?.();
+      return true;
+    }
+    return false;
+  };
 
   // Memoize sorted rows
   const sortedRows = useMemo(() => {
@@ -478,6 +566,7 @@ const TableGrid: React.FC<TableGridProps> = ({
           const isCellSelected = selectedCell?.row === rowIndex && selectedCell?.col === colIndex;
           const isEditing = editingCell?.row === rowIndex && editingCell?.col === colIndex;
           const isHeaderSelected = isSelectedViaHeader(rowIndex, colIndex);
+          const suggestion = getSuggestionForCell(rowIndex, colIndex);
 
           return (
             <div
@@ -486,7 +575,8 @@ const TableGrid: React.FC<TableGridProps> = ({
                   ${isHovered ? 'drop-zone' : ''} 
                   ${isCellSelected ? 'selected' : ''}
                   ${isHeaderSelected ? 'header-selected' : ''}
-                  ${isEditing ? 'editing' : ''}`}
+                  ${isEditing ? 'editing' : ''}
+                  ${suggestion ? 'has-suggestion' : ''}`}
               onDragOver={isReadOnly ? undefined : (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -514,6 +604,12 @@ const TableGrid: React.FC<TableGridProps> = ({
                   alert('This type of content cannot be edited directly. Please remove it first.');
                 }
               }}
+              onKeyDown={(e) => {
+                if (!handleSuggestionKeyDown(e, rowIndex, colIndex)) {
+                  handleArrowNavigation(e);
+                }
+              }}
+              tabIndex={suggestion ? 0 : -1}
               style={{
                 gridRow: rowIndex + 2,
                 gridColumn: colIndex + 2,
@@ -536,6 +632,13 @@ const TableGrid: React.FC<TableGridProps> = ({
                 >
                   {cell && cell.type === 'text' ? cell.content : ''}
                 </div>
+              ) : suggestion ? (
+                <InlineSuggestion
+                  instanceEvent={suggestion}
+                  existingContent={cell}
+                  onAccept={() => onAcceptSuggestion?.()}
+                  onDismiss={() => onDismissSuggestion?.()}
+                />
               ) : cell ?
                 <div
                   key={cell.id}

@@ -26,6 +26,15 @@
   background-color: rgba(74, 144, 226, 0.1);
 }
 
+.table-cell.has-suggestion {
+  position: relative;
+}
+
+.table-cell.has-suggestion:focus {
+  outline: 2px solid rgba(59, 130, 246, 0.5);
+  outline-offset: -1px;
+}
+
 .table-cell.editing {
   box-shadow: 0 0 0 2.5px #4a90e2;
   z-index: 1;
