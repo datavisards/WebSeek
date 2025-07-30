@@ -1,5 +1,5 @@
 import React from 'react';
-import { Instance, InstanceEvent } from '../types';
+import { Instance, InstanceEvent, SketchInstance, VisualizationInstance } from '../types';
 import { getInstanceGeometry } from '../utils';
 import './GhostInstance.css';
 
@@ -87,8 +87,8 @@ const GhostInstance: React.FC<GhostInstanceProps> = ({
       case 'sketch':
         return (
           <div className="ghost-sketch-content">
-            {instance.thumbnail ? (
-              <img src={instance.thumbnail} alt="Sketch preview" className="ghost-sketch-thumb" />
+            {(instance as SketchInstance).thumbnail ? (
+              <img src={(instance as SketchInstance).thumbnail} alt="Sketch preview" className="ghost-sketch-thumb" />
             ) : (
               <div className="ghost-sketch-placeholder">✏️ Sketch</div>
             )}
@@ -98,8 +98,8 @@ const GhostInstance: React.FC<GhostInstanceProps> = ({
       case 'visualization':
         return (
           <div className="ghost-viz-content">
-            {instance.thumbnail ? (
-              <img src={instance.thumbnail} alt="Viz preview" className="ghost-viz-thumb" />
+            {(instance as VisualizationInstance).thumbnail ? (
+              <img src={(instance as VisualizationInstance).thumbnail} alt="Viz preview" className="ghost-viz-thumb" />
             ) : (
               <div className="ghost-viz-placeholder">📊 Chart</div>
             )}

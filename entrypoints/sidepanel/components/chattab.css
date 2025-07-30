@@ -142,12 +142,38 @@
 
 .message-input {
   flex: 1;
-  padding: 5px 15px;
+  padding: 7px 15px;
   border: 1px solid #ddd;
   border-radius: 24px;
   margin-right: 8px;
   font-size: 14px;
-  width: calc(100% - 30px);
+  width: 100%;
+  box-sizing: border-box;
+  
+  /* Scrollbar and clipping fixes */
+  overflow-y: auto;
+  background-clip: padding-box;
+  /* prevent text under scrollbar */
+  padding-right: 25px;
+  
+  /* Optional: smooth scrolling */
+  scroll-behavior: smooth;
+}
+
+/* Optional: scrollbar styling for webkit browsers */
+.message-input::-webkit-scrollbar {
+  width: 8px;
+  border-radius: 24px;
+}
+
+.message-input::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 24px;
+}
+
+.message-input::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 24px;
 }
 
 .loading-indicator {

@@ -5,20 +5,20 @@
     const iframe = document.getElementById('snapshot-frame');
     const urlInfo = document.getElementById('url-info');
     
-    function showError(message) {
-        loadingEl.style.display = 'none';
-        iframe.style.display = 'none';
-        errorEl.textContent = message;
-        errorEl.style.display = 'block';
+    function showError(message: string) {
+        loadingEl!.style.display = 'none';
+        (iframe as HTMLIFrameElement)!.style.display = 'none';
+        errorEl!.textContent = message;
+        errorEl!.style.display = 'block';
     }
     
     function showContent() {
-        loadingEl.style.display = 'none';
-        errorEl.style.display = 'none';
-        iframe.style.display = 'block';
+        loadingEl!.style.display = 'none';
+        errorEl!.style.display = 'none';
+        (iframe as HTMLIFrameElement)!.style.display = 'block';
     }
     
-    function highlightElement(element) {
+    function highlightElement(element: HTMLElement) {
         if (!element) return;
         
         // Scroll element into view
@@ -31,7 +31,7 @@
         
         // Get element position relative to the iframe's content
         const rect = element.getBoundingClientRect();
-        const iframeDocument = iframe.contentDocument;
+        const iframeDocument = (iframe as HTMLIFrameElement).contentDocument!;
         const scrollTop = iframeDocument.documentElement.scrollTop || iframeDocument.body.scrollTop;
         const scrollLeft = iframeDocument.documentElement.scrollLeft || iframeDocument.body.scrollLeft;
         
@@ -51,7 +51,7 @@
         }, 5000);
     }
     
-    function findElementByLocator(locator, iframeDocument) {
+    function findElementByLocator(locator: any, iframeDocument: Document) {
         if (!locator || !iframeDocument) return null;
         
         try {
@@ -96,21 +96,21 @@
         
         // Update URL info
         if (snapshotData.originalUrl) {
-            urlInfo.textContent = `Original URL: ${snapshotData.originalUrl}`;
+            urlInfo!.textContent = `Original URL: ${snapshotData.originalUrl}`;
         }
         
         // Set up iframe with sandbox for security
-        iframe.sandbox = 'allow-same-origin';
-        iframe.srcdoc = snapshotData.htmlContent;
+        (iframe as HTMLIFrameElement).sandbox = 'allow-same-origin';
+        (iframe as HTMLIFrameElement).srcdoc = snapshotData.htmlContent;
         
         // Wait for iframe to load and then highlight element
-        iframe.onload = () => {
+        (iframe as HTMLIFrameElement).onload = () => {
             showContent();
             
             if (locator) {
                 // Give the iframe content a moment to fully render
                 setTimeout(() => {
-                    const targetElement = findElementByLocator(locator, iframe.contentDocument);
+                    const targetElement = findElementByLocator(locator, (iframe as HTMLIFrameElement).contentDocument!);
                     if (targetElement) {
                         highlightElement(targetElement);
                     } else {
@@ -120,12 +120,12 @@
             }
         };
         
-        iframe.onerror = () => {
+        (iframe as HTMLIFrameElement).onerror = () => {
             showError('Failed to load snapshot content');
         };
         
     } catch (error) {
         console.error('Error loading snapshot:', error);
-        showError(`Error loading snapshot: ${error.message}`);
+        showError(`Error loading snapshot: ${(error as Error).message}`);
     }
 })();

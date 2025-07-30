@@ -13,7 +13,9 @@ import { updateInstances } from './utils';
 
 const SidePanel = () => {
   const [logs, setLogs] = useState<string[]>([]);
+  const logsRef = useRef<string[]>([]);
   const [htmlContext, setHtmlContexts] = useState<Record<string, {pageURL: string, htmlContent: string}>>({});
+  const htmlContextRef = useRef<Record<string, {pageURL: string, htmlContent: string}>>({});
   const [messages, setMessages] = useState<Message[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -23,8 +25,15 @@ const SidePanel = () => {
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
-  const addLog = (message: string) => {
-    setLogs(prev => [...prev, message]);
+  const addLog = (message: string, trigger: boolean = true) => {
+    const updatedLogs = [...logsRef.current, message];
+    setLogs(updatedLogs);
+    if (trigger) {
+      console.log("Triggering proactive suggestions due to logs update", updatedLogs);
+      proactiveService.triggerLogsUpdate(updatedLogs);
+    } else {
+      proactiveService.stopSuggestions(true);
+    }
   };
 
   const addMessage = (message: Message) => {
@@ -89,13 +98,13 @@ const SidePanel = () => {
     });
   }, [instances, messages, htmlContext]);
 
-  // Trigger proactive suggestions on logs update
   useEffect(() => {
-    console.log("Triggering proactive suggestions due to logs update", logs);
-    if (logs.length > 0 && Object.keys(htmlContext).length > 0) {
-      proactiveService.triggerLogsUpdate(logs);
-    }
+    logsRef.current = logs;
   }, [logs]);
+
+  useEffect(() => {
+    htmlContextRef.current = htmlContext;
+  }, [htmlContext]);
 
   // Connect websocket on mount, cleanup on unmount
   useEffect(() => {

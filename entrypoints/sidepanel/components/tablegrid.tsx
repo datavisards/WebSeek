@@ -39,8 +39,7 @@ const TableGrid: React.FC<TableGridProps> = ({
   onAcceptSuggestion,
   onDismissSuggestion
 }) => {
-  const cellWidth = Math.max(50, Math.min(200, getInstanceGeometry(table).width / table.cols));
-  const cellHeight = Math.max(50, Math.min(200, getInstanceGeometry(table).height / table.rows));
+  // These will be computed later based on effective table dimensions
   const [hoveredCell, setHoveredCell] = useState<{ row: number, col: number } | null>(null);
   const [editingCell, setEditingCell] = useState<{ row: number, col: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -59,6 +58,32 @@ const TableGrid: React.FC<TableGridProps> = ({
   // Add sort state after other useStates
   const [sortColumn, setSortColumn] = useState<number | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+
+  // Compute effective table dimensions including suggestions
+  const effectiveTable = useMemo(() => {
+    if (!currentSuggestion) return table;
+
+    // Find table update suggestion
+    const tableUpdateEvent = currentSuggestion.instances.find(event => 
+      event.instance?.type === 'table' && event.action === 'update'
+    );
+
+    if (tableUpdateEvent && tableUpdateEvent.instance?.type === 'table') {
+      const suggestedTable = tableUpdateEvent.instance as any;
+      // Return table with expanded dimensions to show suggested content
+      return {
+        ...table,
+        rows: Math.max(table.rows, suggestedTable.rows || 0),
+        cols: Math.max(table.cols, suggestedTable.cols || 0)
+      };
+    }
+
+    return table;
+  }, [table, currentSuggestion]);
+
+  // Update cell dimensions based on effective table
+  const effectiveCellWidth = Math.max(50, Math.min(200, getInstanceGeometry(table).width / effectiveTable.cols));
+  const effectiveCellHeight = Math.max(50, Math.min(200, getInstanceGeometry(table).height / effectiveTable.rows));
 
   // Helper function to find suggestion for a specific cell
   const getSuggestionForCell = (row: number, col: number): InstanceEvent | null => {
@@ -115,10 +140,10 @@ const TableGrid: React.FC<TableGridProps> = ({
       } else if (event.instance) {
         // For add/update actions, check position
         const geometry = getInstanceGeometry(event.instance);
-        const cellX = col * cellWidth;
-        const cellY = row * cellHeight;
-        return geometry.x >= cellX && geometry.x < cellX + cellWidth &&
-               geometry.y >= cellY && geometry.y < cellY + cellHeight;
+        const cellX = col * effectiveCellWidth;
+        const cellY = row * effectiveCellHeight;
+        return geometry.x >= cellX && geometry.x < cellX + effectiveCellWidth &&
+               geometry.y >= cellY && geometry.y < cellY + effectiveCellHeight;
       }
       return false;
     }) || null;
@@ -143,13 +168,15 @@ const TableGrid: React.FC<TableGridProps> = ({
 
   // Memoize sorted rows
   const sortedRows = useMemo(() => {
-    if (sortColumn === null || sortDirection === null) return table.cells;
+    if (sortColumn === null || sortDirection === null) {
+      return table.cells.map((row, idx) => ({ row, originalIndex: idx }));
+    }
     // Only sort if all cells in the column are text or null
     const canSort = table.cells.every(row => {
       const cell = row[sortColumn];
       return !cell || cell.type === 'text';
     });
-    if (!canSort) return table.cells;
+    if (!canSort) return table.cells.map((row, idx) => ({ row, originalIndex: idx }));
     
     // Check if all non-empty values in the column can be converted to numbers
     const columnValues = table.cells.map(row => {
@@ -189,8 +216,11 @@ const TableGrid: React.FC<TableGridProps> = ({
         return a.idx - b.idx;
       }
     });
-    return paired.map(p => p.row);
+    return paired.map(p => ({ row: p.row, originalIndex: p.idx }));
   }, [table.cells, sortColumn, sortDirection]);
+
+  // For backward compatibility, extract just the rows
+  const sortedRowsData = useMemo(() => sortedRows.map(item => item.row), [sortedRows]);
 
   useEffect(() => {
     if (editingCell !== null && inputRef.current) {
@@ -291,13 +321,13 @@ const TableGrid: React.FC<TableGridProps> = ({
           newRow = Math.max(0, selectedCell.row - 1);
           break;
         case 'ArrowDown':
-          newRow = Math.min(table.rows - 1, selectedCell.row + 1);
+          newRow = Math.min(effectiveTable.rows - 1, selectedCell.row + 1);
           break;
         case 'ArrowLeft':
           newCol = Math.max(0, selectedCell.col - 1);
           break;
         case 'ArrowRight':
-          newCol = Math.min(table.cols - 1, selectedCell.col + 1);
+          newCol = Math.min(effectiveTable.cols - 1, selectedCell.col + 1);
           break;
       }
 
@@ -370,8 +400,8 @@ const TableGrid: React.FC<TableGridProps> = ({
 
     const allRows = new Set<number>();
     const allColumns = new Set<number>();
-    for (let i = 0; i < table.rows; i++) allRows.add(i);
-    for (let i = 0; i < table.cols; i++) allColumns.add(i);
+    for (let i = 0; i < effectiveTable.rows; i++) allRows.add(i);
+    for (let i = 0; i < effectiveTable.cols; i++) allColumns.add(i);
 
     setSelectedRows(allRows);
     setSelectedColumns(allColumns);
@@ -469,8 +499,8 @@ const TableGrid: React.FC<TableGridProps> = ({
       className="table-grid"
       style={{
         display: 'grid',
-        gridTemplateColumns: `50px repeat(${table.cols}, ${cellWidth}px)`,
-        gridTemplateRows: `30px repeat(${table.rows}, ${cellHeight}px)`,
+        gridTemplateColumns: `50px repeat(${effectiveTable.cols}, ${effectiveCellWidth}px)`,
+        gridTemplateRows: `30px repeat(${effectiveTable.rows}, ${effectiveCellHeight}px)`,
         border: '1px solid #ccc',
         width: 'fit-content',
         flex: '1 1 auto',
@@ -491,7 +521,7 @@ const TableGrid: React.FC<TableGridProps> = ({
       />
 
       {/* Column Headers */}
-      {Array.from({ length: table.cols }, (_, colIndex) => (
+      {Array.from({ length: effectiveTable.cols }, (_, colIndex) => (
         <div
           key={`col-${colIndex}`}
           className={`grid-header column-header ${selectedColumns.has(colIndex) ? 'selected-header' : ''}`}
@@ -536,7 +566,7 @@ const TableGrid: React.FC<TableGridProps> = ({
       ))}
 
       {/* Row Headers */}
-      {Array.from({ length: table.rows }, (_, rowIndex) => (
+      {Array.from({ length: effectiveTable.rows }, (_, rowIndex) => (
         <div
           key={`row-${rowIndex}`}
           className={`grid-header row-header ${selectedRows.has(rowIndex) ? 'selected-header' : ''}`}
@@ -560,17 +590,36 @@ const TableGrid: React.FC<TableGridProps> = ({
       ))}
 
       {/* Content Cells */}
-      {sortedRows.map((row, rowIndex) => (
-        row.map((cell, colIndex) => {
-          const isHovered = hoveredCell?.row === rowIndex && hoveredCell?.col === colIndex;
-          const isCellSelected = selectedCell?.row === rowIndex && selectedCell?.col === colIndex;
-          const isEditing = editingCell?.row === rowIndex && editingCell?.col === colIndex;
-          const isHeaderSelected = isSelectedViaHeader(rowIndex, colIndex);
-          const suggestion = getSuggestionForCell(rowIndex, colIndex);
+      {Array.from({ length: effectiveTable.rows }, (_, displayRowIndex) => 
+        Array.from({ length: effectiveTable.cols }, (_, colIndex) => {
+          // Get cell and original row index for suggestion detection
+          let cell;
+          let originalRowIndex = displayRowIndex; // Default to display index
+          
+          if (displayRowIndex < sortedRows.length && colIndex < sortedRows[displayRowIndex].row.length) {
+            // Use sorted data and get original row index
+            cell = sortedRows[displayRowIndex].row[colIndex];
+            originalRowIndex = sortedRows[displayRowIndex].originalIndex;
+          } else if (displayRowIndex < table.rows && colIndex < table.cols) {
+            // Fallback to original table for edge cases
+            cell = table.cells[displayRowIndex]?.[colIndex];
+            originalRowIndex = displayRowIndex;
+          } else {
+            // Beyond original table dimensions - this is where new suggested rows/cols would appear
+            cell = undefined;
+            originalRowIndex = displayRowIndex;
+          }
+          
+          const isHovered = hoveredCell?.row === displayRowIndex && hoveredCell?.col === colIndex;
+          const isCellSelected = selectedCell?.row === displayRowIndex && selectedCell?.col === colIndex;
+          const isEditing = editingCell?.row === displayRowIndex && editingCell?.col === colIndex;
+          const isHeaderSelected = isSelectedViaHeader(displayRowIndex, colIndex);
+          // Use original row index for suggestion detection
+          const suggestion = getSuggestionForCell(originalRowIndex, colIndex);
 
           return (
             <div
-              key={`${rowIndex}-${colIndex}`}
+              key={`${displayRowIndex}-${colIndex}`}
               className={`table-cell 
                   ${isHovered ? 'drop-zone' : ''} 
                   ${isCellSelected ? 'selected' : ''}
@@ -580,7 +629,7 @@ const TableGrid: React.FC<TableGridProps> = ({
               onDragOver={isReadOnly ? undefined : (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                setHoveredCell({ row: rowIndex, col: colIndex });
+                setHoveredCell({ row: displayRowIndex, col: colIndex });
               }}
               onDragLeave={isReadOnly ? undefined : () => setHoveredCell(null)}
               onDrop={isReadOnly ? undefined : (e) => {
@@ -589,15 +638,15 @@ const TableGrid: React.FC<TableGridProps> = ({
                 const instanceId = e.dataTransfer.getData('text/plain');
                 const draggedInstance = instances.find(inst => inst.id === instanceId);
                 if (draggedInstance) {
-                  onAddToTable(draggedInstance, rowIndex, colIndex);
+                  onAddToTable(draggedInstance, displayRowIndex, colIndex);
                 }
                 setDraggingInstanceId(null);
                 setHoveredCell(null);
               }}
-              onClick={isReadOnly || isEditing ? undefined : () => handleCellClick(rowIndex, colIndex)}
+              onClick={isReadOnly || isEditing ? undefined : () => handleCellClick(displayRowIndex, colIndex)}
               onDoubleClick={isReadOnly || isEditing ? undefined : () => {
-                if (canEditCell(cell)) {
-                  setEditingCell({ row: rowIndex, col: colIndex });
+                if (cell && canEditCell(cell)) {
+                  setEditingCell({ row: displayRowIndex, col: colIndex });
                 } else if (cell && cell.type === 'image') {
                   alert('Image cells cannot be edited directly. Please remove the image first.');
                 } else {
@@ -605,13 +654,11 @@ const TableGrid: React.FC<TableGridProps> = ({
                 }
               }}
               onKeyDown={(e) => {
-                if (!handleSuggestionKeyDown(e, rowIndex, colIndex)) {
-                  handleArrowNavigation(e);
-                }
+                handleSuggestionKeyDown(e, displayRowIndex, colIndex);
               }}
               tabIndex={suggestion ? 0 : -1}
               style={{
-                gridRow: rowIndex + 2,
+                gridRow: displayRowIndex + 2,
                 gridColumn: colIndex + 2,
                 cursor: isReadOnly ? 'default' : 'pointer',
               }}
@@ -622,8 +669,8 @@ const TableGrid: React.FC<TableGridProps> = ({
                   suppressContentEditableWarning
                   className="editable-text"
                   ref={inputRef}
-                  onBlur={isReadOnly ? undefined : (e) => handleBlur(e, rowIndex, colIndex)}
-                  onKeyDown={isReadOnly ? undefined : (e) => handleKeyDown(e, rowIndex, colIndex)}
+                  onBlur={isReadOnly ? undefined : (e) => handleBlur(e, displayRowIndex, colIndex)}
+                  onKeyDown={isReadOnly ? undefined : (e) => handleKeyDown(e, displayRowIndex, colIndex)}
                   onClick={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
                   onMouseUp={(e) => e.stopPropagation()}
@@ -648,7 +695,7 @@ const TableGrid: React.FC<TableGridProps> = ({
                     height: '100%',
                     userSelect: isReadOnly ? 'none' : undefined
                   }}
-                  onClick={isReadOnly ? undefined : (e) => handleContentClick(e, rowIndex, colIndex)}
+                  onClick={isReadOnly ? undefined : (e) => handleContentClick(e, displayRowIndex, colIndex)}
                 >
                   {cell ? renderEmbeddedContent(cell) : null}
                   {!isReadOnly && !isEditing && (
@@ -656,7 +703,7 @@ const TableGrid: React.FC<TableGridProps> = ({
                       className="remove-cell-content"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onRemoveCellContent(rowIndex, colIndex);
+                        onRemoveCellContent(displayRowIndex, colIndex);
                       }}
                     >
                       ×
@@ -667,7 +714,7 @@ const TableGrid: React.FC<TableGridProps> = ({
             </div>
           );
         })
-      ))}
+      ).flat()}
       
       {/* Context Menu */}
       {contextMenu && (

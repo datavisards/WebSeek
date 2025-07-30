@@ -35,8 +35,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
     const [autoCompleteIndex, setAutoCompleteIndex] = useState(0);
     const [autoCompleteStartPos, setAutoCompleteStartPos] = useState(0);
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
-    const [isStopped, setIsStopped] = useState(false);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
     const [isRetrying, setIsRetrying] = useState(false);
 
     useEffect(() => {
@@ -107,7 +106,14 @@ const ChatTab: React.FC<ChatTabProps> = ({
         }, 0);
     };
 
-    const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+        // Handle Enter key for form submission
+        if (e.key === 'Enter' && !e.shiftKey && !showAutocomplete) {
+            e.preventDefault();
+            sendMsg();
+            return;
+        }
+
         if (!showAutocomplete) return;
 
         switch (e.key) {
@@ -122,7 +128,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
                 setAutoCompleteIndex(prev => Math.max(prev - 1, 0));
                 break;
             case 'Enter':
-                if (autoCompleteList.length > 0) {
+                if (autoCompleteList.length > 0 && !e.shiftKey) {
                     e.preventDefault();
                     selectAutocompleteItem(autoCompleteList[autoCompleteIndex]);
                 }
@@ -135,8 +141,6 @@ const ChatTab: React.FC<ChatTabProps> = ({
                     e.preventDefault();
                     selectAutocompleteItem(autoCompleteList[autoCompleteIndex]);
                 }
-                // Always trigger user activity when Tab is pressed
-                proactiveService.triggerActivity('user_action');
                 break;
         }
     };
@@ -197,7 +201,9 @@ const ChatTab: React.FC<ChatTabProps> = ({
             inputValue.trim();
 
         if (!userMessage || agentLoading) return;
-        setIsStopped(false);
+        
+        // Stop proactive suggestions when user sends a message
+        proactiveService.stopSuggestions();
 
         let conversationHistory = structuredClone(messages);
 
@@ -220,9 +226,6 @@ const ChatTab: React.FC<ChatTabProps> = ({
         try {
             const { message, instances: newInstances } = await callLLMApi('chat', userMessage, conversationHistory, instances);
 
-            // If stopped, do not update UI with agent response
-            if (isStopped) return;
-
             // Generate operation logs before updating instances
             const operationLogs = generateOperationLogs(instances, newInstances);
 
@@ -238,17 +241,17 @@ const ChatTab: React.FC<ChatTabProps> = ({
             // Update the instances
             updateInstances(instances, newInstances, setInstances);
         } catch (error) {
-            if (!isStopped) {
-                console.error('Error in chat:', error);
-                addMessage({
-                    role: 'agent',
-                    message: 'Sorry, I encountered an error while processing your request. Please try again.',
-                    id: generateId(),
-                    isRetrying: false
-                });
-            }
+            console.error('Error in chat:', error);
+            addMessage({
+                role: 'agent',
+                message: 'Sorry, I encountered an error while processing your request. Please try again.',
+                id: generateId(),
+                isRetrying: false
+            });
         } finally {
             setAgentLoading(false);
+            // Resume proactive suggestions after chat response completes
+            proactiveService.resumeSuggestions();
         }
     };
 
@@ -288,9 +291,11 @@ const ChatTab: React.FC<ChatTabProps> = ({
             setInstances(userMessage.instancesCheckpoint);
         }
 
+        // Stop proactive suggestions when user retries a message
+        proactiveService.stopSuggestions();
+        
         setIsRetrying(true);
         setAgentLoading(true);
-        setIsStopped(false);
 
         try {
             // Call the LLM API with retry context
@@ -300,9 +305,6 @@ const ChatTab: React.FC<ChatTabProps> = ({
                 messages.slice(0, userMessageIndex), // Only include conversation up to the retry point
                 currentInstances
             );
-
-            // If stopped, do not update UI with agent response
-            if (isStopped) return;
 
             // Generate operation logs before updating instances
             const operationLogs = generateOperationLogs(currentInstances, newInstances);
@@ -319,19 +321,19 @@ const ChatTab: React.FC<ChatTabProps> = ({
             // Update the instances
             updateInstances(currentInstances, newInstances, setInstances);
         } catch (error) {
-            if (!isStopped) {
-                console.error('Error in retry:', error);
-                setMessages(prev =>
-                    prev.map(m =>
-                        m.id === agentMessageId
-                            ? { ...m, isRetrying: false, message: 'Sorry, I encountered an error while processing your request. Please try again.' }
-                            : m
-                    )
-                );
-            }
+            console.error('Error in retry:', error);
+            setMessages(prev =>
+                prev.map(m =>
+                    m.id === agentMessageId
+                        ? { ...m, isRetrying: false, message: 'Sorry, I encountered an error while processing your request. Please try again.' }
+                        : m
+                )
+            );
         } finally {
             setIsRetrying(false);
             setAgentLoading(false);
+            // Resume proactive suggestions after retry completes
+            proactiveService.resumeSuggestions();
         }
     };
 
@@ -392,15 +394,16 @@ const ChatTab: React.FC<ChatTabProps> = ({
             </div>
             <form onSubmit={handleSubmit} className="message-input-form">
                 <div className="input-container">
-                    <input
+                    <textarea
                         ref={inputRef}
-                        type="text"
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={handleKeyDown}
                         placeholder="Type your message..."
                         className="message-input"
                         disabled={agentLoading}
+                        rows={1}
+                        style={{ resize: 'vertical', minHeight: '40px' }}
                     />
                     {showAutocomplete && autoCompleteList.length > 0 && (
                         <div className="autocomplete-container">
@@ -421,7 +424,6 @@ const ChatTab: React.FC<ChatTabProps> = ({
                         type="button"
                         className="stop-button"
                         onClick={() => {
-                            setIsStopped(true);
                             setAgentLoading(false);
                         }}
                     >

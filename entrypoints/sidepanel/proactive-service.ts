@@ -22,6 +22,7 @@ class ProactiveService {
 
   private currentSuggestions: ProactiveSuggestion[] = [];
   private isGenerating = false;
+  private currentGenerationController: AbortController | null = null;
   private suggestionCount = 0;
   private idleTimer: NodeJS.Timeout | null = null;
   private debounceTimer: NodeJS.Timeout | null = null;
@@ -32,6 +33,9 @@ class ProactiveService {
     htmlContexts: {} as Record<string, any>,
     logs: [] as string[],
   };
+  private isSuggestionsStopped = false;
+  private isUserActive = false;
+  private shouldAutoResume = false;
 
   // Event listeners
   private onSuggestionsUpdated: ((suggestions: ProactiveSuggestion[]) => void) | null = null;
@@ -80,7 +84,24 @@ class ProactiveService {
   // Immediate trigger for logs updates
   triggerLogsUpdate(logs: string[]) {
     this.currentContext.logs = logs;
-    if (!this.settings.enabled) return;
+    
+    // Always log the context update regardless of settings or stopped state
+    console.log('Proactive service: logs updated', logs);
+    
+    // Auto-resume if we were stopped and should resume on next interaction
+    if (this.isSuggestionsStopped && this.shouldAutoResume && logs.length > 0) {
+      console.log('Proactive service: auto-resuming after user interaction');
+      this.isSuggestionsStopped = false;
+      this.shouldAutoResume = false;
+    }
+    
+    if (!this.settings.enabled || this.isSuggestionsStopped) return;
+
+    // Check if the htmlContexts are available
+    if (Object.keys(this.currentContext.htmlContexts).length === 0) {
+      console.log("No HTML context available, skipping proactive suggestions trigger");
+      return;
+    }
 
     this.lastActivity = Date.now();
 
@@ -112,13 +133,24 @@ class ProactiveService {
 
   // Generate suggestions using LLM
   private async generateSuggestions(instances: Instance[], messages: Message[], htmlContexts: Record<string, any>, logs: string[]) {
-    console.log('Generating proactive suggestions...', this.isGenerating, this.suggestionCount, this.settings.maxSuggestionsPerSession);
-    if (this.isGenerating || 
-        this.suggestionCount >= this.settings.maxSuggestionsPerSession) {
+    console.log('Generating proactive suggestions...', this.isGenerating, this.suggestionCount, this.settings.maxSuggestionsPerSession, 'stopped:', this.isSuggestionsStopped);
+    
+    if (this.suggestionCount >= this.settings.maxSuggestionsPerSession ||
+        this.isSuggestionsStopped) {
       return;
     }
 
+    // If already generating, cancel the previous generation
+    if (this.isGenerating && this.currentGenerationController) {
+      console.log('Canceling previous suggestion generation for new interaction');
+      this.currentGenerationController.abort();
+    }
+
+    // Clear existing suggestions when starting new generation
+    this.clearSuggestions();
+
     this.isGenerating = true;
+    this.currentGenerationController = new AbortController();
     
     // Notify that generation started
     if (this.onGenerationStateChanged) {
@@ -167,7 +199,6 @@ class ProactiveService {
         );
       }
 
-      // Use the result directly - chatWithAgent already parses the JSON
       if (result.instances && result.instances.length > 0) {
         // Create a proactive suggestion from the result
         const suggestion: ProactiveSuggestion = {
@@ -190,9 +221,12 @@ class ProactiveService {
       }
 
     } catch (error) {
-      console.error('Error generating proactive suggestions:', error);
+      if (typeof error === 'object' && error !== null && 'name' in error && (error as any).name !== 'AbortError') {
+        console.error('Error generating proactive suggestions:', error);
+      }
     } finally {
       this.isGenerating = false;
+      this.currentGenerationController = null;
       
       // Notify that generation ended
       if (this.onGenerationStateChanged) {
@@ -266,6 +300,48 @@ class ProactiveService {
       maxSuggestions: this.settings.maxSuggestionsPerSession,
       isAtLimit: this.suggestionCount >= this.settings.maxSuggestionsPerSession
     };
+  }
+
+  // Stop all suggestion generation (but continue logging)
+  stopSuggestions(autoResumeOnNextInteraction = false) {
+    console.log('Proactive service: stopping suggestions', autoResumeOnNextInteraction ? '(will auto-resume)' : '');
+    this.isSuggestionsStopped = true;
+    this.shouldAutoResume = autoResumeOnNextInteraction;
+    
+    // Abort any ongoing generation tasks
+    if (this.currentGenerationController) {
+      console.log('Aborting ongoing suggestion generation');
+      this.currentGenerationController.abort();
+      this.currentGenerationController = null;
+    }
+    
+    // Clear any pending timers
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    
+    // Clear current suggestions
+    this.clearSuggestions();
+  }
+
+  // Resume suggestion generation
+  resumeSuggestions() {
+    console.log('Proactive service: resuming suggestions');
+    this.isSuggestionsStopped = false;
+    this.shouldAutoResume = false;
+  }
+
+  // Set user activity state (to track if user is actively working)
+  setUserActive(isActive: boolean) {
+    this.isUserActive = isActive;
+    if (isActive) {
+      this.lastActivity = Date.now();
+    }
   }
 
   // Cleanup

@@ -38,13 +38,13 @@ const createTextDiff = (oldText: string, newText: string) => {
 
 interface InlineSuggestionProps {
   instanceEvent: InstanceEvent;
-  existingContent?: Instance | null;
+  existingContent?: Instance | EmbeddedInstance | null;
   onAccept: () => void;
   onDismiss: () => void;
 }
 
 // Helper function to render instance content properly
-const renderInstanceContent = (instance: Instance) => {
+const renderInstanceContent = (instance: Instance | EmbeddedInstance) => {
   switch (instance.type) {
     case 'text':
       return (
@@ -66,9 +66,9 @@ const renderInstanceContent = (instance: Instance) => {
         />
       );
     case 'sketch':
-      return instance.thumbnail ? (
+      return (instance as any).thumbnail ? (
         <img
-          src={instance.thumbnail}
+          src={(instance as any).thumbnail}
           alt="sketch"
           style={{
             width: '100%',
@@ -92,9 +92,9 @@ const renderInstanceContent = (instance: Instance) => {
         </div>
       );
     case 'visualization':
-      return instance.thumbnail ? (
+      return (instance as any).thumbnail ? (
         <img
-          src={instance.thumbnail}
+          src={(instance as any).thumbnail}
           alt="visualization"
           style={{
             width: '100%',

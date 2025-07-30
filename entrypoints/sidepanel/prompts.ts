@@ -309,11 +309,10 @@ Users may build data instances (some are just examples for intent demonstration,
 Based on the current state of instances, HTML context, conversation history, and interaction logs, you should:
 
 1. **Understand the Current Workflow**: Analyze what the user has been doing based on their instances and recent actions
-2. **Predict Next Step**: Identify the single most logical next action that would advance their data preparation task
+2. **Predict Next Step(s)**: Identify the single most logical next action that would advance their data preparation task. If you are very confident, you can also directly suggest an artifact after many steps.
 3. **Suggest Instance Updates**: Propose ONE specific action that creates, updates, or removes instances
 
 **SUGGESTION GUIDELINES:**
-- Suggest ONLY ONE concrete next step - the most obvious and helpful action
 - ALL suggestions MUST include specific instance updates (add, update, or remove actions)
 - Focus on data preparation tasks: extraction, transformation, organization, analysis
 - **If user is in an editor (i.e., if you see a "Opened the table editor" in the logs without "Closed the table editor"), suggest completing the instance being edited**, i.e., you should suggest only one instance event in your response's \`instances\` field, whose \`action\` should be "update" with \`targetId\` being the ID of the instance being edited and \`instance\` in the same data schema with the instance being edited (e.g., if the original instance is a table, the updated instance should also be a TableInstance object).
