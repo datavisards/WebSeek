@@ -1533,6 +1533,41 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     }));
   };
 
+  // Helper function to extract numerical values from text
+  const extractNumericalValue = (text: string): string => {
+    if (!text || typeof text !== 'string') return '';
+    
+    // Remove all non-numeric characters except decimal points and minus signs
+    const cleaned = text.replace(/[^0-9.-]/g, '');
+    
+    // Handle multiple decimal points by keeping only the first one
+    const parts = cleaned.split('.');
+    let result = parts[0];
+    if (parts.length > 1) {
+      result += '.' + parts.slice(1).join('');
+    }
+    
+    // Handle multiple minus signs by keeping only the first one if it's at the beginning
+    if (result.includes('-')) {
+      const minusCount = (result.match(/-/g) || []).length;
+      if (minusCount > 1 || (result.indexOf('-') > 0)) {
+        // Remove all minus signs and add one at the beginning if the original had any
+        result = result.replace(/-/g, '');
+        if (minusCount > 0) {
+          result = '-' + result;
+        }
+      }
+    }
+    
+    // Validate the result is a valid number
+    const num = parseFloat(result);
+    if (isNaN(num) || !isFinite(num)) {
+      return '';
+    }
+    
+    return result;
+  };
+
   // Handle updating column type
   const handleUpdateColumnType = (colIndex: number, columnType: 'numeral' | 'categorical') => {
     if (!editingTableId) return;
@@ -1541,9 +1576,30 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
         const currentColumnTypes = inst.columnTypes || [];
         const newColumnTypes = [...currentColumnTypes];
         newColumnTypes[colIndex] = columnType;
+        
+        // If changing to numerical, automatically correct non-numerical values
+        let updatedCells = inst.cells;
+        if (columnType === 'numeral') {
+          updatedCells = inst.cells.map(row => {
+            const newRow = [...row];
+            const cell = newRow[colIndex];
+            
+            if (cell && cell.type === 'text') {
+              const extractedValue = extractNumericalValue(cell.content);
+              newRow[colIndex] = {
+                ...cell,
+                content: extractedValue
+              };
+            }
+            
+            return newRow;
+          });
+        }
+        
         return {
           ...inst,
-          columnTypes: newColumnTypes
+          columnTypes: newColumnTypes,
+          cells: updatedCells
         };
       }
       return inst;

@@ -173,6 +173,7 @@ const TableGrid: React.FC<TableGridProps> = ({
     if (sortColumn === null || sortDirection === null) {
       return table.cells.map((row, idx) => ({ row, originalIndex: idx }));
     }
+    
     // Only sort if all cells in the column are text or null
     const canSort = table.cells.every(row => {
       const cell = row[sortColumn];
@@ -180,19 +181,8 @@ const TableGrid: React.FC<TableGridProps> = ({
     });
     if (!canSort) return table.cells.map((row, idx) => ({ row, originalIndex: idx }));
     
-    // Check if more than 80% of non-empty values can be converted to numbers
-    const columnValues = table.cells.map(row => {
-      const cell = row[sortColumn];
-      return cell && cell.type === 'text' ? cell.content.trim() : '';
-    }).filter(val => val !== '');
-    
-    const numericCount = columnValues.filter(val => {
-      const num = Number(val);
-      return !isNaN(num) && isFinite(num);
-    }).length;
-    
-    const isNumericColumn = columnValues.length > 0 && (numericCount / columnValues.length) > 0.8;
-    
+    // Get the column type from table metadata
+    const columnType = table.columnTypes?.[sortColumn] || 'categorical';
     
     // Pair each row with its index for stable sort
     const paired = table.cells.map((row, idx) => ({ row, idx }));
@@ -207,8 +197,8 @@ const TableGrid: React.FC<TableGridProps> = ({
       if (valA === '') return sortDirection === 'asc' ? 1 : -1;
       if (valB === '') return sortDirection === 'asc' ? -1 : 1;
       
-      if (isNumericColumn) {
-        // Mixed numeric/string sorting: numbers first, then strings
+      if (columnType === 'numeral') {
+        // Numerical sorting
         const numA = Number(valA);
         const numB = Number(valB);
         const isNumA = !isNaN(numA) && isFinite(numA);
@@ -231,19 +221,19 @@ const TableGrid: React.FC<TableGridProps> = ({
           return sortDirection === 'asc' ? 1 : -1;
         }
         
-        // Both are strings - sort alphabetically
+        // Both are non-numeric strings - sort alphabetically
         if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
         if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
         return a.idx - b.idx;
       } else {
-        // String sorting
+        // Categorical sorting - lexicographic string comparison
         if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
         if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
         return a.idx - b.idx;
       }
     });
     return paired.map(p => ({ row: p.row, originalIndex: p.idx }));
-  }, [table.cells, sortColumn, sortDirection]);
+  }, [table.cells, sortColumn, sortDirection, table.columnTypes]);
 
   useEffect(() => {
     if (editingCell !== null && inputRef.current) {
@@ -298,6 +288,7 @@ const TableGrid: React.FC<TableGridProps> = ({
     }
     
     const newValue = e.currentTarget.textContent || '';
+    // row is already the original row index when called from the updated handlers
     onEditCellContent(row, col, newValue);
     setEditingCell(null);
   };
@@ -306,6 +297,7 @@ const TableGrid: React.FC<TableGridProps> = ({
     if (e.key === 'Enter') {
       e.preventDefault();
       const newValue = e.currentTarget.textContent || '';
+      // row is already the original row index when called from the updated handlers
       onEditCellContent(row, col, newValue);
       setEditingCell(null);
     } else if (e.key === 'Escape') {
@@ -480,23 +472,50 @@ const TableGrid: React.FC<TableGridProps> = ({
     switch (action) {
       case 'add-before':
         if (type === 'row' && onAddRow) {
-          onAddRow('before', index);
+          // Convert display row index to original row index
+          const originalRowIndex = sortedRows[index]?.originalIndex ?? index;
+          onAddRow('before', originalRowIndex);
+          // Clear sorting when rows are modified to avoid confusion
+          setSortColumn(null);
+          setSortDirection(null);
         } else if (type === 'column' && onAddColumn) {
+          // Column indices don't change with sorting
           onAddColumn('before', index);
+          // Clear sorting when columns are modified
+          setSortColumn(null);
+          setSortDirection(null);
         }
         break;
       case 'add-after':
         if (type === 'row' && onAddRow) {
-          onAddRow('after', index);
+          // Convert display row index to original row index
+          const originalRowIndex = sortedRows[index]?.originalIndex ?? index;
+          onAddRow('after', originalRowIndex);
+          // Clear sorting when rows are modified to avoid confusion
+          setSortColumn(null);
+          setSortDirection(null);
         } else if (type === 'column' && onAddColumn) {
+          // Column indices don't change with sorting
           onAddColumn('after', index);
+          // Clear sorting when columns are modified
+          setSortColumn(null);
+          setSortDirection(null);
         }
         break;
       case 'remove':
         if (type === 'row' && onRemoveRow) {
-          onRemoveRow(index);
+          // Convert display row index to original row index
+          const originalRowIndex = sortedRows[index]?.originalIndex ?? index;
+          onRemoveRow(originalRowIndex);
+          // Clear sorting when rows are modified to avoid confusion
+          setSortColumn(null);
+          setSortDirection(null);
         } else if (type === 'column' && onRemoveColumn) {
+          // Column indices don't change with sorting
           onRemoveColumn(index);
+          // Clear sorting when columns are modified
+          setSortColumn(null);
+          setSortDirection(null);
         }
         break;
     }
@@ -687,7 +706,8 @@ const TableGrid: React.FC<TableGridProps> = ({
                 const instanceId = e.dataTransfer.getData('text/plain');
                 const draggedInstance = instances.find(inst => inst.id === instanceId);
                 if (draggedInstance) {
-                  onAddToTable(draggedInstance, displayRowIndex, colIndex);
+                  // Use original row index for data operations
+                  onAddToTable(draggedInstance, originalRowIndex, colIndex);
                 }
                 setDraggingInstanceId(null);
                 setHoveredCell(null);
@@ -718,8 +738,8 @@ const TableGrid: React.FC<TableGridProps> = ({
                   suppressContentEditableWarning
                   className="editable-text"
                   ref={inputRef}
-                  onBlur={isReadOnly ? undefined : (e) => handleBlur(e, displayRowIndex, colIndex)}
-                  onKeyDown={isReadOnly ? undefined : (e) => handleKeyDown(e, displayRowIndex, colIndex)}
+                  onBlur={isReadOnly ? undefined : (e) => handleBlur(e, originalRowIndex, colIndex)}
+                  onKeyDown={isReadOnly ? undefined : (e) => handleKeyDown(e, originalRowIndex, colIndex)}
                   onClick={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
                   onMouseUp={(e) => e.stopPropagation()}
@@ -752,7 +772,7 @@ const TableGrid: React.FC<TableGridProps> = ({
                       className="remove-cell-content"
                       onClick={(e) => {
                         e.stopPropagation();
-                        onRemoveCellContent(displayRowIndex, colIndex);
+                        onRemoveCellContent(originalRowIndex, colIndex);
                       }}
                     >
                       ×
