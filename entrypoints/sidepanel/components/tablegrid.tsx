@@ -61,6 +61,15 @@ const TableGrid: React.FC<TableGridProps> = ({
   const [sortColumn, setSortColumn] = useState<number | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
 
+  // Filter states
+  const [columnFilters, setColumnFilters] = useState<Map<number, {
+    type: 'categorical' | 'numerical';
+    values?: Set<string>; // for categorical
+    min?: number; // for numerical
+    max?: number; // for numerical
+  }>>(new Map());
+  const [openFilterDropdown, setOpenFilterDropdown] = useState<number | null>(null);
+
   // Compute effective table dimensions including suggestions
   const effectiveTable = useMemo(() => {
     if (!currentSuggestion) return table;
@@ -168,24 +177,58 @@ const TableGrid: React.FC<TableGridProps> = ({
     return false;
   };
 
-  // Memoize sorted rows
-  const sortedRows = useMemo(() => {
+  // Memoize filtered and sorted rows
+  const filteredAndSortedRows = useMemo(() => {
+    // First apply filters
+    let filteredRows = table.cells.map((row, idx) => ({ row, originalIndex: idx }));
+    
+    // Apply column filters
+    columnFilters.forEach((filter, colIndex) => {
+      filteredRows = filteredRows.filter(({ row }) => {
+        const cell = row[colIndex];
+        const cellValue = cell && cell.type === 'text' ? cell.content.trim() : '';
+        
+        if (filter.type === 'categorical' && filter.values && filter.values.size > 0) {
+          // For categorical filters, check if the cell value is in the selected values
+          return filter.values.has(cellValue);
+        } else if (filter.type === 'numerical') {
+          // If no range is specified, show all rows
+          if (filter.min === undefined && filter.max === undefined) {
+            return true;
+          }
+          
+          const numValue = Number(cellValue);
+          if (isNaN(numValue) || !isFinite(numValue)) {
+            // For empty/non-numeric values in numerical columns, only include if they're specifically in range
+            // This means empty values are excluded when a numerical filter is applied
+            return false;
+          }
+          
+          if (filter.min !== undefined && numValue < filter.min) return false;
+          if (filter.max !== undefined && numValue > filter.max) return false;
+          return true;
+        }
+        return true;
+      });
+    });
+    
+    // Then apply sorting
     if (sortColumn === null || sortDirection === null) {
-      return table.cells.map((row, idx) => ({ row, originalIndex: idx }));
+      return filteredRows;
     }
     
-    // Only sort if all cells in the column are text or null
-    const canSort = table.cells.every(row => {
+    // Only sort if all filtered cells in the column are text or null
+    const canSort = filteredRows.every(({ row }) => {
       const cell = row[sortColumn];
       return !cell || cell.type === 'text';
     });
-    if (!canSort) return table.cells.map((row, idx) => ({ row, originalIndex: idx }));
+    if (!canSort) return filteredRows;
     
     // Get the column type from table metadata
     const columnType = table.columnTypes?.[sortColumn] || 'categorical';
     
-    // Pair each row with its index for stable sort
-    const paired = table.cells.map((row, idx) => ({ row, idx }));
+    // Pair each filtered row with its index for stable sort
+    const paired = filteredRows.map(({ row, originalIndex }) => ({ row, idx: originalIndex }));
     paired.sort((a, b) => {
       const cellA = a.row[sortColumn];
       const cellB = b.row[sortColumn];
@@ -233,7 +276,7 @@ const TableGrid: React.FC<TableGridProps> = ({
       }
     });
     return paired.map(p => ({ row: p.row, originalIndex: p.idx }));
-  }, [table.cells, sortColumn, sortDirection, table.columnTypes]);
+  }, [table.cells, sortColumn, sortDirection, table.columnTypes, columnFilters]);
 
   useEffect(() => {
     if (editingCell !== null && inputRef.current) {
@@ -473,7 +516,7 @@ const TableGrid: React.FC<TableGridProps> = ({
       case 'add-before':
         if (type === 'row' && onAddRow) {
           // Convert display row index to original row index
-          const originalRowIndex = sortedRows[index]?.originalIndex ?? index;
+          const originalRowIndex = filteredAndSortedRows[index]?.originalIndex ?? index;
           onAddRow('before', originalRowIndex);
           // Clear sorting when rows are modified to avoid confusion
           setSortColumn(null);
@@ -489,7 +532,7 @@ const TableGrid: React.FC<TableGridProps> = ({
       case 'add-after':
         if (type === 'row' && onAddRow) {
           // Convert display row index to original row index
-          const originalRowIndex = sortedRows[index]?.originalIndex ?? index;
+          const originalRowIndex = filteredAndSortedRows[index]?.originalIndex ?? index;
           onAddRow('after', originalRowIndex);
           // Clear sorting when rows are modified to avoid confusion
           setSortColumn(null);
@@ -505,7 +548,7 @@ const TableGrid: React.FC<TableGridProps> = ({
       case 'remove':
         if (type === 'row' && onRemoveRow) {
           // Convert display row index to original row index
-          const originalRowIndex = sortedRows[index]?.originalIndex ?? index;
+          const originalRowIndex = filteredAndSortedRows[index]?.originalIndex ?? index;
           onRemoveRow(originalRowIndex);
           // Clear sorting when rows are modified to avoid confusion
           setSortColumn(null);
@@ -535,6 +578,23 @@ const TableGrid: React.FC<TableGridProps> = ({
       setSortDirection(null);
     }
   };
+
+  // Close filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openFilterDropdown !== null) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.filter-dropdown')) {
+          setOpenFilterDropdown(null);
+        }
+      }
+    };
+
+    if (openFilterDropdown !== null) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [openFilterDropdown]);
 
   return (
     <div
@@ -628,54 +688,104 @@ const TableGrid: React.FC<TableGridProps> = ({
                   title={`Column type: ${table.columnTypes?.[colIndex] === 'numeral' ? 'Numerical' : 'Categorical'}${!isReadOnly ? ' (click to toggle)' : ''}`}
                 />
               )}
+              <img
+                src="/icon/filter.png"
+                alt="Filter"
+                onClick={e => {
+                  e.stopPropagation();
+                  if (!isReadOnly) {
+                    setOpenFilterDropdown(openFilterDropdown === colIndex ? null : colIndex);
+                  }
+                }}
+                style={{
+                  width: '12px',
+                  height: '12px',
+                  cursor: isReadOnly ? 'default' : 'pointer',
+                  opacity: columnFilters.has(colIndex) ? 1 : 0.6,
+                  userSelect: 'none'
+                }}
+                title="Filter column"
+              />
             </div>
           </div>
         </div>
       ))}
 
-      {/* Row Headers */}
-      {Array.from({ length: effectiveTable.rows }, (_, rowIndex) => (
+      {/* Filter Dropdowns */}
+      {openFilterDropdown !== null && !isReadOnly && (
         <div
-          key={`row-${rowIndex}`}
-          className={`grid-header row-header ${selectedRows.has(rowIndex) ? 'selected-header' : ''}`}
-          onClick={(e) => handleRowHeaderClick(rowIndex, e)}
-          onContextMenu={(e) => handleRowContextMenu(e, rowIndex)}
           style={{
-            gridRow: rowIndex + 2,
-            gridColumn: 1,
-            cursor: isReadOnly ? 'default' : 'pointer',
-            userSelect: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: '1px solid #ccc',
-            backgroundColor: '#f0f0f0',
-            fontWeight: 'bold',
+            position: 'absolute',
+            top: '30px',
+            left: `${50 + openFilterDropdown * effectiveCellWidth}px`,
+            zIndex: 2000
           }}
         >
-          {rowIndex + 1}
+          <FilterDropdown
+            columnIndex={openFilterDropdown}
+            columnType={table.columnTypes?.[openFilterDropdown] || 'categorical'}
+            data={table.cells.map(row => {
+              const cell = row[openFilterDropdown];
+              return cell && cell.type === 'text' ? cell.content.trim() : '';
+            })}
+            currentFilter={columnFilters.get(openFilterDropdown)}
+            onFilterChange={(filter) => {
+              setColumnFilters(prev => {
+                const newFilters = new Map(prev);
+                if (filter) {
+                  newFilters.set(openFilterDropdown, filter);
+                } else {
+                  newFilters.delete(openFilterDropdown);
+                }
+                return newFilters;
+              });
+            }}
+            onClose={() => setOpenFilterDropdown(null)}
+          />
         </div>
-      ))}
+      )}
+
+      {/* Row Headers */}
+      {Array.from({ length: filteredAndSortedRows.length }, (_, displayRowIndex) => {
+        const originalRowIndex = displayRowIndex < filteredAndSortedRows.length ? filteredAndSortedRows[displayRowIndex].originalIndex : displayRowIndex;
+        return (
+          <div
+            key={`row-${displayRowIndex}`}
+            className={`grid-header row-header ${selectedRows.has(originalRowIndex) ? 'selected-header' : ''}`}
+            onClick={(e) => handleRowHeaderClick(originalRowIndex, e)}
+            onContextMenu={(e) => handleRowContextMenu(e, originalRowIndex)}
+            style={{
+              gridRow: displayRowIndex + 2,
+              gridColumn: 1,
+              cursor: isReadOnly ? 'default' : 'pointer',
+              userSelect: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid #ccc',
+              backgroundColor: '#f0f0f0',
+              fontWeight: 'bold',
+            }}
+          >
+            {originalRowIndex + 1}
+          </div>
+        );
+      })}
 
       {/* Content Cells */}
-      {Array.from({ length: effectiveTable.rows }, (_, displayRowIndex) => 
+      {Array.from({ length: filteredAndSortedRows.length }, (_, displayRowIndex) => 
         Array.from({ length: effectiveTable.cols }, (_, colIndex) => {
           // Get cell and original row index for suggestion detection
           let cell;
           let originalRowIndex = displayRowIndex; // Default to display index
           
-          if (displayRowIndex < sortedRows.length && colIndex < sortedRows[displayRowIndex].row.length) {
-            // Use sorted data and get original row index
-            cell = sortedRows[displayRowIndex].row[colIndex];
-            originalRowIndex = sortedRows[displayRowIndex].originalIndex;
-          } else if (displayRowIndex < table.rows && colIndex < table.cols) {
-            // Fallback to original table for edge cases
-            cell = table.cells[displayRowIndex]?.[colIndex];
-            originalRowIndex = displayRowIndex;
+          if (displayRowIndex < filteredAndSortedRows.length && colIndex < filteredAndSortedRows[displayRowIndex].row.length) {
+            // Use filtered and sorted data and get original row index
+            cell = filteredAndSortedRows[displayRowIndex].row[colIndex];
+            originalRowIndex = filteredAndSortedRows[displayRowIndex].originalIndex;
           } else {
-            // Beyond original table dimensions - this is where new suggested rows/cols would appear
-            cell = undefined;
-            originalRowIndex = displayRowIndex;
+            // Beyond filtered table dimensions - don't show anything
+            return null;
           }
           
           const isHovered = hoveredCell?.row === displayRowIndex && hoveredCell?.col === colIndex;
@@ -870,5 +980,270 @@ function renderEmbeddedContent(embedded: EmbeddedInstance) {
       return null;
   }
 }
+
+// FilterDropdown component
+interface FilterDropdownProps {
+  columnIndex: number;
+  columnType: 'categorical' | 'numeral';
+  data: string[];
+  currentFilter?: {
+    type: 'categorical' | 'numerical';
+    values?: Set<string>;
+    min?: number;
+    max?: number;
+  };
+  onFilterChange: (filter: {
+    type: 'categorical' | 'numerical';
+    values?: Set<string>;
+    min?: number;
+    max?: number;
+  } | null) => void;
+  onClose: () => void;
+}
+
+type FilterState = {
+  type: 'categorical' | 'numerical';
+  values?: Set<string>;
+  min?: number;
+  max?: number;
+};
+
+const FilterDropdown: React.FC<FilterDropdownProps> = ({
+  columnType,
+  data,
+  currentFilter,
+  onFilterChange,
+  onClose
+}) => {
+  const [tempFilter, setTempFilter] = useState<FilterState>(currentFilter || {
+    type: columnType === 'numeral' ? 'numerical' : 'categorical',
+    values: columnType === 'categorical' ? new Set<string>() : undefined
+  });
+
+  // Reset tempFilter when currentFilter changes
+  useEffect(() => {
+    setTempFilter(currentFilter || {
+      type: columnType === 'numeral' ? 'numerical' : 'categorical',
+      values: columnType === 'categorical' ? new Set<string>() : undefined
+    });
+  }, [currentFilter, columnType]);
+
+  const uniqueValues = useMemo(() => {
+    const values = new Set(data);
+    const sortedValues = Array.from(values).sort();
+    // Put empty string at the end if it exists
+    if (values.has('')) {
+      return sortedValues.filter(v => v !== '').concat(['']);
+    }
+    return sortedValues;
+  }, [data]);
+
+  const numericStats = useMemo(() => {
+    if (columnType !== 'numeral') return null;
+    const numbers = data
+      .map(val => Number(val))
+      .filter(num => !isNaN(num) && isFinite(num));
+    if (numbers.length === 0) return null;
+    return {
+      min: Math.min(...numbers),
+      max: Math.max(...numbers)
+    };
+  }, [data, columnType]);
+
+  const handleApplyFilter = () => {
+    if (columnType === 'categorical') {
+      // If no values are selected, remove the filter (show all rows)
+      if (!tempFilter.values || tempFilter.values.size === 0) {
+        onFilterChange(null);
+      } else {
+        // Apply the filter with selected values
+        const filterToApply = {
+          ...tempFilter,
+          type: 'categorical' as const
+        };
+        onFilterChange(filterToApply);
+      }
+    } else {
+      // For numerical, only apply if there are actual constraints
+      if (tempFilter.min !== undefined || tempFilter.max !== undefined) {
+        const filterToApply = {
+          ...tempFilter,
+          type: 'numerical' as const
+        };
+        onFilterChange(filterToApply);
+      } else {
+        onFilterChange(null);
+      }
+    }
+    onClose();
+  };
+
+  const handleClearFilter = () => {
+    onFilterChange(null);
+    onClose();
+  };
+
+  return (
+    <div
+      className="filter-dropdown"
+      style={{
+        position: 'absolute',
+        top: '100%',
+        left: 0,
+        background: 'white',
+        border: '1px solid #ddd',
+        borderRadius: '4px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+        zIndex: 2000,
+        minWidth: '200px',
+        maxWidth: '300px',
+        padding: '8px',
+        maxHeight: '300px',
+        overflowY: 'auto'
+      }}
+      onClick={e => e.stopPropagation()}
+    >
+      {columnType === 'categorical' ? (
+        <div>
+          <div style={{ marginBottom: '8px', fontWeight: 'bold', fontSize: '12px' }}>
+            Filter by values:
+          </div>
+          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+            {uniqueValues.map(value => (
+              <label
+                key={value}
+                style={{
+                  display: 'block',
+                  margin: '4px 0',
+                  fontSize: '11px',
+                  cursor: 'pointer'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={tempFilter.values?.has(value) || false}
+                  onChange={(e) => {
+                    const newValues = new Set<string>(tempFilter.values || []);
+                    if (e.target.checked) {
+                      newValues.add(value);
+                    } else {
+                      newValues.delete(value);
+                    }
+                    const newFilter = {
+                      ...tempFilter,
+                      values: newValues
+                    } as FilterState;
+                    setTempFilter(newFilter);
+                  }}
+                  style={{ marginRight: '6px' }}
+                />
+                {value || '(empty)'}
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : numericStats ? (
+        <div>
+          <div style={{ marginBottom: '8px', fontWeight: 'bold', fontSize: '12px' }}>
+            Filter by range:
+          </div>
+          <div style={{ marginBottom: '8px', fontSize: '10px', color: '#666' }}>
+            Range: {numericStats.min} - {numericStats.max}
+          </div>
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{ display: 'block', fontSize: '11px', marginBottom: '4px' }}>
+              Min:
+              <input
+                type="number"
+                value={tempFilter.min ?? ''}
+                onChange={(e) => {
+                  const value = e.target.value === '' ? undefined : Number(e.target.value);
+                  setTempFilter({
+                    ...tempFilter,
+                    min: value
+                  } as FilterState);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '2px 4px',
+                  fontSize: '11px',
+                  border: '1px solid #ccc',
+                  borderRadius: '2px'
+                }}
+                placeholder={numericStats.min.toString()}
+              />
+            </label>
+          </div>
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{ display: 'block', fontSize: '11px', marginBottom: '4px' }}>
+              Max:
+              <input
+                type="number"
+                value={tempFilter.max ?? ''}
+                onChange={(e) => {
+                  const value = e.target.value === '' ? undefined : Number(e.target.value);
+                  setTempFilter({
+                    ...tempFilter,
+                    max: value
+                  } as FilterState);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '2px 4px',
+                  fontSize: '11px',
+                  border: '1px solid #ccc',
+                  borderRadius: '2px'
+                }}
+                placeholder={numericStats.max.toString()}
+              />
+            </label>
+          </div>
+        </div>
+      ) : (
+        <div style={{ fontSize: '11px', color: '#666' }}>
+          No numeric data to filter
+        </div>
+      )}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        marginTop: '8px',
+        borderTop: '1px solid #eee',
+        paddingTop: '8px'
+      }}>
+        <button
+          onClick={handleApplyFilter}
+          style={{
+            flex: 1,
+            padding: '4px 8px',
+            fontSize: '11px',
+            backgroundColor: '#007acc',
+            color: 'white',
+            border: 'none',
+            borderRadius: '2px',
+            cursor: 'pointer'
+          }}
+        >
+          Apply
+        </button>
+        <button
+          onClick={handleClearFilter}
+          style={{
+            flex: 1,
+            padding: '4px 8px',
+            fontSize: '11px',
+            backgroundColor: '#f5f5f5',
+            color: '#333',
+            border: '1px solid #ddd',
+            borderRadius: '2px',
+            cursor: 'pointer'
+          }}
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export default TableGrid;
