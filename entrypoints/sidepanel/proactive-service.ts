@@ -241,6 +241,15 @@ class ProactiveService {
     if (!suggestion) return false;
 
     try {
+      // Set generating state to true when accepting suggestion
+      this.isGenerating = true;
+      if (this.onGenerationStateChanged) {
+        this.onGenerationStateChanged(true);
+      }
+
+      // Remove the accepted suggestion first
+      this.currentSuggestions = this.currentSuggestions.filter(s => s.id !== suggestionId);
+      
       // If suggestion has instances, trigger the appropriate handler
       if (suggestion.instances && suggestion.instances.length > 0) {
         if (this.onSuggestionAccepted) {
@@ -248,17 +257,16 @@ class ProactiveService {
         }
       }
 
-      // Remove the accepted suggestion
-      this.currentSuggestions = this.currentSuggestions.filter(s => s.id !== suggestionId);
-      
-      // Notify listeners of updated suggestions
-      if (this.onSuggestionsUpdated) {
-        this.onSuggestionsUpdated(this.currentSuggestions);
-      }
+      // Don't notify listeners of updated suggestions here - the generation state is already true
+      // so the indicator will stay visible. The suggestions will be updated when new ones are generated.
 
       return true;
     } catch (error) {
       console.error('Error accepting suggestion:', error);
+      this.isGenerating = false;
+      if (this.onGenerationStateChanged) {
+        this.onGenerationStateChanged(false);
+      }
       return false;
     }
   }

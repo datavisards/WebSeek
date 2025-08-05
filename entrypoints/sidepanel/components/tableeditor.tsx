@@ -23,6 +23,7 @@ interface TableEditorProps {
   onRemoveRow?: (rowIndex: number) => void;
   onAddColumn?: (position: 'before' | 'after', colIndex: number) => void;
   onRemoveColumn?: (colIndex: number) => void;
+  onUpdateColumnType?: (colIndex: number, columnType: 'numeral' | 'categorical') => void;
   currentSuggestion?: ProactiveSuggestion;
 }
 
@@ -44,6 +45,7 @@ const TableEditor: React.FC<TableEditorProps> = ({
   onRemoveRow,
   onAddColumn,
   onRemoveColumn,
+  onUpdateColumnType,
   currentSuggestion,
 }) => {
   const [selectedCell, setSelectedCell] = useState<{ row: number, col: number } | null>(null);
@@ -188,6 +190,7 @@ const TableEditor: React.FC<TableEditorProps> = ({
           onRemoveRow={onRemoveRow}
           onAddColumn={onAddColumn}
           onRemoveColumn={onRemoveColumn}
+          onUpdateColumnType={onUpdateColumnType}
           currentSuggestion={currentSuggestion}
           onAcceptSuggestion={() => {
             // Handle accepting the suggestion

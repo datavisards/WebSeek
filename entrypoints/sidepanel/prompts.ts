@@ -69,7 +69,7 @@ The type of "instances" is InstanceEvent[], which is defined as follows:
           | { type: 'instance', id: string, instance: EmbeddedInstance, x: number, y: number, width: number, height: number };
         
         export interface SketchInstance extends BaseInstance { type: 'sketch'; content: SketchItem[]; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
-        export interface TableInstance extends BaseInstance { type: 'table'; rows: number; cols: number; cells: Array<Array<EmbeddedInstance | null>>; x?: number; y?: number; width?: number; height?: number; }
+        export interface TableInstance extends BaseInstance { type: 'table'; rows: number; cols: number; cells: Array<Array<EmbeddedInstance | null>>; columnTypes?: ('numeral' | 'categorical')[]; x?: number; y?: number; width?: number; height?: number; }
         export interface VisualizationInstance extends BaseInstance { type: 'visualization'; spec: object; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
 
         /** The main union type for all standalone instances. */
@@ -83,6 +83,10 @@ Note:
 - Do not leave any non-optional fields empty for each result instance.
 - When returning one or more instances in the results, assign a meaningful, human-readable, and unique ID to each instance (e.g., 'Annual_report', 'Info_list', etc.), which will be used for rendering.
 - For visualization, use the 'visualization' type and provide a Vega-Lite or similar spec in the 'spec' field.
+- **For tables:** When creating TableInstance objects, include the \`columnTypes\` field to specify the data type of each column:
+  - Use 'numeral' for columns containing numeric data (numbers, prices, quantities, etc.)
+  - Use 'categorical' for columns containing text data, categories, labels, or non-numeric identifiers
+  - The array should have the same length as the number of columns (\`cols\`)
 - **Source Assignment:** When generating an instance, you MUST correctly assign its \`source\` field.
   - For a new instance created from scratch (e.g., a summary you write), use a \`ManualSource\`. Example: \`"source": { "type": "manual" }\`.
   - For new instances created from web content, you MUST generate a \`WebCaptureSource\` object. This includes creating a \`locator\` string, and you can get it from the source element in the HTML. The \`locator\` field should be a string containing the stable ID (AID) for the element (use the \`data-aid-id\` attribute value, e.g., "aid-a1b2c3d4").
@@ -139,9 +143,9 @@ Response for this example:
       "action": "add",
       "instance": {
         "type": "table",
-        "table": {
-          "rols": 10,
-          "cols": 1,
+        "rows": 10,
+        "cols": 1,
+        "columnTypes": ["categorical"],
           "cells": [
             [{
               "type": "text",
@@ -261,7 +265,7 @@ export type Locator = string; // Stable ID (AID)
           | { type: 'instance', id: string, instance: EmbeddedInstance, x: number, y: number, width: number, height: number };
         
         export interface SketchInstance extends BaseInstance { type: 'sketch'; content: SketchItem[]; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
-        export interface TableInstance extends BaseInstance { type: 'table'; rows: number; cols: number; cells: Array<Array<EmbeddedInstance | null>>; x?: number; y?: number; width?: number; height?: number; }
+        export interface TableInstance extends BaseInstance { type: 'table'; rows: number; cols: number; cells: Array<Array<EmbeddedInstance | null>>; columnTypes?: ('numeral' | 'categorical')[]; x?: number; y?: number; width?: number; height?: number; }
         export interface VisualizationInstance extends BaseInstance { type: 'visualization'; spec: object; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
 
         /** The main union type for all standalone instances. */
@@ -282,6 +286,10 @@ export type Locator = string; // Stable ID (AID)
 - Be conversational and helpful while maintaining focus on web automation and visualization tasks
 - When returning one or more instances in the results, assign a meaningful, human-readable, and unique ID to each instance (e.g., 'Annual_Report', 'Info_list', 'Sales_Bar_Chart', etc.), which will be used for rendering.
 - For visualization, use the 'visualization' type and provide a Vega-Lite or similar spec in the 'spec' field.
+- **For tables:** When creating TableInstance objects, include the \`columnTypes\` field to specify the data type of each column:
+  - Use 'numeral' for columns containing numeric data (numbers, prices, quantities, etc.)
+  - Use 'categorical' for columns containing text data, categories, labels, or non-numeric identifiers
+  - The array should have the same length as the number of columns (\`cols\`)
 - **Source Assignment:** When generating an instance, you MUST correctly assign its \`source\` field.
   - For a new instance created from scratch (e.g., a summary you write), use a \`ManualSource\`. Example: \`"source": { "type": "manual" }\`.
   - For new instances created from web content, you MUST generate a \`WebCaptureSource\` object. This includes creating a \`locator\` string, and you can get it from the source element in the HTML. The \`locator\` field should be a string containing the stable ID (AID) for the element (use the \`data-aid-id\` attribute value, e.g., "aid-a1b2c3d4").
@@ -374,7 +382,7 @@ The type of "instances" in suggestions is InstanceEvent[], defined as:
         // Instance types (all extend BaseInstance):
         TextInstance: { type: 'text'; content: string; x?: number; y?: number; width?: number; height?: number; }
         ImageInstance: { type: 'image'; src: string; x?: number; y?: number; width?: number; height?: number; }
-        TableInstance: { type: 'table'; rows: number; cols: number; cells: Array<Array<EmbeddedInstance | null>>; x?: number; y?: number; width?: number; height?: number; }
+        TableInstance: { type: 'table'; rows: number; cols: number; cells: Array<Array<EmbeddedInstance | null>>; columnTypes?: ('numeral' | 'categorical')[]; x?: number; y?: number; width?: number; height?: number; }
         SketchInstance: { type: 'sketch'; content: SketchItem[]; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
         VisualizationInstance: { type: 'visualization'; spec: object; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
 

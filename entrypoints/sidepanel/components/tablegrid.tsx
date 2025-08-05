@@ -17,6 +17,7 @@ interface TableGridProps {
   onRemoveRow?: (rowIndex: number) => void;
   onAddColumn?: (position: 'before' | 'after', colIndex: number) => void;
   onRemoveColumn?: (colIndex: number) => void;
+  onUpdateColumnType?: (colIndex: number, columnType: 'numeral' | 'categorical') => void;
   currentSuggestion?: ProactiveSuggestion;
   onAcceptSuggestion?: () => void;
   onDismissSuggestion?: () => void;
@@ -35,6 +36,7 @@ const TableGrid: React.FC<TableGridProps> = ({
   onRemoveRow,
   onAddColumn,
   onRemoveColumn,
+  onUpdateColumnType,
   currentSuggestion,
   onAcceptSuggestion,
   onDismissSuggestion
@@ -178,16 +180,19 @@ const TableGrid: React.FC<TableGridProps> = ({
     });
     if (!canSort) return table.cells.map((row, idx) => ({ row, originalIndex: idx }));
     
-    // Check if all non-empty values in the column can be converted to numbers
+    // Check if more than 80% of non-empty values can be converted to numbers
     const columnValues = table.cells.map(row => {
       const cell = row[sortColumn];
       return cell && cell.type === 'text' ? cell.content.trim() : '';
     }).filter(val => val !== '');
     
-    const isNumericColumn = columnValues.length > 0 && columnValues.every(val => {
+    const numericCount = columnValues.filter(val => {
       const num = Number(val);
       return !isNaN(num) && isFinite(num);
-    });
+    }).length;
+    
+    const isNumericColumn = columnValues.length > 0 && (numericCount / columnValues.length) > 0.8;
+    
     
     // Pair each row with its index for stable sort
     const paired = table.cells.map((row, idx) => ({ row, idx }));
@@ -203,11 +208,32 @@ const TableGrid: React.FC<TableGridProps> = ({
       if (valB === '') return sortDirection === 'asc' ? -1 : 1;
       
       if (isNumericColumn) {
-        // Numeric sorting
+        // Mixed numeric/string sorting: numbers first, then strings
         const numA = Number(valA);
         const numB = Number(valB);
-        if (numA < numB) return sortDirection === 'asc' ? -1 : 1;
-        if (numA > numB) return sortDirection === 'asc' ? 1 : -1;
+        const isNumA = !isNaN(numA) && isFinite(numA);
+        const isNumB = !isNaN(numB) && isFinite(numB);
+        
+        // Both are numbers - sort numerically
+        if (isNumA && isNumB) {
+          if (numA < numB) return sortDirection === 'asc' ? -1 : 1;
+          if (numA > numB) return sortDirection === 'asc' ? 1 : -1;
+          return a.idx - b.idx;
+        }
+        
+        // Only A is a number - A comes first in asc, last in desc
+        if (isNumA && !isNumB) {
+          return sortDirection === 'asc' ? -1 : 1;
+        }
+        
+        // Only B is a number - B comes first in asc, last in desc
+        if (!isNumA && isNumB) {
+          return sortDirection === 'asc' ? 1 : -1;
+        }
+        
+        // Both are strings - sort alphabetically
+        if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+        if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
         return a.idx - b.idx;
       } else {
         // String sorting
@@ -218,9 +244,6 @@ const TableGrid: React.FC<TableGridProps> = ({
     });
     return paired.map(p => ({ row: p.row, originalIndex: p.idx }));
   }, [table.cells, sortColumn, sortDirection]);
-
-  // For backward compatibility, extract just the rows
-  const sortedRowsData = useMemo(() => sortedRows.map(item => item.row), [sortedRows]);
 
   useEffect(() => {
     if (editingCell !== null && inputRef.current) {
@@ -541,27 +564,53 @@ const TableGrid: React.FC<TableGridProps> = ({
             position: 'relative',
           }}
         >
-          <span style={{ marginRight: '4px' }}>{indexToLetters(colIndex)}</span>
-          <span
-            style={{ cursor: 'pointer', marginLeft: '2px', fontSize: '12px', userSelect: 'none' }}
-            onClick={e => {
-              e.stopPropagation();
-              handleSortClick(colIndex);
-            }}
-            title={
-              sortColumn === colIndex
-                ? sortDirection === 'asc'
-                  ? 'Sort descending'
-                  : 'Clear sort'
-                : 'Sort ascending'
-            }
-          >
-            {sortColumn === colIndex ? (
-              sortDirection === 'asc' ? '▲' : '▼'
-            ) : (
-              <span style={{ color: '#bbb' }}>⇅</span>
-            )}
-          </span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span>{indexToLetters(colIndex)}</span>
+              <span
+                style={{ cursor: 'pointer', fontSize: '12px', userSelect: 'none' }}
+                onClick={e => {
+                  e.stopPropagation();
+                  handleSortClick(colIndex);
+                }}
+                title={
+                  sortColumn === colIndex
+                    ? sortDirection === 'asc'
+                      ? 'Sort descending'
+                      : 'Clear sort'
+                    : 'Sort ascending'
+                }
+              >
+                {sortColumn === colIndex ? (
+                  sortDirection === 'asc' ? '▲' : '▼'
+                ) : (
+                  <span style={{ color: '#bbb' }}>⇅</span>
+                )}
+              </span>
+              {onUpdateColumnType && (
+                <img
+                  src={`/icon/${table.columnTypes?.[colIndex] === 'numeral' ? 'numerical' : 'categorical'}.png`}
+                  alt={table.columnTypes?.[colIndex] === 'numeral' ? 'Numerical' : 'Categorical'}
+                  onClick={e => {
+                    e.stopPropagation();
+                    if (!isReadOnly) {
+                      const currentType = table.columnTypes?.[colIndex] || 'categorical';
+                      const newType = currentType === 'categorical' ? 'numeral' : 'categorical';
+                      onUpdateColumnType(colIndex, newType);
+                    }
+                  }}
+                  style={{
+                    width: '12px',
+                    height: '12px',
+                    cursor: isReadOnly ? 'default' : 'pointer',
+                    opacity: isReadOnly ? 0.6 : 1,
+                    userSelect: 'none'
+                  }}
+                  title={`Column type: ${table.columnTypes?.[colIndex] === 'numeral' ? 'Numerical' : 'Categorical'}${!isReadOnly ? ' (click to toggle)' : ''}`}
+                />
+              )}
+            </div>
+          </div>
         </div>
       ))}
 

@@ -128,11 +128,14 @@ export interface SketchInstance extends BaseInstance {
   height?: number;
 }
 
+export type ColumnType = 'numeral' | 'categorical';
+
 export interface TableInstance extends BaseInstance {
   type: 'table';
   rows: number;
   cols: number;
   cells: Array<Array<EmbeddedInstance | null>>;
+  columnTypes?: ColumnType[];
   x?: number;
   y?: number;
   width?: number;

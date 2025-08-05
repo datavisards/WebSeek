@@ -1482,10 +1482,19 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
           return [...rowArr.slice(0, newColIndex), null, ...rowArr.slice(newColIndex)];
         });
 
+        // Handle column types
+        const currentColumnTypes = inst.columnTypes || [];
+        const newColumnTypes = [
+          ...currentColumnTypes.slice(0, newColIndex),
+          'categorical' as const,
+          ...currentColumnTypes.slice(newColIndex)
+        ];
+
         return {
           ...inst,
           cols: newCols,
-          cells: newCells
+          cells: newCells,
+          columnTypes: newColumnTypes
         };
       }
       return inst;
@@ -1506,10 +1515,35 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
           return [...rowArr.slice(0, colIndex), ...rowArr.slice(colIndex + 1)];
         });
 
+        // Handle column types
+        const currentColumnTypes = inst.columnTypes || [];
+        const newColumnTypes = [
+          ...currentColumnTypes.slice(0, colIndex),
+          ...currentColumnTypes.slice(colIndex + 1)
+        ];
+
         return {
           ...inst,
           cols: newCols,
-          cells: newCells
+          cells: newCells,
+          columnTypes: newColumnTypes
+        };
+      }
+      return inst;
+    }));
+  };
+
+  // Handle updating column type
+  const handleUpdateColumnType = (colIndex: number, columnType: 'numeral' | 'categorical') => {
+    if (!editingTableId) return;
+    setInstances(prev => prev.map(inst => {
+      if (inst.id === editingTableId && inst.type === 'table') {
+        const currentColumnTypes = inst.columnTypes || [];
+        const newColumnTypes = [...currentColumnTypes];
+        newColumnTypes[colIndex] = columnType;
+        return {
+          ...inst,
+          columnTypes: newColumnTypes
         };
       }
       return inst;
@@ -2049,6 +2083,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
             onRemoveRow={handleRemoveRow}
             onAddColumn={handleAddColumn}
             onRemoveColumn={handleRemoveColumn}
+            onUpdateColumnType={handleUpdateColumnType}
             currentSuggestion={currentSuggestion}
           />
         ) : editingVisualizationSpec ? (

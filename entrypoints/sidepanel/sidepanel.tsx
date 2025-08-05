@@ -116,7 +116,6 @@ const SidePanel = () => {
 
   // Suggestion handlers
   const handleAcceptSuggestion = useCallback(async (suggestionId: string) => {
-    setIsGeneratingSuggestions(true);
     const success = await proactiveService.acceptSuggestion(suggestionId);
     if (!success) {
       setIsGeneratingSuggestions(false);
