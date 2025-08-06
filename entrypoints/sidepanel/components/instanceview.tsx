@@ -1606,6 +1606,57 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     }));
   };
 
+  // Handle updating column name
+  const handleUpdateColumnName = (colIndex: number, columnName: string) => {
+    if (!editingTableId) return;
+    setInstances(prev => prev.map(inst => {
+      if (inst.id === editingTableId && inst.type === 'table') {
+        const currentColumnNames = inst.columnNames || [];
+        const newColumnNames = [...currentColumnNames];
+        
+        // Ensure the array is long enough
+        while (newColumnNames.length <= colIndex) {
+          newColumnNames.push('');
+        }
+        
+        newColumnNames[colIndex] = columnName;
+        
+        return { ...inst, columnNames: newColumnNames };
+      }
+      return inst;
+    }));
+  };
+
+  // Handle lifting row to header (convert row values to column names)
+  const handleLiftRowToHeader = (rowIndex: number) => {
+    if (!editingTableId) return;
+    setInstances(prev => prev.map(inst => {
+      if (inst.id === editingTableId && inst.type === 'table') {
+        const rowToLift = inst.cells[rowIndex];
+        if (!rowToLift) return inst;
+
+        // Extract text content from cells in the row
+        const newColumnNames = rowToLift.map(cell => {
+          if (cell && cell.type === 'text') {
+            return cell.content;
+          }
+          return '';
+        });
+
+        // Create new cells array without the lifted row
+        const newCells = inst.cells.filter((_, index) => index !== rowIndex);
+
+        return { 
+          ...inst, 
+          columnNames: newColumnNames,
+          cells: newCells,
+          rows: inst.rows - 1
+        };
+      }
+      return inst;
+    }));
+  };
+
   const handleInstanceContextMenu = (e: React.MouseEvent, instanceId: string) => {
     e.preventDefault();
     console.log("Context menu triggered for instance ID:", instanceId);
@@ -2140,6 +2191,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
             onAddColumn={handleAddColumn}
             onRemoveColumn={handleRemoveColumn}
             onUpdateColumnType={handleUpdateColumnType}
+            onUpdateColumnName={handleUpdateColumnName}
+            onLiftRowToHeader={handleLiftRowToHeader}
             currentSuggestion={currentSuggestion}
           />
         ) : editingVisualizationSpec ? (

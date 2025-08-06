@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { TableInstance, Instance, EmbeddedInstance, ProactiveSuggestion, InstanceEvent } from '../types';
+import { TableInstance, Instance, EmbeddedInstance, EmbeddedTextInstance, ProactiveSuggestion, InstanceEvent } from '../types';
 import { getInstanceGeometry, indexToLetters, areInstancesContentEqual } from '../utils';
 import InlineSuggestion from './InlineSuggestion';
 import './tablegrid.css';
@@ -18,6 +18,8 @@ interface TableGridProps {
   onAddColumn?: (position: 'before' | 'after', colIndex: number) => void;
   onRemoveColumn?: (colIndex: number) => void;
   onUpdateColumnType?: (colIndex: number, columnType: 'numeral' | 'categorical') => void;
+  onUpdateColumnName?: (colIndex: number, columnName: string) => void;
+  onLiftRowToHeader?: (rowIndex: number) => void;
   currentSuggestion?: ProactiveSuggestion;
   onAcceptSuggestion?: () => void;
   onDismissSuggestion?: () => void;
@@ -37,6 +39,8 @@ const TableGrid: React.FC<TableGridProps> = ({
   onAddColumn,
   onRemoveColumn,
   onUpdateColumnType,
+  onUpdateColumnName,
+  onLiftRowToHeader,
   currentSuggestion,
   onAcceptSuggestion,
   onDismissSuggestion
@@ -44,7 +48,12 @@ const TableGrid: React.FC<TableGridProps> = ({
   // These will be computed later based on effective table dimensions
   const [hoveredCell, setHoveredCell] = useState<{ row: number, col: number } | null>(null);
   const [editingCell, setEditingCell] = useState<{ row: number, col: number } | null>(null);
+  const [editingColumnName, setEditingColumnName] = useState<number | null>(null);
+  const [flashfillSuggestions, setFlashfillSuggestions] = useState<Map<string, string[]>>(new Map());
+  const [dragStart, setDragStart] = useState<{ row: number, col: number } | null>(null);
+  const [dragPreview, setDragPreview] = useState<{ row: number, col: number }[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const columnNameInputRef = useRef<HTMLDivElement>(null);
 
   // Multi-selection states
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
@@ -278,11 +287,368 @@ const TableGrid: React.FC<TableGridProps> = ({
     return paired.map(p => ({ row: p.row, originalIndex: p.idx }));
   }, [table.cells, sortColumn, sortDirection, table.columnTypes, columnFilters]);
 
+  // Helper function to get column name (custom or default A, B, C...)
+  const getColumnName = (colIndex: number): string => {
+    return table.columnNames?.[colIndex] || indexToLetters(colIndex);
+  };
+
+  // Formula evaluation functions
+  const parseColumnReference = (ref: string): { col: number, row?: number } | null => {
+    // Parse references like A1, B2, A:A (column), 1:1 (row)
+    const cellMatch = ref.match(/^([A-Z]+)(\d+)$/);
+    if (cellMatch) {
+      const colLetters = cellMatch[1];
+      const rowNum = parseInt(cellMatch[2]) - 1; // Convert to 0-based
+      let col = 0;
+      for (let i = 0; i < colLetters.length; i++) {
+        col = col * 26 + (colLetters.charCodeAt(i) - 65 + 1);
+      }
+      col -= 1; // Convert to 0-based
+      return { col, row: rowNum };
+    }
+    
+    // Column range like A:A
+    const colMatch = ref.match(/^([A-Z]+):([A-Z]+)$/);
+    if (colMatch && colMatch[1] === colMatch[2]) {
+      const colLetters = colMatch[1];
+      let col = 0;
+      for (let i = 0; i < colLetters.length; i++) {
+        col = col * 26 + (colLetters.charCodeAt(i) - 65 + 1);
+      }
+      col -= 1; // Convert to 0-based
+      return { col };
+    }
+    
+    return null;
+  };
+
+  const getCellValue = (row: number, col: number): number => {
+    const cell = table.cells[row]?.[col];
+    if (!cell || cell.type !== 'text') return 0;
+    const textCell = cell as EmbeddedTextInstance;
+    const value = parseFloat(textCell.content);
+    return isNaN(value) ? 0 : value;
+  };
+
+  const evaluateFormula = (formula: string): string => {
+    try {
+      // Remove leading = sign
+      const expr = formula.startsWith('=') ? formula.slice(1) : formula;
+      
+      // Handle SUM function
+      const sumMatch = expr.match(/SUM\(([^)]+)\)/i);
+      if (sumMatch) {
+        const range = sumMatch[1];
+        const ref = parseColumnReference(range);
+        if (ref && ref.row === undefined) {
+          // Column sum
+          let sum = 0;
+          for (let r = 0; r < table.rows; r++) {
+            sum += getCellValue(r, ref.col);
+          }
+          return sum.toString();
+        } else if (ref && ref.row !== undefined) {
+          // Single cell
+          return getCellValue(ref.row, ref.col).toString();
+        }
+        return '0';
+      }
+
+      // Handle AVG function
+      const avgMatch = expr.match(/AVG\(([^)]+)\)/i);
+      if (avgMatch) {
+        const range = avgMatch[1];
+        const ref = parseColumnReference(range);
+        if (ref && ref.row === undefined) {
+          // Column average
+          let sum = 0;
+          let count = 0;
+          for (let r = 0; r < table.rows; r++) {
+            const value = getCellValue(r, ref.col);
+            const cell = table.cells[r]?.[ref.col];
+            if (value !== 0 || (cell?.type === 'text' && (cell as EmbeddedTextInstance).content.trim() !== '')) {
+              sum += value;
+              count++;
+            }
+          }
+          return count > 0 ? (sum / count).toString() : '0';
+        } else if (ref && ref.row !== undefined) {
+          // Single cell
+          return getCellValue(ref.row, ref.col).toString();
+        }
+        return '0';
+      }
+
+      // Handle basic mathematical expressions with cell references
+      let processedExpr = expr;
+      
+      // Replace cell references with their values
+      const cellRefs = expr.match(/[A-Z]+\d+/g) || [];
+      for (const ref of cellRefs) {
+        const parsed = parseColumnReference(ref);
+        if (parsed && parsed.row !== undefined) {
+          const value = getCellValue(parsed.row, parsed.col);
+          processedExpr = processedExpr.replace(new RegExp(ref, 'g'), value.toString());
+        }
+      }
+
+      // Evaluate the mathematical expression safely
+      // Only allow numbers, operators, and parentheses
+      if (/^[0-9+\-*/().\s]+$/.test(processedExpr)) {
+        const result = Function('"use strict"; return (' + processedExpr + ')')();
+        return isNaN(result) ? '#ERROR' : result.toString();
+      }
+      
+      return '#ERROR';
+    } catch (error) {
+      return '#ERROR';
+    }
+  };
+
+  const isFormula = (content: string): boolean => {
+    return content.startsWith('=');
+  };
+
+  // Flashfill pattern detection functions
+  const detectPattern = (examples: string[]): { type: string; pattern?: any } | null => {
+    if (examples.length < 2) return null;
+    
+    // Remove empty examples
+    const validExamples = examples.filter(ex => ex.trim() !== '');
+    if (validExamples.length < 2) return null;
+
+    // Check for numeric sequence
+    const numbers = validExamples.map(ex => parseFloat(ex)).filter(n => !isNaN(n));
+    if (numbers.length === validExamples.length && numbers.length >= 2) {
+      const diff = numbers[1] - numbers[0];
+      let isArithmetic = true;
+      for (let i = 2; i < numbers.length; i++) {
+        if (Math.abs((numbers[i] - numbers[i-1]) - diff) > 0.001) {
+          isArithmetic = false;
+          break;
+        }
+      }
+      if (isArithmetic) {
+        return { type: 'arithmetic', pattern: { start: numbers[0], diff } };
+      }
+    }
+
+    // Check for text concatenation patterns (like "Item 1", "Item 2")
+    const textPattern = validExamples[0].match(/^(.+?)(\d+)(.*)$/);
+    if (textPattern) {
+      const [, prefix, numStr, suffix] = textPattern;
+      const startNum = parseInt(numStr);
+      if (!isNaN(startNum)) {
+        let isTextSequence = true;
+        for (let i = 1; i < validExamples.length; i++) {
+          const expected = `${prefix}${startNum + i}${suffix}`;
+          if (validExamples[i] !== expected) {
+            isTextSequence = false;
+            break;
+          }
+        }
+        if (isTextSequence) {
+          return { type: 'text_sequence', pattern: { prefix, suffix, startNum } };
+        }
+      }
+    }
+
+    // Check for text transformation patterns (like extracting first word, uppercase, etc.)
+    if (validExamples.length >= 2) {
+      // Check if all examples are uppercase of some source
+      const sourceCol = findSourceColumn(validExamples);
+      if (sourceCol !== null) {
+        return { type: 'text_transform', pattern: { sourceCol, transform: 'uppercase' } };
+      }
+    }
+
+    return null;
+  };
+
+  const findSourceColumn = (examples: string[]): number | null => {
+    // Try to find a column that could be the source for transformation
+    for (let col = 0; col < table.cols; col++) {
+      if (col === selectedCell?.col) continue; // Skip current column
+      
+      let matches = 0;
+      for (let i = 0; i < Math.min(examples.length, table.rows); i++) {
+        const sourceCell = table.cells[i]?.[col];
+        if (sourceCell?.type === 'text') {
+          const sourceText = (sourceCell as EmbeddedTextInstance).content;
+          // Check various transformations
+          if (sourceText.toUpperCase() === examples[i] ||
+              sourceText.toLowerCase() === examples[i] ||
+              sourceText.split(' ')[0] === examples[i] ||
+              sourceText.split(' ').pop() === examples[i]) {
+            matches++;
+          }
+        }
+      }
+      if (matches === examples.length && matches >= 2) {
+        return col;
+      }
+    }
+    return null;
+  };
+
+  const generateFlashfillSuggestions = (row: number, col: number): string[] => {
+    if (!selectedCell || selectedCell.col !== col) return [];
+    
+    // Get examples from cells above current position
+    const examples: string[] = [];
+    for (let r = 0; r < row; r++) {
+      const cell = table.cells[r]?.[col];
+      if (cell?.type === 'text') {
+        examples.push((cell as EmbeddedTextInstance).content);
+      } else {
+        examples.push('');
+      }
+    }
+
+    const pattern = detectPattern(examples.filter(ex => ex.trim() !== ''));
+    if (!pattern) return [];
+
+    const suggestions: string[] = [];
+    
+    switch (pattern.type) {
+      case 'arithmetic':
+        const nextNum = pattern.pattern.start + (row * pattern.pattern.diff);
+        suggestions.push(nextNum.toString());
+        break;
+        
+      case 'text_sequence':
+        const nextText = `${pattern.pattern.prefix}${pattern.pattern.startNum + row}${pattern.pattern.suffix}`;
+        suggestions.push(nextText);
+        break;
+        
+      case 'text_transform':
+        const sourceCell = table.cells[row]?.[pattern.pattern.sourceCol];
+        if (sourceCell?.type === 'text') {
+          const sourceText = (sourceCell as EmbeddedTextInstance).content;
+          switch (pattern.pattern.transform) {
+            case 'uppercase':
+              suggestions.push(sourceText.toUpperCase());
+              break;
+          }
+        }
+        break;
+    }
+
+    return suggestions;
+  };
+
+  // Update flashfill suggestions when table changes
+  useEffect(() => {
+    const newSuggestions = new Map<string, string[]>();
+    
+    for (let row = 1; row < table.rows; row++) { // Start from row 1 to have examples
+      for (let col = 0; col < table.cols; col++) {
+        const cell = table.cells[row]?.[col];
+        if (!cell || cell.type !== 'text' || (cell as EmbeddedTextInstance).content.trim() !== '') {
+          continue; // Skip non-empty cells
+        }
+        
+        const suggestions = generateFlashfillSuggestions(row, col);
+        if (suggestions.length > 0) {
+          newSuggestions.set(`${row}-${col}`, suggestions);
+        }
+      }
+    }
+    
+    setFlashfillSuggestions(newSuggestions);
+  }, [table.cells, selectedCell]);
+
+  // Apply flashfill to a range of cells
+  const applyFlashfillToCells = (startCell: { row: number, col: number }, targetCells: { row: number, col: number }[]) => {
+    console.log('applyFlashfillToCells called:', { startCell, targetCells });
+    
+    // Get the pattern from cells above the start cell
+    const examples: string[] = [];
+    for (let r = 0; r <= startCell.row; r++) {
+      const cell = table.cells[r]?.[startCell.col];
+      if (cell?.type === 'text') {
+        examples.push((cell as EmbeddedTextInstance).content);
+      } else {
+        examples.push('');
+      }
+    }
+
+    console.log('Examples for pattern detection:', examples);
+    const pattern = detectPattern(examples.filter(ex => ex.trim() !== ''));
+    console.log('Detected pattern:', pattern);
+    
+    if (targetCells.length > 0) {
+      if (pattern) {
+        console.log('Applying detected pattern to cells...');
+        // Apply pattern to each target cell
+        targetCells.forEach(({ row, col }) => {
+          let value = '';
+          
+          switch (pattern.type) {
+            case 'arithmetic':
+              const nextNum = pattern.pattern.start + (row * pattern.pattern.diff);
+              value = nextNum.toString();
+              break;
+              
+            case 'text_sequence':
+              const nextText = `${pattern.pattern.prefix}${pattern.pattern.startNum + row}${pattern.pattern.suffix}`;
+              value = nextText;
+              break;
+              
+            case 'text_transform':
+              const sourceCell = table.cells[row]?.[pattern.pattern.sourceCol];
+              if (sourceCell?.type === 'text') {
+                const sourceText = (sourceCell as EmbeddedTextInstance).content;
+                switch (pattern.pattern.transform) {
+                  case 'uppercase':
+                    value = sourceText.toUpperCase();
+                    break;
+                }
+              }
+              break;
+          }
+          
+          console.log(`Setting cell (${row}, ${col}) to: "${value}"`);
+          if (value) {
+            onEditCellContent(row, col, value);
+          }
+        });
+      } else {
+        console.log('No pattern detected, using last cell value as fallback...');
+        // Fallback: use the last non-empty cell value
+        const lastValue = examples.filter(ex => ex.trim() !== '').pop() || '';
+        if (lastValue) {
+          targetCells.forEach(({ row, col }) => {
+            console.log(`Setting cell (${row}, ${col}) to last value: "${lastValue}"`);
+            onEditCellContent(row, col, lastValue);
+          });
+        }
+      }
+    } else {
+      console.log('No target cells');
+    }
+  };
+
   useEffect(() => {
     if (editingCell !== null && inputRef.current) {
       inputRef.current.focus();
     }
   }, [editingCell]);
+
+  useEffect(() => {
+    if (editingColumnName !== null && columnNameInputRef.current) {
+      columnNameInputRef.current.focus();
+      
+      // Select all text in contentEditable div
+      const range = document.createRange();
+      range.selectNodeContents(columnNameInputRef.current);
+      const selection = window.getSelection();
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+  }, [editingColumnName]);
 
   // Notify parent when selected cell changes
   useEffect(() => {
@@ -507,6 +873,30 @@ const TableGrid: React.FC<TableGridProps> = ({
     setContextMenu(null);
   };
 
+  // Column name editing handlers
+  const handleColumnNameEdit = (colIndex: number) => {
+    if (isReadOnly) return;
+    setEditingColumnName(colIndex);
+  };
+
+  const handleColumnNameBlur = (colIndex: number, newName: string) => {
+    if (onUpdateColumnName && newName.trim() !== getColumnName(colIndex)) {
+      onUpdateColumnName(colIndex, newName.trim());
+    }
+    setEditingColumnName(null);
+  };
+
+  const handleColumnNameKeyDown = (e: React.KeyboardEvent, colIndex: number) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const newName = e.currentTarget.textContent || '';
+      handleColumnNameBlur(colIndex, newName);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setEditingColumnName(null);
+    }
+  };
+
   const handleContextMenuAction = (action: string) => {
     if (!contextMenu) return;
     
@@ -557,6 +947,16 @@ const TableGrid: React.FC<TableGridProps> = ({
           // Column indices don't change with sorting
           onRemoveColumn(index);
           // Clear sorting when columns are modified
+          setSortColumn(null);
+          setSortDirection(null);
+        }
+        break;
+      case 'lift-to-header':
+        if (type === 'row' && onLiftRowToHeader) {
+          // Convert display row index to original row index
+          const originalRowIndex = filteredAndSortedRows[index]?.originalIndex ?? index;
+          onLiftRowToHeader(originalRowIndex);
+          // Clear sorting when rows are modified to avoid confusion
           setSortColumn(null);
           setSortDirection(null);
         }
@@ -645,7 +1045,46 @@ const TableGrid: React.FC<TableGridProps> = ({
         >
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span>{indexToLetters(colIndex)}</span>
+              {editingColumnName === colIndex ? (
+                <div
+                  contentEditable
+                  suppressContentEditableWarning
+                  ref={columnNameInputRef}
+                  onBlur={(e) => handleColumnNameBlur(colIndex, e.currentTarget.textContent || '')}
+                  onKeyDown={(e) => handleColumnNameKeyDown(e, colIndex)}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    minWidth: '20px',
+                    maxWidth: '80px',  // Match the display span's maxWidth
+                    textAlign: 'center',
+                    outline: 'none',
+                    border: '1px solid #007acc',
+                    borderRadius: '2px',
+                    padding: '1px 2px',
+                    backgroundColor: 'white',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {getColumnName(colIndex)}
+                </div>
+              ) : (
+                <span 
+                  onDoubleClick={() => handleColumnNameEdit(colIndex)}
+                  style={{ 
+                    cursor: isReadOnly ? 'default' : 'pointer',
+                    maxWidth: '80px',  // Set maximum width for column headers
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    display: 'inline-block'
+                  }}
+                  title={(isReadOnly ? '' : 'Double-click to edit column name. ') + `Full name: ${getColumnName(colIndex)}`}
+                >
+                  {getColumnName(colIndex)}
+                </span>
+              )}
               <span
                 style={{ cursor: 'pointer', fontSize: '12px', userSelect: 'none' }}
                 onClick={e => {
@@ -803,7 +1242,10 @@ const TableGrid: React.FC<TableGridProps> = ({
                   ${isCellSelected ? 'selected' : ''}
                   ${isHeaderSelected ? 'header-selected' : ''}
                   ${isEditing ? 'editing' : ''}
-                  ${suggestion ? 'has-suggestion' : ''}`}
+                  ${suggestion ? 'has-suggestion' : ''}
+                  ${dragPreview.some(cell => cell.row === originalRowIndex && cell.col === colIndex) ? 'drag-preview' : ''}`}
+              data-row={originalRowIndex}
+              data-col={colIndex}
               onDragOver={isReadOnly ? undefined : (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -856,7 +1298,7 @@ const TableGrid: React.FC<TableGridProps> = ({
                   onSelect={(e) => e.stopPropagation()}
                   onFocus={(e) => e.stopPropagation()}
                 >
-                  {cell && cell.type === 'text' ? cell.content : ''}
+                  {cell && cell.type === 'text' ? (cell as EmbeddedTextInstance).content : ''}
                 </div>
               ) : suggestion ? (
                 <InlineSuggestion
@@ -876,7 +1318,7 @@ const TableGrid: React.FC<TableGridProps> = ({
                   }}
                   onClick={isReadOnly ? undefined : (e) => handleContentClick(e, displayRowIndex, colIndex)}
                 >
-                  {cell ? renderEmbeddedContent(cell) : null}
+                  {cell ? renderEmbeddedContent(cell, evaluateFormula) : null}
                   {!isReadOnly && !isEditing && (
                     <button
                       className="remove-cell-content"
@@ -888,7 +1330,109 @@ const TableGrid: React.FC<TableGridProps> = ({
                       ×
                     </button>
                   )}
-                </div> : null
+                  {!isReadOnly && !isEditing && cell && (
+                    <div
+                      className="fill-handle"
+                      style={{
+                        position: 'absolute',
+                        bottom: '-1px',
+                        right: '-1px',
+                        width: '6px',
+                        height: '6px',
+                        backgroundColor: '#000',
+                        cursor: 'crosshair',
+                        zIndex: 10,
+                        border: '1px solid white'
+                      }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        
+                        // Use local variables to avoid React state race conditions
+                        const dragStartCell = { row: originalRowIndex, col: colIndex };
+                        let currentPreview: { row: number, col: number }[] = [];
+                        
+                        setDragStart(dragStartCell);
+                        setDragPreview([]);
+                        
+                        const handleMouseMove = (e: MouseEvent) => {
+                          // Find the cell under the mouse
+                          const element = document.elementFromPoint(e.clientX, e.clientY);
+                          const cellElement = element?.closest('.table-cell') as HTMLElement;
+                          if (cellElement && cellElement.dataset.row && cellElement.dataset.col) {
+                            const endRow = parseInt(cellElement.dataset.row);
+                            const endCol = parseInt(cellElement.dataset.col);
+                            
+                            // Only fill in the same column
+                            if (endCol === colIndex && endRow > originalRowIndex) {
+                              const preview = [];
+                              for (let r = originalRowIndex + 1; r <= endRow; r++) {
+                                preview.push({ row: r, col: colIndex });
+                              }
+                              currentPreview = preview;
+                              setDragPreview(preview);
+                            } else {
+                              // Clear preview if not in valid drag area
+                              currentPreview = [];
+                              setDragPreview([]);
+                            }
+                          } else {
+                            // Clear preview if not over a cell
+                            currentPreview = [];
+                            setDragPreview([]);
+                          }
+                        };
+                        
+                        const handleMouseUp = () => {
+                          console.log('Drag completed:', { dragStart: dragStartCell, dragPreview: currentPreview.length });
+                          if (currentPreview.length > 0) {
+                            console.log('Applying flashfill:', dragStartCell, currentPreview);
+                            // Apply flashfill to all cells in preview
+                            applyFlashfillToCells(dragStartCell, currentPreview);
+                          }
+                          setDragStart(null);
+                          setDragPreview([]);
+                          document.removeEventListener('mousemove', handleMouseMove);
+                          document.removeEventListener('mouseup', handleMouseUp);
+                        };
+                        
+                        document.addEventListener('mousemove', handleMouseMove);
+                        document.addEventListener('mouseup', handleMouseUp);
+                      }}
+                      title="Drag to fill down with pattern"
+                    />
+                  )}
+                </div> : (
+                // Empty cell - show flashfill suggestions if available
+                flashfillSuggestions.has(`${originalRowIndex}-${colIndex}`) ? (
+                  <div
+                    className="flashfill-suggestion"
+                    style={{
+                      width: '100%',  
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#888',
+                      fontStyle: 'italic',
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      backgroundColor: 'rgba(0, 120, 215, 0.05)',
+                      border: '1px dashed rgba(0, 120, 215, 0.3)'
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const suggestions = flashfillSuggestions.get(`${originalRowIndex}-${colIndex}`);
+                      if (suggestions && suggestions[0]) {
+                        onEditCellContent(originalRowIndex, colIndex, suggestions[0]);
+                      }
+                    }}
+                    title="Click to apply flashfill suggestion"
+                  >
+                    {flashfillSuggestions.get(`${originalRowIndex}-${colIndex}`)?.[0]}
+                  </div>
+                ) : null
+              )
               }
             </div>
           );
@@ -923,6 +1467,14 @@ const TableGrid: React.FC<TableGridProps> = ({
           >
             Add {contextMenu.type === 'row' ? 'Row' : 'Column'} After
           </div>
+          {contextMenu.type === 'row' && onLiftRowToHeader && (
+            <div
+              className="contextmenuoption"
+              onClick={() => handleContextMenuAction('lift-to-header')}
+            >
+              Lift Row to Header
+            </div>
+          )}
           <div
             className="contextmenuoption"
             onClick={() => handleContextMenuAction('remove')}
@@ -939,12 +1491,17 @@ const TableGrid: React.FC<TableGridProps> = ({
 // (Render embedded content function remains unchanged)
 
 // Helper to render different embedded content types (unchanged)
-function renderEmbeddedContent(embedded: EmbeddedInstance) {
+function renderEmbeddedContent(embedded: EmbeddedInstance, evaluateFormula?: (formula: string) => string) {
   switch (embedded.type) {
     case 'text':
+      const textContent = embedded.content;
+      const isFormulaCell = textContent.startsWith('=');
+      const displayContent = (isFormulaCell && evaluateFormula) 
+        ? evaluateFormula(textContent) 
+        : textContent;
       return (
-        <p className="cell-text" style={{ margin: 0, fontSize: '12px' }}>
-          {embedded.content}
+        <p className={`cell-text ${isFormulaCell ? 'formula' : ''}`} style={{ margin: 0, fontSize: '12px' }}>
+          {displayContent}
         </p>
       );
     case 'image':

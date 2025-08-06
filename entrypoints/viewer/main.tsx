@@ -111,7 +111,7 @@
                 // Give the iframe content a moment to fully render
                 setTimeout(() => {
                     const targetElement = findElementByLocator(locator, (iframe as HTMLIFrameElement).contentDocument!);
-                    if (targetElement) {
+                    if (targetElement && targetElement instanceof HTMLElement) {
                         highlightElement(targetElement);
                     } else {
                         console.warn('Target element not found in snapshot');

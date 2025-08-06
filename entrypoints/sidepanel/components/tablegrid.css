@@ -74,6 +74,46 @@
   -webkit-box-orient: vertical;
 }
 
+.cell-text.formula {
+  font-style: italic;
+  color: #2c5aa0;
+  position: relative;
+}
+
+.cell-text.formula::before {
+  content: 'f';
+  position: absolute;
+  top: -2px;
+  left: -8px;
+  font-size: 8px;
+  font-weight: bold;
+  color: #2c5aa0;
+  background: white;
+  border: 1px solid #2c5aa0;
+  border-radius: 2px;
+  width: 10px;
+  height: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.table-cell.drag-preview {
+  background-color: #e6f7ff !important;
+  border: 2px dashed #1890ff !important;
+}
+
+.fill-handle {
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: auto;
+}
+
+.table-cell:hover .fill-handle {
+  opacity: 1;
+}
+
 .editable-text {
   padding: 4px;
   border-radius: 3px;
