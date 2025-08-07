@@ -5,7 +5,7 @@ import { getInstanceGeometry, generateInstanceContext, generateId, createSketchT
 import TextEditor from './texteditor';
 import SketchEditor from './sketcheditor';
 import TrashView from './trashview';
-import TableEditor from './tableeditor';
+import MultiTableEditor from './MultiTableEditor';
 import RenameModal from './renamemodal';
 import VisualizationEditor from './visualizationeditor';
 import InstanceViewHeader from './InstanceViewHeader';
@@ -2171,28 +2171,30 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
             currentSuggestion={currentSuggestion}
           />
         ) : editingTableId ? (
-          // Table Editor View
-          <TableEditor
-            tableId={editingTableId}
+          // Multi-Table Editor View
+          <MultiTableEditor
+            initialTableId={editingTableId}
             instances={instances}
             htmlContext={htmlContext}
-            onSaveTable={saveTable}
+            onSaveTable={(tableId: string, tableName?: string) => saveTable()}
             onCancel={cancelTableEdit}
-            onAddToTable={handleAddToTable}
-            onRemoveCellContent={removeCellContent}
-            onEditCellContent={(row: number, col: number, value: string) => { value.length > 0 ? handleAddToTable({ type: 'text', id: generateId(), content: value } as TextInstance, row, col) : removeCellContent(row, col) }}
+            onAddToTable={(tableId: string, instance: Instance, row: number, col: number) => handleAddToTable(instance, row, col)}
+            onRemoveCellContent={(tableId: string, row: number, col: number) => removeCellContent(row, col)}
+            onEditCellContent={(tableId: string, row: number, col: number, value: string) => { 
+              value.length > 0 ? handleAddToTable({ type: 'text', id: generateId(), content: value } as TextInstance, row, col) : removeCellContent(row, col) 
+            }}
             draggingInstanceId={draggingInstanceId}
             setDraggingInstanceId={setDraggingInstanceId}
             availableInstances={availableInstances}
-            onCaptureToCell={handleCaptureToTableCell}
+            onCaptureToCell={(tableId: string, row: number, col: number) => handleCaptureToTableCell(row, col)}
             isCaptureEnabled={isCaptureEnabled}
-            onAddRow={handleAddRow}
-            onRemoveRow={handleRemoveRow}
-            onAddColumn={handleAddColumn}
-            onRemoveColumn={handleRemoveColumn}
-            onUpdateColumnType={handleUpdateColumnType}
-            onUpdateColumnName={handleUpdateColumnName}
-            onLiftRowToHeader={handleLiftRowToHeader}
+            onAddRow={(tableId: string, position: 'before' | 'after', rowIndex: number) => handleAddRow(position, rowIndex)}
+            onRemoveRow={(tableId: string, rowIndex: number) => handleRemoveRow(rowIndex)}
+            onAddColumn={(tableId: string, position: 'before' | 'after', colIndex: number) => handleAddColumn(position, colIndex)}
+            onRemoveColumn={(tableId: string, colIndex: number) => handleRemoveColumn(colIndex)}
+            onUpdateColumnType={(tableId: string, colIndex: number, columnType: 'numeral' | 'categorical') => handleUpdateColumnType(colIndex, columnType)}
+            onUpdateColumnName={(tableId: string, colIndex: number, columnName: string) => handleUpdateColumnName(colIndex, columnName)}
+            onLiftRowToHeader={(tableId: string, rowIndex: number) => handleLiftRowToHeader(rowIndex)}
             currentSuggestion={currentSuggestion}
           />
         ) : editingVisualizationSpec ? (
