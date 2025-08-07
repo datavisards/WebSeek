@@ -697,8 +697,13 @@ const TableGrid: React.FC<TableGridProps> = ({
     }
     
     const newValue = e.currentTarget.textContent || '';
-    // row is already the original row index when called from the updated handlers
-    onEditCellContent(row, col, newValue);
+    const cell = table.cells[row]?.[col];
+    const originalValue = (cell && cell.type === 'text') ? (cell as EmbeddedTextInstance).content : '';
+    
+    // Only call onEditCellContent if the value actually changed
+    if (newValue !== originalValue) {
+      onEditCellContent(row, col, newValue);
+    }
     setEditingCell(null);
   };
 
@@ -706,8 +711,13 @@ const TableGrid: React.FC<TableGridProps> = ({
     if (e.key === 'Enter') {
       e.preventDefault();
       const newValue = e.currentTarget.textContent || '';
-      // row is already the original row index when called from the updated handlers
-      onEditCellContent(row, col, newValue);
+      const cell = table.cells[row]?.[col];
+      const originalValue = (cell && cell.type === 'text') ? (cell as EmbeddedTextInstance).content : '';
+      
+      // Only call onEditCellContent if the value actually changed
+      if (newValue !== originalValue) {
+        onEditCellContent(row, col, newValue);
+      }
       setEditingCell(null);
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -723,16 +733,15 @@ const TableGrid: React.FC<TableGridProps> = ({
     
     if (isReadOnly || !selectedCell) return;
 
-    const cell = table.cells[selectedCell.row][selectedCell.col];
-    if (!cell) return;
+    const cell = table.cells[selectedCell.row]?.[selectedCell.col];
 
     if (e.key === 'F2' || e.key === 'Enter') {
       e.preventDefault();
       if (canEditCell(cell)) {
         setEditingCell(selectedCell);
-      } else if (cell.type === 'image') {
+      } else if (cell && cell.type === 'image') {
         alert('Image cells cannot be edited directly. Please remove the image first.');
-      } else {
+      } else if (cell) {
         alert('This type of content cannot be edited directly. Please remove it first.');
       }
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -1266,11 +1275,11 @@ const TableGrid: React.FC<TableGridProps> = ({
               }}
               onClick={isReadOnly || isEditing ? undefined : () => handleCellClick(displayRowIndex, colIndex)}
               onDoubleClick={isReadOnly || isEditing ? undefined : () => {
-                if (cell && canEditCell(cell)) {
+                if (canEditCell(cell)) {
                   setEditingCell({ row: displayRowIndex, col: colIndex });
                 } else if (cell && cell.type === 'image') {
                   alert('Image cells cannot be edited directly. Please remove the image first.');
-                } else {
+                } else if (cell) {
                   alert('This type of content cannot be edited directly. Please remove it first.');
                 }
               }}
