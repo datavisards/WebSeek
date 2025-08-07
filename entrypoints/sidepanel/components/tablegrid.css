@@ -26,6 +26,11 @@
   background-color: rgba(74, 144, 226, 0.1);
 }
 
+.table-cell.range-selected {
+  background-color: rgba(74, 144, 226, 0.15) !important;
+  border: 1px solid rgba(74, 144, 226, 0.4) !important;
+}
+
 .table-cell.has-suggestion {
   position: relative;
 }
@@ -80,24 +85,6 @@
   position: relative;
 }
 
-.cell-text.formula::before {
-  content: 'f';
-  position: absolute;
-  top: -2px;
-  left: -8px;
-  font-size: 8px;
-  font-weight: bold;
-  color: #2c5aa0;
-  background: white;
-  border: 1px solid #2c5aa0;
-  border-radius: 2px;
-  width: 10px;
-  height: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
 
 .table-cell.drag-preview {
   background-color: #e6f7ff !important;

@@ -133,6 +133,12 @@ class ProactiveService {
 
   // Generate suggestions using LLM
   private async generateSuggestions(instances: Instance[], messages: Message[], htmlContexts: Record<string, any>, logs: string[]) {
+    // If the global env variable for proactive suggestions is disabled, skip generation
+    if (import.meta.env.WXT_USE_PROACTIVE_SERVICE === "false") {
+      console.log('Proactive suggestions are disabled by environment variable, skipping generation');
+      return;
+    }
+
     console.log('Generating proactive suggestions...', this.isGenerating, this.suggestionCount, this.settings.maxSuggestionsPerSession, 'stopped:', this.isSuggestionsStopped);
     
     if (this.suggestionCount >= this.settings.maxSuggestionsPerSession ||

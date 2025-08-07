@@ -25,7 +25,7 @@ interface JoinSuggestion {
 
 interface CopiedData {
   type: 'cells' | 'rows' | 'columns' | 'region';
-  data: any[][];
+  data: any[][]; // For 'cells' and 'region': string values; for 'rows'/'columns': full cell instances
   sourceTableId: string;
   sourceRange: { startRow: number; endRow: number; startCol: number; endCol: number };
 }
@@ -52,6 +52,7 @@ interface MultiTableEditorProps {
   onUpdateColumnName?: (tableId: string, colIndex: number, columnName: string) => void;
   onLiftRowToHeader?: (tableId: string, rowIndex: number) => void;
   currentSuggestion?: ProactiveSuggestion;
+  onOperation?: (message: string, trigger?: boolean) => void;
 }
 
 const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
@@ -76,6 +77,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
   onUpdateColumnName,
   onLiftRowToHeader,
   currentSuggestion,
+  onOperation,
 }) => {
   // State for managing multiple open tables
   const [openTables, setOpenTables] = useState<OpenTable[]>(() => {
@@ -90,16 +92,36 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       id: initialTableId,
       instance: initialTable,
       isDirty: false,
-      originalName: initialTable.name || `Table ${initialTableId.slice(0, 8)}`
+      originalName: `Table ${initialTableId.slice(0, 8)}`
     }];
   });
 
   const [activeTabId, setActiveTabId] = useState<string | null>(initialTableId);
   const [selectedCell, setSelectedCell] = useState<{ tableId: string; row: number; col: number } | null>(null);
+  const [selectedRange, setSelectedRange] = useState<{ tableId: string; startRow: number; endRow: number; startCol: number; endCol: number } | null>(null);
   const [copiedData, setCopiedData] = useState<CopiedData | null>(null);
   const [showJoinPanel, setShowJoinPanel] = useState(false);
   const [showTableSelector, setShowTableSelector] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+
+  // Sync openTables with the latest instances from parent
+  useEffect(() => {
+    setOpenTables(prev => prev.map(openTable => {
+      // Find the updated instance from parent
+      const updatedInstance = instances.find(inst => 
+        inst.id === openTable.id && inst.type === 'table'
+      ) as TableInstance | undefined;
+      
+      if (updatedInstance && updatedInstance !== openTable.instance) {
+        console.log(`Syncing table ${openTable.id}: rows ${openTable.instance.rows} -> ${updatedInstance.rows}, cols ${openTable.instance.cols} -> ${updatedInstance.cols}`);
+        return {
+          ...openTable,
+          instance: updatedInstance
+        };
+      }
+      return openTable;
+    }));
+  }, [instances]);
 
   // Available tables that can be opened (not currently open)
   const availableTables = useMemo(() => {
@@ -162,7 +184,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       id: tableId,
       instance: table,
       isDirty: false,
-      originalName: table.name || `Table ${tableId.slice(0, 8)}`
+      originalName: `Table ${tableId.slice(0, 8)}`
     };
     
     setOpenTables(prev => [...prev, newOpenTable]);
@@ -217,109 +239,364 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
 
   // Enhanced copy functionality
   const handleCopy = useCallback(() => {
-    if (!selectedCell) return;
+    if (!activeTabId) return;
     
-    const table = openTables.find(t => t.id === selectedCell.tableId)?.instance;
+    const table = openTables.find(t => t.id === activeTabId)?.instance;
     if (!table) return;
     
-    // For now, copy single cell - extend for ranges later
-    const cell = table.cells[selectedCell.row]?.[selectedCell.col];
-    const cellData = cell && cell.type === 'text' ? cell.content : '';
+    let dataRange = null;
     
-    setCopiedData({
-      type: 'cells',
-      data: [[cellData]],
-      sourceTableId: selectedCell.tableId,
-      sourceRange: {
+    // Determine what to copy based on selection
+    if (selectedRange && selectedRange.tableId === activeTabId) {
+      // Copy range
+      dataRange = selectedRange;
+    } else if (selectedCell && selectedCell.tableId === activeTabId) {
+      // Copy single cell
+      dataRange = {
+        tableId: activeTabId,
         startRow: selectedCell.row,
         endRow: selectedCell.row,
         startCol: selectedCell.col,
         endCol: selectedCell.col
+      };
+    } else {
+      return;
+    }
+    
+    // Extract data from range
+    const data: string[][] = [];
+    for (let row = dataRange.startRow; row <= dataRange.endRow; row++) {
+      const rowData: string[] = [];
+      for (let col = dataRange.startCol; col <= dataRange.endCol; col++) {
+        const cell = table.cells[row]?.[col];
+        rowData.push(cell && cell.type === 'text' ? cell.content : '');
+      }
+      data.push(rowData);
+    }
+    
+    setCopiedData({
+      type: 'region',
+      data,
+      sourceTableId: activeTabId,
+      sourceRange: {
+        startRow: dataRange.startRow,
+        endRow: dataRange.endRow,
+        startCol: dataRange.startCol,
+        endCol: dataRange.endCol
       }
     });
     
-    // Also copy to system clipboard
-    navigator.clipboard?.writeText(cellData);
-  }, [selectedCell, openTables]);
+    // Copy to system clipboard as TSV (tab-separated values)
+    const tsvData = data.map(row => row.join('\t')).join('\n');
+    navigator.clipboard?.writeText(tsvData);
+  }, [selectedCell, selectedRange, activeTabId, openTables]);
 
   // Enhanced paste functionality
   const handlePaste = useCallback(async () => {
-    if (!selectedCell || !activeTabId) return;
+    if (!activeTabId) return;
     
-    let dataToPaste = '';
+    let pasteTarget = null;
+    
+    // Determine where to paste
+    if (selectedRange && selectedRange.tableId === activeTabId) {
+      pasteTarget = { 
+        startRow: selectedRange.startRow, 
+        startCol: selectedRange.startCol 
+      };
+    } else if (selectedCell && selectedCell.tableId === activeTabId) {
+      pasteTarget = { 
+        startRow: selectedCell.row, 
+        startCol: selectedCell.col 
+      };
+    } else {
+      return;
+    }
+    
+    let dataToPaste: string[][] = [];
     
     // Try to get data from our internal clipboard first
     if (copiedData) {
-      dataToPaste = copiedData.data[0][0];
+      dataToPaste = copiedData.data;
     } else {
-      // Fallback to system clipboard
+      // Fallback to system clipboard - parse TSV
       try {
-        dataToPaste = await navigator.clipboard.readText();
+        const clipboardText = await navigator.clipboard.readText();
+        dataToPaste = clipboardText.split('\n').map(row => row.split('\t'));
       } catch (error) {
         console.warn('Could not access clipboard:', error);
         return;
       }
     }
     
-    handleEditCellContent(selectedCell.row, selectedCell.col, dataToPaste);
-  }, [copiedData, selectedCell, activeTabId, handleEditCellContent]);
-
-  // Copy entire row
-  const handleCopyRow = useCallback(() => {
-    if (!selectedCell) return;
+    // Paste data starting from the target position
+    const currentActiveTabId = activeTabId;
     
-    const table = openTables.find(t => t.id === selectedCell.tableId)?.instance;
+    // Use setTimeout with 0 delay to batch DOM updates
+    setTimeout(() => {
+      for (let dataRow = 0; dataRow < dataToPaste.length; dataRow++) {
+        const targetRow = pasteTarget.startRow + dataRow;
+        for (let dataCol = 0; dataCol < dataToPaste[dataRow].length; dataCol++) {
+          const targetCol = pasteTarget.startCol + dataCol;
+          const cellValue = dataToPaste[dataRow][dataCol];
+          
+          if (cellValue) {
+            onEditCellContent(currentActiveTabId, targetRow, targetCol, cellValue);
+          }
+        }
+      }
+      markTableDirty(currentActiveTabId);
+    }, 0);
+  }, [copiedData, selectedCell, selectedRange, activeTabId, onEditCellContent, markTableDirty]);
+
+
+  // Row/Column copy handlers for context menu
+  const handleRowCopy = useCallback((rowIndex: number) => {
+    if (!activeTabId) return;
+    
+    const table = openTables.find(t => t.id === activeTabId)?.instance;
     if (!table) return;
     
-    const row = table.cells[selectedCell.row];
-    if (!row) return;
-    
-    const rowData = row.map(cell => cell && cell.type === 'text' ? cell.content : '');
+    const rowCells = [];
+    const rowStringData = [];
+    const row = table.cells[rowIndex];
+    if (row) {
+      for (let col = 0; col < table.cols; col++) {
+        const cell = row[col];
+        rowCells.push(cell); // Store the full cell instance
+        // For clipboard, convert to string representation
+        if (cell) {
+          switch (cell.type) {
+            case 'text':
+              rowStringData.push(cell.content);
+              break;
+            case 'image':
+              rowStringData.push(`[IMAGE: ${cell.src}]`);
+              break;
+            case 'sketch':
+              rowStringData.push('[SKETCH]');
+              break;
+            case 'table':
+              rowStringData.push('[TABLE]');
+              break;
+            case 'visualization':
+              rowStringData.push('[VISUALIZATION]');
+              break;
+            default:
+              rowStringData.push('');
+          }
+        } else {
+          rowStringData.push('');
+        }
+      }
+    }
     
     setCopiedData({
       type: 'rows',
-      data: [rowData],
-      sourceTableId: selectedCell.tableId,
+      data: [rowCells], // Store full cell instances for internal operations
+      sourceTableId: activeTabId,
       sourceRange: {
-        startRow: selectedCell.row,
-        endRow: selectedCell.row,
+        startRow: rowIndex,
+        endRow: rowIndex,
         startCol: 0,
         endCol: table.cols - 1
       }
     });
     
-    // Copy as tab-separated values
-    navigator.clipboard?.writeText(rowData.join('\t'));
-  }, [selectedCell, openTables]);
+    // Copy string representation to system clipboard
+    navigator.clipboard?.writeText(rowStringData.join('\t'));
+  }, [activeTabId, openTables]);
 
-  // Copy entire column
-  const handleCopyColumn = useCallback(() => {
-    if (!selectedCell) return;
+  const handleColumnCopy = useCallback((colIndex: number) => {
+    if (!activeTabId) return;
     
-    const table = openTables.find(t => t.id === selectedCell.tableId)?.instance;
+    const table = openTables.find(t => t.id === activeTabId)?.instance;
     if (!table) return;
     
-    const columnData = [];
+    const columnCells = [];
+    const columnStringData = [];
     for (let row = 0; row < table.rows; row++) {
-      const cell = table.cells[row]?.[selectedCell.col];
-      columnData.push([cell && cell.type === 'text' ? cell.content : '']);
+      const cell = table.cells[row]?.[colIndex];
+      columnCells.push([cell]); // Store the full cell instance
+      
+      // For clipboard, convert to string representation
+      if (cell) {
+        switch (cell.type) {
+          case 'text':
+            columnStringData.push(cell.content);
+            break;
+          case 'image':
+            columnStringData.push(`[IMAGE: ${cell.src}]`);
+            break;
+          case 'sketch':
+            columnStringData.push('[SKETCH]');
+            break;
+          case 'table':
+            columnStringData.push('[TABLE]');
+            break;
+          case 'visualization':
+            columnStringData.push('[VISUALIZATION]');
+            break;
+          default:
+            columnStringData.push('');
+        }
+      } else {
+        columnStringData.push('');
+      }
     }
     
     setCopiedData({
       type: 'columns',
-      data: columnData,
-      sourceTableId: selectedCell.tableId,
+      data: columnCells, // Store full cell instances for internal operations
+      sourceTableId: activeTabId,
       sourceRange: {
         startRow: 0,
         endRow: table.rows - 1,
-        startCol: selectedCell.col,
-        endCol: selectedCell.col
+        startCol: colIndex,
+        endCol: colIndex
       }
     });
     
-    // Copy as line-separated values
-    navigator.clipboard?.writeText(columnData.map(row => row[0]).join('\n'));
-  }, [selectedCell, openTables]);
+    // Copy string representation to system clipboard
+    navigator.clipboard?.writeText(columnStringData.join('\n'));
+  }, [activeTabId, openTables]);
+
+  // Paste to row/column handlers
+  const handleRowPaste = useCallback((rowIndex: number) => {
+    if (!copiedData || !activeTabId) return;
+    
+    if (copiedData.type === 'rows' && copiedData.data.length > 0) {
+      const rowCells = copiedData.data[0]; // Full cell instances
+      const currentActiveTabId = activeTabId;
+      const sourceRowIndex = copiedData.sourceRange.startRow;
+      
+      // Log the operation as a single row copy
+      if (onOperation) {
+        onOperation(`Copy row ${sourceRowIndex + 1} to row ${rowIndex + 1} in table "${currentActiveTabId}"`);
+      }
+      
+      // Batch all operations into a single async operation to minimize re-renders
+      setTimeout(() => {
+        // Process all cells in the row as a single batched operation
+        for (let col = 0; col < rowCells.length; col++) {
+          const cell = rowCells[col];
+          if (cell) {
+            if (cell.type === 'text') {
+              // For text cells, use editCellContent
+              onEditCellContent(currentActiveTabId, rowIndex, col, cell.content);
+            } else {
+              // For non-text cells (images, sketches, etc.), use addToTable to preserve the full instance
+              onAddToTable(currentActiveTabId, cell, rowIndex, col);
+            }
+          } else {
+            // Clear the cell if source was empty
+            onRemoveCellContent(currentActiveTabId, rowIndex, col);
+          }
+        }
+        markTableDirty(currentActiveTabId);
+      }, 0);
+    }
+  }, [copiedData, activeTabId, onEditCellContent, onAddToTable, onRemoveCellContent, markTableDirty, onOperation]);
+
+  const handleColumnPaste = useCallback((colIndex: number) => {
+    if (!copiedData || !activeTabId) return;
+    
+    if (copiedData.type === 'columns' && copiedData.data.length > 0) {
+      const currentActiveTabId = activeTabId;
+      const columnCells = copiedData.data; // Array of [cell] arrays
+      const sourceColIndex = copiedData.sourceRange.startCol;
+      
+      // Log the operation as a single column copy
+      if (onOperation) {
+        onOperation(`Copy column ${String.fromCharCode(65 + sourceColIndex)} to column ${String.fromCharCode(65 + colIndex)} in table "${currentActiveTabId}"`);
+      }
+      
+      // Batch all operations into a single async operation to minimize re-renders
+      setTimeout(() => {
+        // Process all cells in the column as a single batched operation
+        for (let row = 0; row < columnCells.length; row++) {
+          const cell = columnCells[row][0]; // Extract cell from [cell] array
+          if (cell) {
+            if (cell.type === 'text') {
+              // For text cells, use editCellContent
+              onEditCellContent(currentActiveTabId, row, colIndex, cell.content);
+            } else {
+              // For non-text cells (images, sketches, etc.), use addToTable to preserve the full instance
+              onAddToTable(currentActiveTabId, cell, row, colIndex);
+            }
+          } else {
+            // Clear the cell if source was empty
+            onRemoveCellContent(currentActiveTabId, row, colIndex);
+          }
+        }
+        markTableDirty(currentActiveTabId);
+      }, 0);
+    }
+  }, [copiedData, activeTabId, onEditCellContent, onAddToTable, onRemoveCellContent, markTableDirty, onOperation]);
+
+  // Cell selection handler
+  const handleCellSelectionChange = useCallback((cell: { row: number; col: number } | null) => {
+    if (cell && activeTabId) {
+      setSelectedCell({ tableId: activeTabId, ...cell });
+      // Clear range selection when individual cell is selected
+      setSelectedRange(null);
+    } else {
+      setSelectedCell(null);
+    }
+  }, [activeTabId]);
+
+  // Range selection handler
+  const handleRangeSelectionChange = useCallback((range: { startRow: number; endRow: number; startCol: number; endCol: number } | null) => {
+    if (range && activeTabId) {
+      setSelectedRange({ tableId: activeTabId, ...range });
+      // Clear single cell selection when range is selected
+      setSelectedCell(null);
+    } else {
+      setSelectedRange(null);
+    }
+  }, [activeTabId]);
+
+  // Wrapped handlers for row/column operations that mark table as dirty
+  const handleAddRowWrapped = useCallback((position: 'before' | 'after', rowIndex: number) => {
+    if (!activeTabId || !onAddRow) return;
+    onAddRow(activeTabId, position, rowIndex);
+    markTableDirty(activeTabId);
+  }, [activeTabId, onAddRow, markTableDirty]);
+
+  const handleRemoveRowWrapped = useCallback((rowIndex: number) => {
+    if (!activeTabId || !onRemoveRow) return;
+    onRemoveRow(activeTabId, rowIndex);
+    markTableDirty(activeTabId);
+  }, [activeTabId, onRemoveRow, markTableDirty]);
+
+  const handleAddColumnWrapped = useCallback((position: 'before' | 'after', colIndex: number) => {
+    if (!activeTabId || !onAddColumn) return;
+    onAddColumn(activeTabId, position, colIndex);
+    markTableDirty(activeTabId);
+  }, [activeTabId, onAddColumn, markTableDirty]);
+
+  const handleRemoveColumnWrapped = useCallback((colIndex: number) => {
+    if (!activeTabId || !onRemoveColumn) return;
+    onRemoveColumn(activeTabId, colIndex);
+    markTableDirty(activeTabId);
+  }, [activeTabId, onRemoveColumn, markTableDirty]);
+
+  const handleUpdateColumnTypeWrapped = useCallback((colIndex: number, columnType: 'numeral' | 'categorical') => {
+    if (!activeTabId || !onUpdateColumnType) return;
+    onUpdateColumnType(activeTabId, colIndex, columnType);
+    markTableDirty(activeTabId);
+  }, [activeTabId, onUpdateColumnType, markTableDirty]);
+
+  const handleUpdateColumnNameWrapped = useCallback((colIndex: number, columnName: string) => {
+    if (!activeTabId || !onUpdateColumnName) return;
+    onUpdateColumnName(activeTabId, colIndex, columnName);
+    markTableDirty(activeTabId);
+  }, [activeTabId, onUpdateColumnName, markTableDirty]);
+
+  const handleLiftRowToHeaderWrapped = useCallback((rowIndex: number) => {
+    if (!activeTabId || !onLiftRowToHeader) return;
+    onLiftRowToHeader(activeTabId, rowIndex);
+    markTableDirty(activeTabId);
+  }, [activeTabId, onLiftRowToHeader, markTableDirty]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -327,13 +604,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'c') {
           e.preventDefault();
-          if (e.shiftKey) {
-            handleCopyRow();
-          } else if (e.altKey) {
-            handleCopyColumn();
-          } else {
-            handleCopy();
-          }
+          handleCopy();
         } else if (e.key === 'v') {
           e.preventDefault();
           handlePaste();
@@ -343,7 +614,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleCopy, handlePaste, handleCopyRow, handleCopyColumn]);
+  }, [handleCopy, handlePaste]);
 
   // Function to perform join operation
   const performJoin = useCallback((suggestion: JoinSuggestion) => {
@@ -408,7 +679,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     const joinedTable: TableInstance = {
       id: joinedTableId,
       type: 'table',
-      name: `${leftTable.name || 'Left'} ${suggestion.joinType.toUpperCase()} ${rightTable.name || 'Right'}`,
+      source: { type: 'manual' }, // Required property
       rows: joinedRows.length,
       cols: joinedColumnNames.length,
       cells: joinedRows,
@@ -426,7 +697,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       instance: joinedTable,
       isDirty: true,
       isNew: true,
-      originalName: joinedTable.name
+      originalName: `${openTables.find(t => t.id === suggestion.leftTableId)?.originalName || 'Left'} ${suggestion.joinType.toUpperCase()} ${openTables.find(t => t.id === suggestion.rightTableId)?.originalName || 'Right'}`
     };
     
     setOpenTables(prev => [...prev, newOpenTable]);
@@ -538,41 +809,6 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
             </button>
           )}
           
-          {/* Copy/Paste Controls */}
-          {selectedCell && (
-            <div style={{ display: 'flex', gap: '4px', borderLeft: '1px solid #ddd', paddingLeft: '8px' }}>
-              <button 
-                onClick={handleCopy}
-                title="Copy cell (Ctrl+C)"
-                style={{ fontSize: '12px', padding: '4px 8px' }}
-              >
-                Copy
-              </button>
-              <button 
-                onClick={handleCopyRow}
-                title="Copy row (Ctrl+Shift+C)"
-                style={{ fontSize: '12px', padding: '4px 8px' }}
-              >
-                Copy Row
-              </button>
-              <button 
-                onClick={handleCopyColumn}
-                title="Copy column (Ctrl+Alt+C)"
-                style={{ fontSize: '12px', padding: '4px 8px' }}
-              >
-                Copy Col
-              </button>
-              {copiedData && (
-                <button 
-                  onClick={handlePaste}
-                  title="Paste (Ctrl+V)"
-                  style={{ fontSize: '12px', padding: '4px 8px', backgroundColor: '#e8f5e8' }}
-                >
-                  Paste
-                </button>
-              )}
-            </div>
-          )}
           
           <button onClick={handleSaveAll}>
             Save {openTables.filter(t => t.isDirty).length > 0 && `(${openTables.filter(t => t.isDirty).length})`}
@@ -644,20 +880,27 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
             onRemoveCellContent={handleRemoveCellContent}
             setDraggingInstanceId={setDraggingInstanceId}
             onEditCellContent={handleEditCellContent}
-            onCellSelectionChange={(cell) => {
-              if (cell) {
-                setSelectedCell({ tableId: activeTabId!, ...cell });
-              } else {
-                setSelectedCell(null);
-              }
-            }}
-            onAddRow={onAddRow ? (pos, idx) => onAddRow(activeTabId!, pos, idx) : undefined}
-            onRemoveRow={onRemoveRow ? (idx) => onRemoveRow(activeTabId!, idx) : undefined}
-            onAddColumn={onAddColumn ? (pos, idx) => onAddColumn(activeTabId!, pos, idx) : undefined}
-            onRemoveColumn={onRemoveColumn ? (idx) => onRemoveColumn(activeTabId!, idx) : undefined}
-            onUpdateColumnType={onUpdateColumnType ? (idx, type) => onUpdateColumnType(activeTabId!, idx, type) : undefined}
-            onUpdateColumnName={onUpdateColumnName ? (idx, name) => onUpdateColumnName(activeTabId!, idx, name) : undefined}
-            onLiftRowToHeader={onLiftRowToHeader ? (idx) => onLiftRowToHeader(activeTabId!, idx) : undefined}
+            onCellSelectionChange={handleCellSelectionChange}
+            // Copy/paste handlers for context menus
+            onCopyRow={handleRowCopy}
+            onCopyColumn={handleColumnCopy}
+            onPasteToRow={copiedData ? handleRowPaste : undefined}
+            onPasteToColumn={copiedData ? handleColumnPaste : undefined}
+            // Range selection
+            selectedRange={selectedRange && selectedRange.tableId === activeTabId ? {
+              startRow: selectedRange.startRow,
+              endRow: selectedRange.endRow,
+              startCol: selectedRange.startCol,
+              endCol: selectedRange.endCol
+            } : null}
+            onRangeSelectionChange={handleRangeSelectionChange}
+            onAddRow={onAddRow ? handleAddRowWrapped : undefined}
+            onRemoveRow={onRemoveRow ? handleRemoveRowWrapped : undefined}
+            onAddColumn={onAddColumn ? handleAddColumnWrapped : undefined}
+            onRemoveColumn={onRemoveColumn ? handleRemoveColumnWrapped : undefined}
+            onUpdateColumnType={onUpdateColumnType ? handleUpdateColumnTypeWrapped : undefined}
+            onUpdateColumnName={onUpdateColumnName ? handleUpdateColumnNameWrapped : undefined}
+            onLiftRowToHeader={onLiftRowToHeader ? handleLiftRowToHeaderWrapped : undefined}
             currentSuggestion={currentSuggestion}
             onAcceptSuggestion={() => {
               if (currentSuggestion) {
@@ -766,7 +1009,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
                     backgroundColor: '#f9f9f9'
                   }}
                 >
-                  <strong>{table.name || `Table ${table.id.slice(0, 8)}`}</strong>
+                  <strong>{`Table ${table.id.slice(0, 8)}`}</strong>
                   <br />
                   <small>{table.rows} rows × {table.cols} columns</small>
                 </div>
@@ -800,7 +1043,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
             backgroundColor: 'white',
             padding: '24px',
             borderRadius: '8px',
-            minWidth: '500px',
+            minWidth: '400px',
             maxHeight: '80vh',
             overflow: 'auto'
           }}>

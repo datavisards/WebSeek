@@ -1213,4 +1213,185 @@ export function areInstancesContentEqual(instance1: Instance | EmbeddedInstance 
   }
 }
 
-export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance, mapToObject, updateInstances, areInstancesContentEqual };
+// Formula evaluation utilities for table thumbnails
+export const evaluateFormulaInTable = (formula: string, table: any): string => {
+  try {
+    // Remove leading = sign
+    const expr = formula.startsWith('=') ? formula.slice(1) : formula;
+    
+    // Helper function to parse column references
+    const parseColumnReference = (ref: string): { col: number, row?: number } | null => {
+      const cellMatch = ref.match(/^([A-Z]+)(\d+)$/);
+      if (cellMatch) {
+        const colLetters = cellMatch[1];
+        const rowNum = parseInt(cellMatch[2]) - 1; // Convert to 0-based
+        let col = 0;
+        for (let i = 0; i < colLetters.length; i++) {
+          col = col * 26 + (colLetters.charCodeAt(i) - 65 + 1);
+        }
+        col -= 1; // Convert to 0-based
+        return { col, row: rowNum };
+      }
+      
+      // Column range like A:A
+      const colMatch = ref.match(/^([A-Z]+):([A-Z]+)$/);
+      if (colMatch && colMatch[1] === colMatch[2]) {
+        const colLetters = colMatch[1];
+        let col = 0;
+        for (let i = 0; i < colLetters.length; i++) {
+          col = col * 26 + (colLetters.charCodeAt(i) - 65 + 1);
+        }
+        col -= 1; // Convert to 0-based
+        return { col };
+      }
+      
+      return null;
+    };
+
+    // Parse cell ranges like A1:A2
+    const parseCellRange = (range: string): { startCol: number, endCol: number, startRow: number, endRow: number } | null => {
+      const rangeMatch = range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+      if (!rangeMatch) return null;
+      
+      const startColLetters = rangeMatch[1];
+      const startRowNum = parseInt(rangeMatch[2]) - 1;
+      const endColLetters = rangeMatch[3];
+      const endRowNum = parseInt(rangeMatch[4]) - 1;
+      
+      let startCol = 0;
+      for (let i = 0; i < startColLetters.length; i++) {
+        startCol = startCol * 26 + (startColLetters.charCodeAt(i) - 65 + 1);
+      }
+      startCol -= 1;
+      
+      let endCol = 0;
+      for (let i = 0; i < endColLetters.length; i++) {
+        endCol = endCol * 26 + (endColLetters.charCodeAt(i) - 65 + 1);
+      }
+      endCol -= 1;
+      
+      return { startCol, endCol, startRow: startRowNum, endRow: endRowNum };
+    };
+
+    // Get raw cell value (skip formulas to avoid recursion)
+    const getRawCellValue = (row: number, col: number): number => {
+      const cell = table.cells[row]?.[col];
+      if (!cell || cell.type !== 'text') return 0;
+      const content = cell.content.trim();
+      
+      // Skip formulas to avoid infinite recursion
+      if (content.startsWith('=')) return 0;
+      
+      const value = parseFloat(content);
+      return isNaN(value) ? 0 : value;
+    };
+    
+    // Handle SUM function
+    const sumMatch = expr.match(/SUM\(([^)]+)\)/i);
+    if (sumMatch) {
+      const range = sumMatch[1];
+      
+      // Try parsing as cell range first (A1:A2)
+      const cellRange = parseCellRange(range);
+      if (cellRange) {
+        let sum = 0;
+        for (let row = cellRange.startRow; row <= cellRange.endRow; row++) {
+          for (let col = cellRange.startCol; col <= cellRange.endCol; col++) {
+            sum += getRawCellValue(row, col);
+          }
+        }
+        return sum.toString();
+      }
+      
+      // Fall back to column reference
+      const ref = parseColumnReference(range);
+      if (ref && ref.row === undefined) {
+        // Column sum
+        let sum = 0;
+        for (let r = 0; r < table.rows; r++) {
+          sum += getRawCellValue(r, ref.col);
+        }
+        return sum.toString();
+      } else if (ref && ref.row !== undefined) {
+        // Single cell
+        return getRawCellValue(ref.row, ref.col).toString();
+      }
+      return '0';
+    }
+
+    // Handle AVG function
+    const avgMatch = expr.match(/AVG\(([^)]+)\)/i);
+    if (avgMatch) {
+      const range = avgMatch[1];
+      
+      // Try parsing as cell range first
+      const cellRange = parseCellRange(range);
+      if (cellRange) {
+        let sum = 0;
+        let count = 0;
+        for (let row = cellRange.startRow; row <= cellRange.endRow; row++) {
+          for (let col = cellRange.startCol; col <= cellRange.endCol; col++) {
+            const value = getRawCellValue(row, col);
+            const cell = table.cells[row]?.[col];
+            if (value !== 0 || (cell?.type === 'text' && cell.content.trim() !== '')) {
+              sum += value;
+              count++;
+            }
+          }
+        }
+        return count > 0 ? (sum / count).toString() : '0';
+      }
+      
+      // Fall back to column reference
+      const ref = parseColumnReference(range);
+      if (ref && ref.row === undefined) {
+        let sum = 0;
+        let count = 0;
+        for (let r = 0; r < table.rows; r++) {
+          const value = getRawCellValue(r, ref.col);
+          const cell = table.cells[r]?.[ref.col];
+          if (value !== 0 || (cell?.type === 'text' && cell.content.trim() !== '')) {
+            sum += value;
+            count++;
+          }
+        }
+        return count > 0 ? (sum / count).toString() : '0';
+      } else if (ref && ref.row !== undefined) {
+        return getRawCellValue(ref.row, ref.col).toString();
+      }
+      return '0';
+    }
+
+    // Handle basic mathematical expressions with cell references
+    let processedExpr = expr;
+    
+    // Replace cell references with their values
+    const cellRefs = expr.match(/[A-Z]+\d+/g) || [];
+    for (const ref of cellRefs) {
+      const parsed = parseColumnReference(ref);
+      if (parsed && parsed.row !== undefined) {
+        const value = getRawCellValue(parsed.row, parsed.col);
+        processedExpr = processedExpr.replace(new RegExp(ref, 'g'), value.toString());
+      }
+    }
+
+    // If the processed expression is just a number, return it directly
+    const numResult = parseFloat(processedExpr.trim());
+    if (!isNaN(numResult) && isFinite(numResult)) {
+      return numResult.toString();
+    }
+    
+    // Evaluate the mathematical expression safely
+    // Only allow numbers, operators, and parentheses
+    if (/^[0-9+\-*/().\s]+$/.test(processedExpr)) {
+      const result = Function('"use strict"; return (' + processedExpr + ')')();
+      return isNaN(result) ? '#ERROR' : result.toString();
+    }
+    
+    return '#ERROR';
+  } catch (error) {
+    return '#ERROR';
+  }
+};
+
+export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance, mapToObject, updateInstances, areInstancesContentEqual, evaluateFormulaInTable };

@@ -23,6 +23,14 @@ interface TableGridProps {
   currentSuggestion?: ProactiveSuggestion;
   onAcceptSuggestion?: () => void;
   onDismissSuggestion?: () => void;
+  // Copy/paste operations
+  onCopyRow?: (rowIndex: number) => void;
+  onCopyColumn?: (colIndex: number) => void;
+  onPasteToRow?: (rowIndex: number) => void;
+  onPasteToColumn?: (colIndex: number) => void;
+  // Selection operations
+  selectedRange?: { startRow: number; endRow: number; startCol: number; endCol: number } | null;
+  onRangeSelectionChange?: (range: { startRow: number; endRow: number; startCol: number; endCol: number } | null) => void;
 }
 
 const TableGrid: React.FC<TableGridProps> = ({
@@ -43,17 +51,27 @@ const TableGrid: React.FC<TableGridProps> = ({
   onLiftRowToHeader,
   currentSuggestion,
   onAcceptSuggestion,
-  onDismissSuggestion
+  onDismissSuggestion,
+  onCopyRow,
+  onCopyColumn,
+  onPasteToRow,
+  onPasteToColumn,
+  selectedRange,
+  onRangeSelectionChange
 }) => {
   // These will be computed later based on effective table dimensions
   const [hoveredCell, setHoveredCell] = useState<{ row: number, col: number } | null>(null);
   const [editingCell, setEditingCell] = useState<{ row: number, col: number } | null>(null);
   const [editingColumnName, setEditingColumnName] = useState<number | null>(null);
   const [flashfillSuggestions, setFlashfillSuggestions] = useState<Map<string, string[]>>(new Map());
-  const [dragStart, setDragStart] = useState<{ row: number, col: number } | null>(null);
   const [dragPreview, setDragPreview] = useState<{ row: number, col: number }[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const columnNameInputRef = useRef<HTMLDivElement>(null);
+  
+  // Box selection state
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectionStart, setSelectionStart] = useState<{ row: number, col: number } | null>(null);
+  const [currentRange, setCurrentRange] = useState<{ startRow: number; endRow: number; startCol: number; endCol: number } | null>(selectedRange || null);
 
   // Multi-selection states
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
@@ -241,8 +259,31 @@ const TableGrid: React.FC<TableGridProps> = ({
     paired.sort((a, b) => {
       const cellA = a.row[sortColumn];
       const cellB = b.row[sortColumn];
-      const valA = cellA && cellA.type === 'text' ? cellA.content.trim() : '';
-      const valB = cellB && cellB.type === 'text' ? cellB.content.trim() : '';
+      // For formulas, use calculated result for sorting; for regular text, use content
+      let valA = '';
+      let valB = '';
+      
+      if (cellA && cellA.type === 'text') {
+        const content = cellA.content.trim();
+        if (content.startsWith('=')) {
+          const calculated = evaluateFormula(content);
+          // If formula evaluation fails, use the formula text for sorting
+          valA = calculated === '#ERROR' ? content : calculated;
+        } else {
+          valA = content;
+        }
+      }
+      
+      if (cellB && cellB.type === 'text') {
+        const content = cellB.content.trim();
+        if (content.startsWith('=')) {
+          const calculated = evaluateFormula(content);
+          // If formula evaluation fails, use the formula text for sorting
+          valB = calculated === '#ERROR' ? content : calculated;
+        } else {
+          valB = content;
+        }
+      }
       
       // Handle empty values - sort them to the end
       if (valA === '' && valB === '') return a.idx - b.idx;
@@ -322,13 +363,50 @@ const TableGrid: React.FC<TableGridProps> = ({
     return null;
   };
 
-  const getCellValue = (row: number, col: number): number => {
+  // Parse cell ranges like A1:A2, B1:C3
+  const parseCellRange = (range: string): { startCol: number, endCol: number, startRow: number, endRow: number } | null => {
+    const rangeMatch = range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+    if (!rangeMatch) return null;
+    
+    const startColLetters = rangeMatch[1];
+    const startRowNum = parseInt(rangeMatch[2]) - 1; // Convert to 0-based
+    const endColLetters = rangeMatch[3];
+    const endRowNum = parseInt(rangeMatch[4]) - 1; // Convert to 0-based
+    
+    let startCol = 0;
+    for (let i = 0; i < startColLetters.length; i++) {
+      startCol = startCol * 26 + (startColLetters.charCodeAt(i) - 65 + 1);
+    }
+    startCol -= 1; // Convert to 0-based
+    
+    let endCol = 0;
+    for (let i = 0; i < endColLetters.length; i++) {
+      endCol = endCol * 26 + (endColLetters.charCodeAt(i) - 65 + 1);
+    }
+    endCol -= 1; // Convert to 0-based
+    
+    return {
+      startCol,
+      endCol,
+      startRow: startRowNum,
+      endRow: endRowNum
+    };
+  };
+
+  // Get raw cell value without formula evaluation (to avoid circular dependency)
+  const getRawCellValue = (row: number, col: number): number => {
     const cell = table.cells[row]?.[col];
     if (!cell || cell.type !== 'text') return 0;
     const textCell = cell as EmbeddedTextInstance;
-    const value = parseFloat(textCell.content);
+    const content = textCell.content.trim();
+    
+    // Skip formulas to avoid infinite recursion
+    if (content.startsWith('=')) return 0;
+    
+    const value = parseFloat(content);
     return isNaN(value) ? 0 : value;
   };
+
 
   const evaluateFormula = (formula: string): string => {
     try {
@@ -339,17 +417,31 @@ const TableGrid: React.FC<TableGridProps> = ({
       const sumMatch = expr.match(/SUM\(([^)]+)\)/i);
       if (sumMatch) {
         const range = sumMatch[1];
+        
+        // Try parsing as cell range first (A1:A2)
+        const cellRange = parseCellRange(range);
+        if (cellRange) {
+          let sum = 0;
+          for (let row = cellRange.startRow; row <= cellRange.endRow; row++) {
+            for (let col = cellRange.startCol; col <= cellRange.endCol; col++) {
+              sum += getRawCellValue(row, col);
+            }
+          }
+          return sum.toString();
+        }
+        
+        // Fall back to column reference (A:A or single cell A1)
         const ref = parseColumnReference(range);
         if (ref && ref.row === undefined) {
           // Column sum
           let sum = 0;
           for (let r = 0; r < table.rows; r++) {
-            sum += getCellValue(r, ref.col);
+            sum += getRawCellValue(r, ref.col);
           }
           return sum.toString();
         } else if (ref && ref.row !== undefined) {
           // Single cell
-          return getCellValue(ref.row, ref.col).toString();
+          return getRawCellValue(ref.row, ref.col).toString();
         }
         return '0';
       }
@@ -358,13 +450,33 @@ const TableGrid: React.FC<TableGridProps> = ({
       const avgMatch = expr.match(/AVG\(([^)]+)\)/i);
       if (avgMatch) {
         const range = avgMatch[1];
+        
+        // Try parsing as cell range first (A1:A2)
+        const cellRange = parseCellRange(range);
+        if (cellRange) {
+          let sum = 0;
+          let count = 0;
+          for (let row = cellRange.startRow; row <= cellRange.endRow; row++) {
+            for (let col = cellRange.startCol; col <= cellRange.endCol; col++) {
+              const value = getRawCellValue(row, col);
+              const cell = table.cells[row]?.[col];
+              if (value !== 0 || (cell?.type === 'text' && (cell as EmbeddedTextInstance).content.trim() !== '')) {
+                sum += value;
+                count++;
+              }
+            }
+          }
+          return count > 0 ? (sum / count).toString() : '0';
+        }
+        
+        // Fall back to column reference (A:A or single cell A1)
         const ref = parseColumnReference(range);
         if (ref && ref.row === undefined) {
           // Column average
           let sum = 0;
           let count = 0;
           for (let r = 0; r < table.rows; r++) {
-            const value = getCellValue(r, ref.col);
+            const value = getRawCellValue(r, ref.col);
             const cell = table.cells[r]?.[ref.col];
             if (value !== 0 || (cell?.type === 'text' && (cell as EmbeddedTextInstance).content.trim() !== '')) {
               sum += value;
@@ -374,7 +486,7 @@ const TableGrid: React.FC<TableGridProps> = ({
           return count > 0 ? (sum / count).toString() : '0';
         } else if (ref && ref.row !== undefined) {
           // Single cell
-          return getCellValue(ref.row, ref.col).toString();
+          return getRawCellValue(ref.row, ref.col).toString();
         }
         return '0';
       }
@@ -387,11 +499,17 @@ const TableGrid: React.FC<TableGridProps> = ({
       for (const ref of cellRefs) {
         const parsed = parseColumnReference(ref);
         if (parsed && parsed.row !== undefined) {
-          const value = getCellValue(parsed.row, parsed.col);
+          const value = getRawCellValue(parsed.row, parsed.col);
           processedExpr = processedExpr.replace(new RegExp(ref, 'g'), value.toString());
         }
       }
 
+      // If the processed expression is just a number, return it directly
+      const numResult = parseFloat(processedExpr.trim());
+      if (!isNaN(numResult) && isFinite(numResult)) {
+        return numResult.toString();
+      }
+      
       // Evaluate the mathematical expression safely
       // Only allow numbers, operators, and parentheses
       if (/^[0-9+\-*/().\s]+$/.test(processedExpr)) {
@@ -405,9 +523,6 @@ const TableGrid: React.FC<TableGridProps> = ({
     }
   };
 
-  const isFormula = (content: string): boolean => {
-    return content.startsWith('=');
-  };
 
   // Flashfill pattern detection functions
   const detectPattern = (examples: string[]): { type: string; pattern?: any } | null => {
@@ -676,6 +791,12 @@ const TableGrid: React.FC<TableGridProps> = ({
     setSelectedRows(new Set());
     setSelectedColumns(new Set());
     setEditingCell(null);
+    
+    // Clear range selection when clicking on individual cell
+    if (currentRange) {
+      setCurrentRange(null);
+      onRangeSelectionChange?.(null);
+    }
   };
 
   const handleContentClick = (e: React.MouseEvent, row: number, col: number) => {
@@ -684,7 +805,56 @@ const TableGrid: React.FC<TableGridProps> = ({
     setSelectedRows(new Set());
     setSelectedColumns(new Set());
     // Don't enter edit mode on single click - only select the cell
+    
+    // Clear range selection when clicking on individual cell
+    if (currentRange) {
+      setCurrentRange(null);
+      onRangeSelectionChange?.(null);
+    }
   };
+
+  // Box selection handlers
+  const handleCellMouseDown = (e: React.MouseEvent, row: number, col: number) => {
+    if (e.button !== 0 || isReadOnly || editingCell) return; // Only left click
+    
+    e.preventDefault();
+    setIsSelecting(true);
+    setSelectionStart({ row, col });
+    setCurrentRange({ startRow: row, endRow: row, startCol: col, endCol: col });
+    
+    // Clear other selections
+    setSelectedRows(new Set());
+    setSelectedColumns(new Set());
+    setSelectedCell(null);
+  };
+
+  const handleCellMouseEnter = (row: number, col: number) => {
+    if (!isSelecting || !selectionStart) return;
+    
+    const startRow = Math.min(selectionStart.row, row);
+    const endRow = Math.max(selectionStart.row, row);
+    const startCol = Math.min(selectionStart.col, col);
+    const endCol = Math.max(selectionStart.col, col);
+    
+    const newRange = { startRow, endRow, startCol, endCol };
+    setCurrentRange(newRange);
+  };
+
+  const handleMouseUp = useCallback(() => {
+    if (isSelecting && currentRange) {
+      onRangeSelectionChange?.(currentRange);
+    }
+    setIsSelecting(false);
+    setSelectionStart(null);
+  }, [isSelecting, currentRange, onRangeSelectionChange]);
+
+  // Global mouse up handler
+  useEffect(() => {
+    if (isSelecting) {
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => document.removeEventListener('mouseup', handleMouseUp);
+    }
+  }, [isSelecting, handleMouseUp]);
 
   const handleBlur = (e: React.FocusEvent, row: number, col: number) => {
     // Only blur if the new focus target is outside the cell
@@ -970,6 +1140,30 @@ const TableGrid: React.FC<TableGridProps> = ({
           setSortDirection(null);
         }
         break;
+      case 'copy-row':
+        if (type === 'row' && onCopyRow) {
+          // Convert display row index to original row index
+          const originalRowIndex = filteredAndSortedRows[index]?.originalIndex ?? index;
+          onCopyRow(originalRowIndex);
+        }
+        break;
+      case 'copy-column':
+        if (type === 'column' && onCopyColumn) {
+          onCopyColumn(index);
+        }
+        break;
+      case 'paste-to-row':
+        if (type === 'row' && onPasteToRow) {
+          // Convert display row index to original row index
+          const originalRowIndex = filteredAndSortedRows[index]?.originalIndex ?? index;
+          onPasteToRow(originalRowIndex);
+        }
+        break;
+      case 'paste-to-column':
+        if (type === 'column' && onPasteToColumn) {
+          onPasteToColumn(index);
+        }
+        break;
     }
     
     closeContextMenu();
@@ -1240,6 +1434,9 @@ const TableGrid: React.FC<TableGridProps> = ({
           const isCellSelected = selectedCell?.row === displayRowIndex && selectedCell?.col === colIndex;
           const isEditing = editingCell?.row === displayRowIndex && editingCell?.col === colIndex;
           const isHeaderSelected = isSelectedViaHeader(displayRowIndex, colIndex);
+          const isInRange = currentRange && 
+            originalRowIndex >= currentRange.startRow && originalRowIndex <= currentRange.endRow &&
+            colIndex >= currentRange.startCol && colIndex <= currentRange.endCol;
           // Use original row index for suggestion detection
           const suggestion = getSuggestionForCell(originalRowIndex, colIndex);
 
@@ -1252,6 +1449,7 @@ const TableGrid: React.FC<TableGridProps> = ({
                   ${isHeaderSelected ? 'header-selected' : ''}
                   ${isEditing ? 'editing' : ''}
                   ${suggestion ? 'has-suggestion' : ''}
+                  ${isInRange ? 'range-selected' : ''}
                   ${dragPreview.some(cell => cell.row === originalRowIndex && cell.col === colIndex) ? 'drag-preview' : ''}`}
               data-row={originalRowIndex}
               data-col={colIndex}
@@ -1274,6 +1472,8 @@ const TableGrid: React.FC<TableGridProps> = ({
                 setHoveredCell(null);
               }}
               onClick={isReadOnly || isEditing ? undefined : () => handleCellClick(displayRowIndex, colIndex)}
+              onMouseDown={isReadOnly || isEditing ? undefined : (e) => handleCellMouseDown(e, originalRowIndex, colIndex)}
+              onMouseEnter={() => handleCellMouseEnter(originalRowIndex, colIndex)}
               onDoubleClick={isReadOnly || isEditing ? undefined : () => {
                 if (canEditCell(cell)) {
                   setEditingCell({ row: displayRowIndex, col: colIndex });
@@ -1361,7 +1561,6 @@ const TableGrid: React.FC<TableGridProps> = ({
                         const dragStartCell = { row: originalRowIndex, col: colIndex };
                         let currentPreview: { row: number, col: number }[] = [];
                         
-                        setDragStart(dragStartCell);
                         setDragPreview([]);
                         
                         const handleMouseMove = (e: MouseEvent) => {
@@ -1399,7 +1598,6 @@ const TableGrid: React.FC<TableGridProps> = ({
                             // Apply flashfill to all cells in preview
                             applyFlashfillToCells(dragStartCell, currentPreview);
                           }
-                          setDragStart(null);
                           setDragPreview([]);
                           document.removeEventListener('mousemove', handleMouseMove);
                           document.removeEventListener('mouseup', handleMouseUp);
@@ -1484,6 +1682,32 @@ const TableGrid: React.FC<TableGridProps> = ({
               Lift Row to Header
             </div>
           )}
+          
+          {/* Copy/Paste separator */}
+          <div style={{ borderTop: '1px solid #eee', margin: '4px 0' }}></div>
+          
+          {/* Copy option */}
+          {((contextMenu.type === 'row' && onCopyRow) || (contextMenu.type === 'column' && onCopyColumn)) && (
+            <div
+              className="contextmenuoption"
+              onClick={() => handleContextMenuAction(contextMenu.type === 'row' ? 'copy-row' : 'copy-column')}
+            >
+              Copy {contextMenu.type === 'row' ? 'Row' : 'Column'}
+            </div>
+          )}
+          
+          {/* Paste option - only show if there's something to paste */}
+          {((contextMenu.type === 'row' && onPasteToRow) || (contextMenu.type === 'column' && onPasteToColumn)) && (
+            <div
+              className="contextmenuoption"
+              onClick={() => handleContextMenuAction(contextMenu.type === 'row' ? 'paste-to-row' : 'paste-to-column')}
+            >
+              Paste to {contextMenu.type === 'row' ? 'Row' : 'Column'}
+            </div>
+          )}
+          
+          <div style={{ borderTop: '1px solid #eee', margin: '4px 0' }}></div>
+          
           <div
             className="contextmenuoption"
             onClick={() => handleContextMenuAction('remove')}

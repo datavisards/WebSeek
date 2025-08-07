@@ -1,7 +1,7 @@
 import { browser, type Browser } from 'wxt/browser';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Instance, EmbeddedInstance, SketchItem, TextInstance, SketchInstance, TableInstance, Message } from '../types';
-import { getInstanceGeometry, generateInstanceContext, generateId, createSketchThumbnail, updateInstances } from '../utils';
+import { getInstanceGeometry, generateInstanceContext, generateId, createSketchThumbnail, updateInstances, evaluateFormulaInTable } from '../utils';
 import TextEditor from './texteditor';
 import SketchEditor from './sketcheditor';
 import TrashView from './trashview';
@@ -2193,6 +2193,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
             onAddColumn={(tableId: string, position: 'before' | 'after', colIndex: number) => handleAddColumn(position, colIndex)}
             onRemoveColumn={(tableId: string, colIndex: number) => handleRemoveColumn(colIndex)}
             onUpdateColumnType={(tableId: string, colIndex: number, columnType: 'numeral' | 'categorical') => handleUpdateColumnType(colIndex, columnType)}
+            onOperation={onOperation}
             onUpdateColumnName={(tableId: string, colIndex: number, columnName: string) => handleUpdateColumnName(colIndex, columnName)}
             onLiftRowToHeader={(tableId: string, rowIndex: number) => handleLiftRowToHeader(rowIndex)}
             currentSuggestion={currentSuggestion}
@@ -2428,9 +2429,15 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
                                       whiteSpace: 'nowrap',
                                     }}
                                   >
-                                    {cell.content.length > 10
-                                      ? `${cell.content.slice(0, 10)}...`
-                                      : cell.content}
+                                    {(() => {
+                                      // For formulas, show calculated result in thumbnail
+                                      const content = cell.content.startsWith('=') 
+                                        ? evaluateFormulaInTable(cell.content, instance)
+                                        : cell.content;
+                                      return content.length > 10 
+                                        ? `${content.slice(0, 10)}...` 
+                                        : content;
+                                    })()}
                                   </p>
                                 ) : cell.type === 'image' ? (
                                   <img
