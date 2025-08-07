@@ -458,11 +458,17 @@ const TableGrid: React.FC<TableGridProps> = ({
           let count = 0;
           for (let row = cellRange.startRow; row <= cellRange.endRow; row++) {
             for (let col = cellRange.startCol; col <= cellRange.endCol; col++) {
-              const value = getRawCellValue(row, col);
               const cell = table.cells[row]?.[col];
-              if (value !== 0 || (cell?.type === 'text' && (cell as EmbeddedTextInstance).content.trim() !== '')) {
-                sum += value;
-                count++;
+              // Only count cells that actually have content (non-empty text cells)
+              if (cell?.type === 'text') {
+                const content = (cell as EmbeddedTextInstance).content.trim();
+                // Skip formulas to avoid circular dependencies and only count non-empty content
+                if (!content.startsWith('=') && content !== '') {
+                  const value = parseFloat(content);
+                  const numValue = isNaN(value) ? 0 : value;
+                  sum += numValue;
+                  count++;
+                }
               }
             }
           }
@@ -476,11 +482,17 @@ const TableGrid: React.FC<TableGridProps> = ({
           let sum = 0;
           let count = 0;
           for (let r = 0; r < table.rows; r++) {
-            const value = getRawCellValue(r, ref.col);
             const cell = table.cells[r]?.[ref.col];
-            if (value !== 0 || (cell?.type === 'text' && (cell as EmbeddedTextInstance).content.trim() !== '')) {
-              sum += value;
-              count++;
+            // Only count cells that actually have content (non-empty text cells)
+            if (cell?.type === 'text') {
+              const content = (cell as EmbeddedTextInstance).content.trim();
+              // Skip formulas to avoid circular dependencies and only count non-empty content
+              if (!content.startsWith('=') && content !== '') {
+                const value = parseFloat(content);
+                const numValue = isNaN(value) ? 0 : value;
+                sum += numValue;
+                count++;
+              }
             }
           }
           return count > 0 ? (sum / count).toString() : '0';
