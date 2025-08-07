@@ -408,6 +408,58 @@ const TableGrid: React.FC<TableGridProps> = ({
   };
 
 
+  // Safe mathematical expression evaluator without using Function() or eval()
+  const evaluateMathExpression = (expr: string): number => {
+    // Remove all whitespace
+    expr = expr.replace(/\s/g, '');
+    
+    if (expr === '') return 0;
+    
+    // Handle parentheses first (recursive evaluation)
+    while (expr.includes('(')) {
+      const lastOpen = expr.lastIndexOf('(');
+      const firstClose = expr.indexOf(')', lastOpen);
+      if (firstClose === -1) throw new Error('Mismatched parentheses');
+      
+      const innerExpr = expr.substring(lastOpen + 1, firstClose);
+      const innerResult = evaluateMathExpression(innerExpr);
+      expr = expr.substring(0, lastOpen) + innerResult.toString() + expr.substring(firstClose + 1);
+    }
+    
+    // Handle multiplication and division (left to right)
+    let tokens = expr.split(/([+\-*/])/).filter(token => token !== '');
+    
+    for (let i = 1; i < tokens.length; i += 2) {
+      if (tokens[i] === '*' || tokens[i] === '/') {
+        const left = parseFloat(tokens[i - 1]);
+        const right = parseFloat(tokens[i + 1]);
+        if (isNaN(left) || isNaN(right)) throw new Error('Invalid number');
+        
+        const result = tokens[i] === '*' ? left * right : left / right;
+        tokens.splice(i - 1, 3, result.toString());
+        i -= 2; // Adjust index after splice
+      }
+    }
+    
+    // Handle addition and subtraction (left to right)
+    let result = parseFloat(tokens[0]);
+    if (isNaN(result)) throw new Error('Invalid number');
+    
+    for (let i = 1; i < tokens.length; i += 2) {
+      const operator = tokens[i];
+      const operand = parseFloat(tokens[i + 1]);
+      if (isNaN(operand)) throw new Error('Invalid number');
+      
+      if (operator === '+') {
+        result += operand;
+      } else if (operator === '-') {
+        result -= operand;
+      }
+    }
+    
+    return result;
+  };
+
   const evaluateFormula = (formula: string): string => {
     try {
       // Remove leading = sign
@@ -508,25 +560,25 @@ const TableGrid: React.FC<TableGridProps> = ({
       
       // Replace cell references with their values
       const cellRefs = expr.match(/[A-Z]+\d+/g) || [];
+      
       for (const ref of cellRefs) {
         const parsed = parseColumnReference(ref);
         if (parsed && parsed.row !== undefined) {
           const value = getRawCellValue(parsed.row, parsed.col);
-          processedExpr = processedExpr.replace(new RegExp(ref, 'g'), value.toString());
+          // Use a more specific replacement to avoid partial matches
+          processedExpr = processedExpr.replace(new RegExp('\\b' + ref + '\\b', 'g'), value.toString());
         }
       }
 
-      // If the processed expression is just a number, return it directly
-      const numResult = parseFloat(processedExpr.trim());
-      if (!isNaN(numResult) && isFinite(numResult)) {
-        return numResult.toString();
-      }
-      
-      // Evaluate the mathematical expression safely
+      // Evaluate the mathematical expression safely without using Function() or eval()
       // Only allow numbers, operators, and parentheses
       if (/^[0-9+\-*/().\s]+$/.test(processedExpr)) {
-        const result = Function('"use strict"; return (' + processedExpr + ')')();
-        return isNaN(result) ? '#ERROR' : result.toString();
+        try {
+          const result = evaluateMathExpression(processedExpr.trim());
+          return isNaN(result) || !isFinite(result) ? '#ERROR' : result.toString();
+        } catch (error) {
+          return '#ERROR';
+        }
       }
       
       return '#ERROR';

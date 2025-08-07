@@ -771,7 +771,8 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '14px'
+                fontSize: '14px',
+                color: 'black'
               }}
             >
               ×
@@ -783,9 +784,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
         <button
           onClick={() => setShowTableSelector(true)}
           style={{
-            padding: '8px 16px',
             border: '1px solid #ccc',
-            backgroundColor: '#f0f0f0',
             cursor: 'pointer'
           }}
         >

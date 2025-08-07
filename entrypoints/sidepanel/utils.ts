@@ -1214,6 +1214,58 @@ export function areInstancesContentEqual(instance1: Instance | EmbeddedInstance 
 }
 
 // Formula evaluation utilities for table thumbnails
+// Safe mathematical expression evaluator without using Function() or eval()
+const evaluateMathExpressionInUtils = (expr: string): number => {
+  // Remove all whitespace
+  expr = expr.replace(/\s/g, '');
+  
+  if (expr === '') return 0;
+  
+  // Handle parentheses first (recursive evaluation)
+  while (expr.includes('(')) {
+    const lastOpen = expr.lastIndexOf('(');
+    const firstClose = expr.indexOf(')', lastOpen);
+    if (firstClose === -1) throw new Error('Mismatched parentheses');
+    
+    const innerExpr = expr.substring(lastOpen + 1, firstClose);
+    const innerResult = evaluateMathExpressionInUtils(innerExpr);
+    expr = expr.substring(0, lastOpen) + innerResult.toString() + expr.substring(firstClose + 1);
+  }
+  
+  // Handle multiplication and division (left to right)
+  let tokens = expr.split(/([+\-*/])/).filter(token => token !== '');
+  
+  for (let i = 1; i < tokens.length; i += 2) {
+    if (tokens[i] === '*' || tokens[i] === '/') {
+      const left = parseFloat(tokens[i - 1]);
+      const right = parseFloat(tokens[i + 1]);
+      if (isNaN(left) || isNaN(right)) throw new Error('Invalid number');
+      
+      const result = tokens[i] === '*' ? left * right : left / right;
+      tokens.splice(i - 1, 3, result.toString());
+      i -= 2; // Adjust index after splice
+    }
+  }
+  
+  // Handle addition and subtraction (left to right)
+  let result = parseFloat(tokens[0]);
+  if (isNaN(result)) throw new Error('Invalid number');
+  
+  for (let i = 1; i < tokens.length; i += 2) {
+    const operator = tokens[i];
+    const operand = parseFloat(tokens[i + 1]);
+    if (isNaN(operand)) throw new Error('Invalid number');
+    
+    if (operator === '+') {
+      result += operand;
+    } else if (operator === '-') {
+      result -= operand;
+    }
+  }
+  
+  return result;
+};
+
 export const evaluateFormulaInTable = (formula: string, table: any): string => {
   try {
     // Remove leading = sign
@@ -1324,39 +1376,53 @@ export const evaluateFormulaInTable = (formula: string, table: any): string => {
     if (avgMatch) {
       const range = avgMatch[1];
       
-      // Try parsing as cell range first
+      // Try parsing as cell range first (A1:A2)
       const cellRange = parseCellRange(range);
       if (cellRange) {
         let sum = 0;
         let count = 0;
         for (let row = cellRange.startRow; row <= cellRange.endRow; row++) {
           for (let col = cellRange.startCol; col <= cellRange.endCol; col++) {
-            const value = getRawCellValue(row, col);
             const cell = table.cells[row]?.[col];
-            if (value !== 0 || (cell?.type === 'text' && cell.content.trim() !== '')) {
-              sum += value;
-              count++;
+            // Only count cells that actually have content (non-empty text cells)
+            if (cell?.type === 'text') {
+              const content = cell.content.trim();
+              // Skip formulas to avoid circular dependencies and only count non-empty content
+              if (!content.startsWith('=') && content !== '') {
+                const value = parseFloat(content);
+                const numValue = isNaN(value) ? 0 : value;
+                sum += numValue;
+                count++;
+              }
             }
           }
         }
         return count > 0 ? (sum / count).toString() : '0';
       }
       
-      // Fall back to column reference
+      // Fall back to column reference (A:A or single cell A1)
       const ref = parseColumnReference(range);
       if (ref && ref.row === undefined) {
+        // Column average
         let sum = 0;
         let count = 0;
         for (let r = 0; r < table.rows; r++) {
-          const value = getRawCellValue(r, ref.col);
           const cell = table.cells[r]?.[ref.col];
-          if (value !== 0 || (cell?.type === 'text' && cell.content.trim() !== '')) {
-            sum += value;
-            count++;
+          // Only count cells that actually have content (non-empty text cells)
+          if (cell?.type === 'text') {
+            const content = cell.content.trim();
+            // Skip formulas to avoid circular dependencies and only count non-empty content
+            if (!content.startsWith('=') && content !== '') {
+              const value = parseFloat(content);
+              const numValue = isNaN(value) ? 0 : value;
+              sum += numValue;
+              count++;
+            }
           }
         }
         return count > 0 ? (sum / count).toString() : '0';
       } else if (ref && ref.row !== undefined) {
+        // Single cell
         return getRawCellValue(ref.row, ref.col).toString();
       }
       return '0';
@@ -1371,21 +1437,20 @@ export const evaluateFormulaInTable = (formula: string, table: any): string => {
       const parsed = parseColumnReference(ref);
       if (parsed && parsed.row !== undefined) {
         const value = getRawCellValue(parsed.row, parsed.col);
-        processedExpr = processedExpr.replace(new RegExp(ref, 'g'), value.toString());
+        // Use a more specific replacement to avoid partial matches
+        processedExpr = processedExpr.replace(new RegExp('\\b' + ref + '\\b', 'g'), value.toString());
       }
     }
 
-    // If the processed expression is just a number, return it directly
-    const numResult = parseFloat(processedExpr.trim());
-    if (!isNaN(numResult) && isFinite(numResult)) {
-      return numResult.toString();
-    }
-    
-    // Evaluate the mathematical expression safely
+    // Evaluate the mathematical expression safely without using Function() or eval()
     // Only allow numbers, operators, and parentheses
     if (/^[0-9+\-*/().\s]+$/.test(processedExpr)) {
-      const result = Function('"use strict"; return (' + processedExpr + ')')();
-      return isNaN(result) ? '#ERROR' : result.toString();
+      try {
+        const result = evaluateMathExpressionInUtils(processedExpr.trim());
+        return isNaN(result) || !isFinite(result) ? '#ERROR' : result.toString();
+      } catch (error) {
+        return '#ERROR';
+      }
     }
     
     return '#ERROR';
