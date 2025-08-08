@@ -10,6 +10,43 @@ button {
   transition: background-color 0.3s ease;
 }
 
+/* Visualization Editor Mode Switcher */
+.visualization-editor-mode-switcher {
+  display: flex;
+  gap: 0;
+  margin-bottom: 1rem;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  width: fit-content;
+}
+
+.visualization-editor-mode-switcher .mode-btn {
+  background: #f8f9fa;
+  color: #495057;
+  border: 1px solid #dee2e6;
+  border-radius: 0;
+  padding: 0.5rem 1rem;
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.visualization-editor-mode-switcher .mode-btn:first-child {
+  border-right: none;
+}
+
+.visualization-editor-mode-switcher .mode-btn:hover:not(.active) {
+  background: #e9ecef;
+}
+
+.visualization-editor-mode-switcher .mode-btn.active {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
 button:hover:not([disabled]) {
   background-color: #357ab8;
 }

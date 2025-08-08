@@ -1,0 +1,393 @@
+/* Shelf Visualization Editor Styles */
+.shelf-editor-main {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  flex-grow: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.shelf-editor-left {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  height: 100%;
+}
+
+.shelf-editor-specs {
+  background: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.5rem;
+  height: 55%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow-y: auto;
+}
+
+.shelf-editor-data {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 0.5rem;
+  height: 45%;
+  display: flex;
+  flex-direction: column;
+}
+
+.shelf-editor-right {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+.shelf-editor-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Chart Type Section */
+
+.chart-type-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chart-type-section label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #333;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.chart-type-dropdown {
+  flex: 1;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.chart-type-dropdown:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+/* Data Sources Section */
+.shelf-editor-data h4 {
+  margin: 0 0 0.4rem 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 0.3rem;
+}
+
+/* Filter Section */
+.filter-section {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.filter-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #333;
+  min-width: 50px;
+  flex-shrink: 0;
+}
+
+.filter-dropdown {
+  flex: 1;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.65rem;
+  cursor: pointer;
+}
+
+.filter-dropdown:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.columns-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.column-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.3rem;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  background: white;
+  cursor: grab;
+  font-size: 0.65rem;
+  transition: all 0.2s;
+}
+
+.column-header {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.column-item:hover {
+  background: #f8f9fa;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.column-item:active {
+  cursor: grabbing;
+}
+
+.column-item.numeral {
+  border-left: 3px solid #28a745;
+}
+
+.column-item.categorical {
+  border-left: 3px solid #007bff;
+}
+
+.column-icon {
+  font-weight: bold;
+  font-size: 0.7rem;
+  color: #666;
+  min-width: 20px;
+}
+
+.column-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.column-profile {
+  font-size: 0.55rem;
+  color: #666;
+  font-style: italic;
+  margin-top: -0.1rem;
+}
+
+.no-data {
+  color: #666;
+  font-style: italic;
+  font-size: 0.8rem;
+  margin: 1rem 0;
+  text-align: center;
+}
+
+/* Shelves Container */
+.shelves-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.shelf-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.shelf-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.shelf-label {
+  font-weight: 600;
+  font-size: 0.7rem;
+  color: #333;
+  min-width: 50px;
+  flex-shrink: 0;
+}
+
+.shelf {
+  min-height: 20px;
+  padding: 0.1rem;
+  border: 2px dashed #ccc;
+  border-radius: 4px;
+  background: white;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  transition: all 0.2s;
+  flex: 1;
+}
+
+.shelf:hover {
+  border-color: #007bff;
+  background: #f8f9fa;
+}
+
+.shelf.x-shelf {
+  border-color: #28a745;
+}
+
+.shelf.x-shelf:hover {
+  border-color: #28a745;
+  background: #f0fff4;
+}
+
+.shelf.y-shelf {
+  border-color: #dc3545;
+}
+
+.shelf.y-shelf:hover {
+  border-color: #dc3545;
+  background: #fff5f5;
+}
+
+.shelf.color-shelf {
+  border-color: #fd7e14;
+}
+
+.shelf.color-shelf:hover {
+  border-color: #fd7e14;
+  background: #fff8f0;
+}
+
+/* Drag over states */
+.shelf.dragged-over {
+  border-style: solid !important;
+  border-width: 2px !important;
+  transform: scale(1.02);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.shelf.x-shelf.dragged-over {
+  background: #e6ffed !important;
+  border-color: #28a745 !important;
+}
+
+.shelf.y-shelf.dragged-over {
+  background: #ffe6e6 !important;
+  border-color: #dc3545 !important;
+}
+
+.shelf.color-shelf.dragged-over {
+  background: #fff5e6 !important;
+  border-color: #fd7e14 !important;
+}
+
+.shelf-placeholder {
+  color: #999;
+  font-style: italic;
+  font-size: 0.65rem;
+  text-align: center;
+}
+
+.shelf-item {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.1rem 0.4rem;
+  background: #e9ecef;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  max-width: 120px;
+}
+
+.shelf-item.numeral {
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+}
+
+.shelf-item.categorical {
+  background: #cce5ff;
+  border: 1px solid #99d6ff;
+}
+
+.remove-btn {
+  background: none;
+  border: none;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: #666;
+  cursor: pointer;
+  padding: 0;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.remove-btn:hover {
+  background: rgba(0,0,0,0.1);
+  color: #dc3545;
+}
+
+/* Preview Panel */
+.shelf-editor-right h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #333;
+  padding: 0.5rem 0.5rem 0 0.5rem;
+}
+
+.preview-container {
+  flex: 1;
+  margin: 0 0.5rem 0.5rem 0.5rem;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  background: #fafafa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.no-preview {
+  color: #666;
+  font-style: italic;
+  text-align: center;
+  padding: 2rem;
+}
+
+/* Responsive design */
+@media (max-width: 1200px) {
+  .shelf-editor-main {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .shelf-editor-sidebar,
+  .shelf-editor-preview {
+    width: 100%;
+  }
+  
+  .shelf-editor-center {
+    min-width: unset;
+  }
+  
+}

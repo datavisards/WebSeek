@@ -8,6 +8,7 @@ import TrashView from './trashview';
 import MultiTableEditor from './MultiTableEditor';
 import RenameModal from './renamemodal';
 import VisualizationEditor from './visualizationeditor';
+import ShelfVisualizationEditor from './ShelfVisualizationEditor';
 import InstanceViewHeader from './InstanceViewHeader';
 import InstanceContextMenu from './InstanceContextMenu';
 import GhostInstance from './GhostInstance';
@@ -146,6 +147,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   const [instanceToolsOpen, setInstanceToolsOpen] = useState(false);
   // Add state for visualization editor
   const [editingVisualizationSpec, setEditingVisualizationSpec] = useState<object | string | null>(null);
+  const [visualizationEditorMode, setVisualizationEditorMode] = useState<'shelf' | 'json'>('shelf');
 
   // Input handlers hook
   const { handleDrop, handlePaste, handleDragOver } = useInputHandlers({
@@ -2220,13 +2222,37 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
           />
         ) : editingVisualizationSpec ? (
           // Visualization Editor View
-          <VisualizationEditor
-            initialSpec={editingVisualizationSpec}
-            onSave={handleSaveVisualization}
-            onCancel={handleCancelVisualization}
-            availableInstances={availableInstances}
-            currentSuggestion={currentSuggestion}
-          />
+          <>
+            <div className="visualization-editor-mode-switcher">
+              <button 
+                className={`mode-btn ${visualizationEditorMode === 'shelf' ? 'active' : ''}`}
+                onClick={() => setVisualizationEditorMode('shelf')}
+              >
+                Visual Builder
+              </button>
+              <button 
+                className={`mode-btn ${visualizationEditorMode === 'json' ? 'active' : ''}`}
+                onClick={() => setVisualizationEditorMode('json')}
+              >
+                JSON Editor
+              </button>
+            </div>
+            {visualizationEditorMode === 'shelf' ? (
+              <ShelfVisualizationEditor
+                onSave={handleSaveVisualization}
+                onCancel={handleCancelVisualization}
+                availableInstances={availableInstances}
+              />
+            ) : (
+              <VisualizationEditor
+                initialSpec={editingVisualizationSpec}
+                onSave={handleSaveVisualization}
+                onCancel={handleCancelVisualization}
+                availableInstances={availableInstances}
+                currentSuggestion={currentSuggestion}
+              />
+            )}
+          </>
         ) : (
           // Default Instance View
           <>
