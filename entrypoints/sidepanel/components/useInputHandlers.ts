@@ -37,7 +37,8 @@ export const useInputHandlers = ({
         reader.onload = (e) => {
           const result = e.target?.result as string;
           if (result) {
-            const newId = generateId();
+            const newId = `Image${imageCountRef.current + 1}`;
+            setImageCount(prev => prev + 1);
             const newInstance: ImageInstance = {
               type: 'image',
               id: newId,
@@ -49,7 +50,6 @@ export const useInputHandlers = ({
               height: 150
             };
             setInstances(prev => [...prev, newInstance]);
-            setImageCount(prev => prev + 1);
             imageCountRef.current += 1;
             onOperation(`Uploaded image [${newId}](#instance-${newId})`);
           }
@@ -72,7 +72,8 @@ export const useInputHandlers = ({
           reader.onload = (e) => {
             const result = e.target?.result as string;
             if (result) {
-              const newId = generateId();
+              const newId = `Image${imageCountRef.current + 1}`;
+              setImageCount(prev => prev + 1);
               const newInstance: ImageInstance = {
                 type: 'image',
                 id: newId,
@@ -84,7 +85,6 @@ export const useInputHandlers = ({
                 height: 150
               };
               setInstances(prev => [...prev, newInstance]);
-              setImageCount(prev => prev + 1);
               imageCountRef.current += 1;
               onOperation(`Pasted image [${newId}](#instance-${newId})`);
             }
@@ -94,7 +94,8 @@ export const useInputHandlers = ({
       } else if (item.type === 'text/plain') {
         item.getAsString((text) => {
           if (text.trim()) {
-            const newId = generateId();
+            const newId = `Text${textCountRef.current + 1}`;
+            setTextCount(prev => prev + 1);
             const newInstance: TextInstance = {
               type: 'text',
               id: newId,
@@ -106,7 +107,6 @@ export const useInputHandlers = ({
               height: 100
             };
             setInstances(prev => [...prev, newInstance]);
-            setTextCount(prev => prev + 1);
             textCountRef.current += 1;
             onOperation(`Pasted text [${newId}](#instance-${newId})`);
           }

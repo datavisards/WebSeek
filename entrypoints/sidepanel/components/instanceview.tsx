@@ -1,7 +1,7 @@
 import { browser, type Browser } from 'wxt/browser';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Instance, EmbeddedInstance, SketchItem, TextInstance, SketchInstance, TableInstance, Message } from '../types';
-import { getInstanceGeometry, generateInstanceContext, generateId, createSketchThumbnail, updateInstances, evaluateFormulaInTable } from '../utils';
+import { getInstanceGeometry, generateInstanceContext, generateId, generateTypedId, generateEditingId, createSketchThumbnail, updateInstances, evaluateFormulaInTable } from '../utils';
 import TextEditor from './texteditor';
 import SketchEditor from './sketcheditor';
 import TrashView from './trashview';
@@ -1088,8 +1088,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
       setEditingTextContent(instance.content);
       onOperation(`Edit text "${instance.id}" by editing the embedded text content`, false);
     } else if (instance.type === 'image' || instance.type === 'sketch') {
-      let newId = `Sketch${sketchCount + 1}`;
-      setSketchCount(prev => prev + 1);
+      // Generate a temporary ID with suffix for editing existing instances
+      const existingIds = new Set(instances.map(inst => inst.id));
+      let suffix = 1;
+      let newId = `${instance.id}_${suffix}`;
+      while (existingIds.has(newId)) {
+        suffix++;
+        newId = `${instance.id}_${suffix}`;
+      }
       let newSketch: Instance = {
         id: newId,
         type: 'sketch',
@@ -1129,7 +1135,15 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
       onOperation(`Edit ${instance.type} "${instance.id}" by editing the embedded ${instance.type} in sketch "${newSketch.id}"`, false);
     } else if (instance.type === 'table') {
       let newTable = structuredClone(instance) as TableInstance;
-      newTable.id = generateId();
+      // Generate a temporary ID with suffix for editing existing table
+      const existingIds = new Set(instances.map(inst => inst.id));
+      let suffix = 1;
+      let newId = `${instance.id}_${suffix}`;
+      while (existingIds.has(newId)) {
+        suffix++;
+        newId = `${instance.id}_${suffix}`;
+      }
+      newTable.id = newId;
       newTable.cells = newTable.cells.map(rowArr => rowArr.map(cell => cell ? { ...cell, id: generateId() } : null));
       setInstances(prev => [...prev, newTable]);
       setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
@@ -1294,7 +1308,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     // Initialize cells for all positions
     const cells = Array.from({ length: rows }, () => Array.from({ length: cols }, () => null));
 
-    const newId = generateId();
+    const newId = `Table${tableCount + 1}`;
+    setTableCount(prev => prev + 1);
     const newTable: Instance = {
       id: newId,
       type: 'table',
@@ -1984,7 +1999,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   // Batch create table from selected
   const handleBatchCreateTable = () => {
     if (selectedInstanceIds.length === 0) return;
-    const newId = generateId();
+    const newId = `Table${tableCount + 1}`;
+    setTableCount(prev => prev + 1);
     const selected = instances.filter(inst => selectedInstanceIds.includes(inst.id));
     const rows = selected.length;
     const cols = 1;

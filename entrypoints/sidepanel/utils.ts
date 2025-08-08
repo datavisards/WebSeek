@@ -1,6 +1,54 @@
 // import htmlclean from 'htmlclean';
 import { Instance, EmbeddedInstance, TextInstance, EmbeddedImageInstance, EmbeddedSketchInstance, EmbeddedTableInstance, EmbeddedTextInstance, ImageInstance, SketchInstance, TableInstance, SketchItem, VisualizationInstance, InstanceSource, WebCaptureSource, ManualSource, Locator, InstanceEvent } from './types';
 
+// Helper function to generate meaningful IDs for different instance types
+export const generateTypedId = (type: string, existingInstances: any[] = []) => {
+  const typeMap: { [key: string]: string } = {
+    'text': 'Text',
+    'image': 'Image', 
+    'sketch': 'Sketch',
+    'table': 'Table',
+    'visualization': 'Visualization'
+  };
+  
+  const prefix = typeMap[type] || 'Instance';
+  
+  // Find the highest existing number for this type
+  const regex = new RegExp(`^${prefix}(\d+)$`);
+  let maxNum = 0;
+  
+  existingInstances.forEach(inst => {
+    if (inst.id) {
+      const match = inst.id.match(regex);
+      if (match) {
+        maxNum = Math.max(maxNum, parseInt(match[1]));
+      }
+    }
+  });
+  
+  return `${prefix}${maxNum + 1}`;
+};
+
+// Helper function to generate temporary ID with suffix for editing existing instances
+export const generateEditingId = (originalId: string) => {
+  const match = originalId.match(/^(.+?)(_\d+)?$/);
+  const baseId = match ? match[1] : originalId;
+  
+  // Find the next available suffix number
+  let suffix = 1;
+  const existingIds = new Set(); // This would need to be passed from context in real usage
+  
+  // For now, just append _1, _2, etc. 
+  let newId = `${baseId}_${suffix}`;
+  while (existingIds.has(newId)) {
+    suffix++;
+    newId = `${baseId}_${suffix}`;
+  }
+  
+  return newId;
+};
+
+// Keep the old function for backward compatibility with existing code that still needs it
 export const generateId = () => '_' + Math.random().toString(36).substring(2, 9);
 
 /**
