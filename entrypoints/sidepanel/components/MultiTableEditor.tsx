@@ -19,6 +19,8 @@ interface JoinSuggestion {
   rightTableId: string;
   leftColumn: string;
   rightColumn: string;
+  leftColumnIndex: number;
+  rightColumnIndex: number;
   joinType: 'inner' | 'left' | 'right' | 'full' | 'union';
   confidence: number;
 }
@@ -103,6 +105,16 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
   const [showJoinPanel, setShowJoinPanel] = useState(false);
   const [showTableSelector, setShowTableSelector] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showManualJoin, setShowManualJoin] = useState(false);
+  const [manualJoin, setManualJoin] = useState({
+    leftTableId: '',
+    rightTableId: '',
+    leftColumn: '',
+    rightColumn: '',
+    leftColumnIndex: -1,
+    rightColumnIndex: -1,
+    joinType: 'inner' as 'inner' | 'left' | 'right' | 'full' | 'union'
+  });
 
   // Sync openTables with the latest instances from parent
   useEffect(() => {
@@ -140,19 +152,61 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
         const leftTable = openTables[i].instance;
         const rightTable = openTables[j].instance;
         
-        // Simple heuristic: look for columns with similar names
         const leftColumnNames = leftTable.columnNames || [];
         const rightColumnNames = rightTable.columnNames || [];
         
-        for (let leftCol = 0; leftCol < leftColumnNames.length; leftCol++) {
-          for (let rightCol = 0; rightCol < rightColumnNames.length; rightCol++) {
+        for (let leftCol = 0; leftCol < leftTable.cols; leftCol++) {
+          for (let rightCol = 0; rightCol < rightTable.cols; rightCol++) {
             const leftName = leftColumnNames[leftCol]?.toLowerCase() || '';
             const rightName = rightColumnNames[rightCol]?.toLowerCase() || '';
             
-            // Check for exact match or common join patterns
-            const isMatch = leftName === rightName || 
-              (leftName.includes('id') && rightName.includes('id')) ||
-              (leftName.includes('key') && rightName.includes('key'));
+            let confidence = 0;
+            let isMatch = false;
+            
+            // Check for exact column name match
+            if (leftName === rightName && leftName !== '') {
+              isMatch = true;
+              confidence = 0.9;
+            }
+            // Check for common join patterns in names
+            else if ((leftName.includes('id') && rightName.includes('id')) ||
+                     (leftName.includes('key') && rightName.includes('key'))) {
+              isMatch = true;
+              confidence = 0.6;
+            }
+            // Check for matching values in columns (new logic)
+            else {
+              const leftValues = new Set<string>();
+              const rightValues = new Set<string>();
+              
+              // Collect all text values from left column
+              for (let row = 0; row < leftTable.rows; row++) {
+                const cell = leftTable.cells[row]?.[leftCol];
+                if (cell && cell.type === 'text' && cell.content.trim()) {
+                  leftValues.add(cell.content.trim().toLowerCase());
+                }
+              }
+              
+              // Collect all text values from right column  
+              for (let row = 0; row < rightTable.rows; row++) {
+                const cell = rightTable.cells[row]?.[rightCol];
+                if (cell && cell.type === 'text' && cell.content.trim()) {
+                  rightValues.add(cell.content.trim().toLowerCase());
+                }
+              }
+              
+              // Calculate overlap
+              if (leftValues.size > 0 && rightValues.size > 0) {
+                const intersection = new Set([...leftValues].filter(val => rightValues.has(val)));
+                const overlapRatio = intersection.size / Math.min(leftValues.size, rightValues.size);
+                
+                // Consider it a match if there's significant overlap
+                if (overlapRatio >= 0.3) {
+                  isMatch = true;
+                  confidence = 0.4 + (overlapRatio * 0.4); // 0.4 to 0.8 based on overlap
+                }
+              }
+            }
             
             if (isMatch) {
               suggestions.push({
@@ -160,8 +214,10 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
                 rightTableId: rightTable.id,
                 leftColumn: leftColumnNames[leftCol] || `Column ${leftCol + 1}`,
                 rightColumn: rightColumnNames[rightCol] || `Column ${rightCol + 1}`,
+                leftColumnIndex: leftCol,
+                rightColumnIndex: rightCol,
                 joinType: 'inner',
-                confidence: leftName === rightName ? 0.9 : 0.6
+                confidence
               });
             }
           }
@@ -623,12 +679,12 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     
     if (!leftTable || !rightTable) return;
     
-    // Find column indices
-    const leftColIndex = leftTable.columnNames?.findIndex(name => name === suggestion.leftColumn) ?? -1;
-    const rightColIndex = rightTable.columnNames?.findIndex(name => name === suggestion.rightColumn) ?? -1;
+    // Use column indices from suggestion
+    const leftColIndex = suggestion.leftColumnIndex;
+    const rightColIndex = suggestion.rightColumnIndex;
     
-    if (leftColIndex === -1 || rightColIndex === -1) {
-      alert('Could not find matching columns for join');
+    if (leftColIndex < 0 || leftColIndex >= leftTable.cols || rightColIndex < 0 || rightColIndex >= rightTable.cols) {
+      alert('Invalid column indices for join');
       return;
     }
     
@@ -645,8 +701,9 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       joinedColumnNames = leftNames;
       joinedRows = [...leftTable.cells, ...rightTable.cells];
     } else {
-      // Inner join implementation
-      joinedColumnNames = [...leftNames, ...rightNames];
+      // Inner join implementation - exclude right join column name to avoid duplication
+      const rightNamesExcludingJoinCol = rightNames.filter((_, index) => index !== rightColIndex);
+      joinedColumnNames = [...leftNames, ...rightNamesExcludingJoinCol];
       
       for (let leftRow = 0; leftRow < leftTable.rows; leftRow++) {
         const leftRowData = leftTable.cells[leftRow] || [];
@@ -661,8 +718,9 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
           const rightKey = rightKeyCell && rightKeyCell.type === 'text' ? rightKeyCell.content : '';
           
           if (leftKey === rightKey) {
-            // Match found - combine rows
-            const combinedRow = [...leftRowData, ...rightRowData];
+            // Match found - combine rows (exclude right join column to avoid duplication)
+            const rightRowExcludingJoinCol = rightRowData.filter((_, index) => index !== rightColIndex);
+            const combinedRow = [...leftRowData, ...rightRowExcludingJoinCol];
             joinedRows.push(combinedRow);
           }
         }
@@ -684,7 +742,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       cols: joinedColumnNames.length,
       cells: joinedRows,
       columnNames: joinedColumnNames,
-      columnTypes: [...(leftTable.columnTypes || []), ...(rightTable.columnTypes || [])],
+      columnTypes: [...(leftTable.columnTypes || []), ...(rightTable.columnTypes || []).filter((_, index) => index !== rightColIndex)],
       x: Math.max((leftTable.x || 0), (rightTable.x || 0)) + 50,
       y: Math.max((leftTable.y || 0), (rightTable.y || 0)) + 50,
       width: Math.max((leftTable.width || 400), 400),
@@ -706,6 +764,34 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     
     console.log('Created joined table:', joinedTable);
   }, [openTables]);
+
+  // Function to perform manual join
+  const performManualJoin = useCallback(() => {
+    const suggestion: JoinSuggestion = {
+      leftTableId: manualJoin.leftTableId,
+      rightTableId: manualJoin.rightTableId,
+      leftColumn: manualJoin.leftColumn,
+      rightColumn: manualJoin.rightColumn,
+      leftColumnIndex: manualJoin.leftColumnIndex,
+      rightColumnIndex: manualJoin.rightColumnIndex,
+      joinType: manualJoin.joinType,
+      confidence: 1.0
+    };
+    
+    performJoin(suggestion);
+    setShowManualJoin(false);
+    
+    // Reset manual join form
+    setManualJoin({
+      leftTableId: '',
+      rightTableId: '',
+      leftColumn: '',
+      rightColumn: '',
+      leftColumnIndex: -1,
+      rightColumnIndex: -1,
+      joinType: 'inner'
+    });
+  }, [manualJoin, performJoin]);
 
   // Function to save all tables
   const handleSaveAll = useCallback(() => {
@@ -802,7 +888,6 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
           {openTables.length > 1 && (
             <button 
               onClick={() => setShowJoinPanel(!showJoinPanel)}
-              style={{ backgroundColor: joinSuggestions.length > 0 ? '#e3f2fd' : undefined }}
             >
               Join Tables {joinSuggestions.length > 0 && `(${joinSuggestions.length})`}
             </button>
@@ -835,7 +920,149 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
           padding: '12px',
           margin: '8px 0'
         }}>
-          <h4 style={{ margin: '0 0 8px 0' }}>Join Suggestions</h4>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+            <h4 style={{ margin: 0 }}>Join Tables</h4>
+            <button 
+              onClick={() => setShowManualJoin(!showManualJoin)}
+              style={{ fontSize: '12px', padding: '4px 8px' }}
+            >
+              {showManualJoin ? 'Hide Manual Join' : 'Manual Join'}
+            </button>
+          </div>
+          
+          {/* Manual Join Interface */}
+          {showManualJoin && (
+            <div style={{
+              backgroundColor: 'white',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              padding: '12px',
+              marginBottom: '12px'
+            }}>
+              <h5 style={{ margin: '0 0 8px 0' }}>Manual Join Configuration</h5>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>Left Table:</label>
+                  <select 
+                    value={manualJoin.leftTableId}
+                    onChange={(e) => setManualJoin(prev => ({ ...prev, leftTableId: e.target.value, leftColumn: '', leftColumnIndex: -1 }))}
+                    style={{ width: '100%', padding: '4px' }}
+                  >
+                    <option value="">Select table...</option>
+                    {openTables.map(table => (
+                      <option key={table.id} value={table.id}>{table.originalName}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>Right Table:</label>
+                  <select 
+                    value={manualJoin.rightTableId}
+                    onChange={(e) => setManualJoin(prev => ({ ...prev, rightTableId: e.target.value, rightColumn: '', rightColumnIndex: -1 }))}
+                    style={{ width: '100%', padding: '4px' }}
+                  >
+                    <option value="">Select table...</option>
+                    {openTables.map(table => (
+                      <option key={table.id} value={table.id}>{table.originalName}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>Left Column:</label>
+                  <select 
+                    value={manualJoin.leftColumn}
+                    onChange={(e) => {
+                      const selectedName = e.target.value;
+                      const table = openTables.find(t => t.id === manualJoin.leftTableId)?.instance;
+                      const columnIndex = table ? Array.from({ length: table.cols }, (_, i) => {
+                        const name = table.columnNames?.[i] || `Column ${i + 1}`;
+                        return { name, index: i };
+                      }).find(col => col.name === selectedName)?.index ?? -1 : -1;
+                      
+                      setManualJoin(prev => ({ ...prev, leftColumn: selectedName, leftColumnIndex: columnIndex }));
+                    }}
+                    style={{ width: '100%', padding: '4px' }}
+                    disabled={!manualJoin.leftTableId}
+                  >
+                    <option value="">Select column...</option>
+                    {manualJoin.leftTableId && (() => {
+                      const table = openTables.find(t => t.id === manualJoin.leftTableId)?.instance;
+                      return table ? Array.from({ length: table.cols }, (_, i) => {
+                        const name = table.columnNames?.[i] || `Column ${i + 1}`;
+                        return <option key={i} value={name}>{name}</option>;
+                      }) : [];
+                    })()}
+                  </select>
+                </div>
+                
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>Right Column:</label>
+                  <select 
+                    value={manualJoin.rightColumn}
+                    onChange={(e) => {
+                      const selectedName = e.target.value;
+                      const table = openTables.find(t => t.id === manualJoin.rightTableId)?.instance;
+                      const columnIndex = table ? Array.from({ length: table.cols }, (_, i) => {
+                        const name = table.columnNames?.[i] || `Column ${i + 1}`;
+                        return { name, index: i };
+                      }).find(col => col.name === selectedName)?.index ?? -1 : -1;
+                      
+                      setManualJoin(prev => ({ ...prev, rightColumn: selectedName, rightColumnIndex: columnIndex }));
+                    }}
+                    style={{ width: '100%', padding: '4px' }}
+                    disabled={!manualJoin.rightTableId}
+                  >
+                    <option value="">Select column...</option>
+                    {manualJoin.rightTableId && (() => {
+                      const table = openTables.find(t => t.id === manualJoin.rightTableId)?.instance;
+                      return table ? Array.from({ length: table.cols }, (_, i) => {
+                        const name = table.columnNames?.[i] || `Column ${i + 1}`;
+                        return <option key={i} value={name}>{name}</option>;
+                      }) : [];
+                    })()}
+                  </select>
+                </div>
+                
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>Join Type:</label>
+                  <select 
+                    value={manualJoin.joinType}
+                    onChange={(e) => setManualJoin(prev => ({ ...prev, joinType: e.target.value as any }))}
+                    style={{ width: '100%', padding: '4px' }}
+                  >
+                    <option value="inner">Inner Join</option>
+                    <option value="left">Left Join</option>
+                    <option value="right">Right Join</option>
+                    <option value="full">Full Join</option>
+                    <option value="union">Union</option>
+                  </select>
+                </div>
+              </div>
+              
+              <button 
+                onClick={performManualJoin}
+                disabled={!manualJoin.leftTableId || !manualJoin.rightTableId || !manualJoin.leftColumn || !manualJoin.rightColumn}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#007acc',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: manualJoin.leftTableId && manualJoin.rightTableId && manualJoin.leftColumn && manualJoin.rightColumn ? 'pointer' : 'not-allowed'
+                }}
+              >
+                Perform Manual Join
+              </button>
+            </div>
+          )}
+          
+          {/* Auto Suggestions */}
+          <h5 style={{ margin: '0 0 8px 0' }}>Suggested Joins</h5>
           {joinSuggestions.length > 0 ? (
             <div>
               {joinSuggestions.slice(0, 3).map((suggestion, index) => (
@@ -849,10 +1076,13 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
                   borderRadius: '4px',
                   marginBottom: '4px'
                 }}>
-                  <span>
+                  <span style={{ fontSize: '12px' }}>
                     {openTables.find(t => t.id === suggestion.leftTableId)?.originalName}.{suggestion.leftColumn}
                     {' ↔ '}
                     {openTables.find(t => t.id === suggestion.rightTableId)?.originalName}.{suggestion.rightColumn}
+                    <span style={{ color: '#666', marginLeft: '8px' }}>
+                      (confidence: {Math.round(suggestion.confidence * 100)}%)
+                    </span>
                   </span>
                   <button 
                     onClick={() => performJoin(suggestion)}
@@ -864,7 +1094,9 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
               ))}
             </div>
           ) : (
-            <p style={{ margin: 0, color: '#666' }}>No obvious join relationships detected</p>
+            <p style={{ margin: 0, color: '#666', fontSize: '12px' }}>
+              No automatic join relationships detected. Use Manual Join above to specify custom join criteria.
+            </p>
           )}
         </div>
       )}

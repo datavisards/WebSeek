@@ -677,6 +677,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     onOperation(`Created [${sketch.id}](#instance-${sketch.id})` + (originalInstanceId ? ` from [${originalInstanceId}](#instance-${originalInstanceId})` : '') + (withstr ? ` with ${withstr}` : ''), false);
     setCurrentStroke(null);
     setEditingSketchId(null);
+    setAvailableInstances([]);
   };
 
   // Cancel sketch creation
@@ -685,6 +686,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     onOperation(`Cancel sketch creation for "${editingSketchId}"`, false);
     setInstances(prev => prev.filter(inst => inst.id !== editingSketchId));
     setEditingSketchId(null);
+    setAvailableInstances([]);
   };
 
   // Render sketch to canvas
@@ -1396,6 +1398,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
       onOperation(`Saved and closed the table editor. Created [${newId}](#instance-${newId})` + (withstr ? ` with ${withstr}` : ''), false);
     }
     setEditingTableId(null);
+    setAvailableInstances([]);
   };
 
   const cancelTableEdit = () => {
@@ -1403,6 +1406,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     onOperation(`Cancelled table editing for "${editingTableId}" and closed the table editor`, false);
     setInstances(prev => prev.filter(inst => inst.id !== editingTableId));
     setEditingTableId(null);
+    setAvailableInstances([]);
   };
 
   // Handle capture to specific table cell
@@ -2176,26 +2180,26 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
             initialTableId={editingTableId}
             instances={instances}
             htmlContext={htmlContext}
-            onSaveTable={(tableId: string, tableName?: string) => saveTable()}
+            onSaveTable={(_tableId: string, _tableName?: string) => saveTable()}
             onCancel={cancelTableEdit}
-            onAddToTable={(tableId: string, instance: Instance, row: number, col: number) => handleAddToTable(instance, row, col)}
-            onRemoveCellContent={(tableId: string, row: number, col: number) => removeCellContent(row, col)}
-            onEditCellContent={(tableId: string, row: number, col: number, value: string) => { 
+            onAddToTable={(_tableId: string, instance: Instance, row: number, col: number) => handleAddToTable(instance, row, col)}
+            onRemoveCellContent={(_tableId: string, row: number, col: number) => removeCellContent(row, col)}
+            onEditCellContent={(_tableId: string, row: number, col: number, value: string) => { 
               value.length > 0 ? handleAddToTable({ type: 'text', id: generateId(), content: value } as TextInstance, row, col) : removeCellContent(row, col) 
             }}
             draggingInstanceId={draggingInstanceId}
             setDraggingInstanceId={setDraggingInstanceId}
             availableInstances={availableInstances}
-            onCaptureToCell={(tableId: string, row: number, col: number) => handleCaptureToTableCell(row, col)}
+            onCaptureToCell={(_tableId: string, row: number, col: number) => handleCaptureToTableCell(row, col)}
             isCaptureEnabled={isCaptureEnabled}
-            onAddRow={(tableId: string, position: 'before' | 'after', rowIndex: number) => handleAddRow(position, rowIndex)}
-            onRemoveRow={(tableId: string, rowIndex: number) => handleRemoveRow(rowIndex)}
-            onAddColumn={(tableId: string, position: 'before' | 'after', colIndex: number) => handleAddColumn(position, colIndex)}
-            onRemoveColumn={(tableId: string, colIndex: number) => handleRemoveColumn(colIndex)}
-            onUpdateColumnType={(tableId: string, colIndex: number, columnType: 'numeral' | 'categorical') => handleUpdateColumnType(colIndex, columnType)}
+            onAddRow={(_tableId: string, position: 'before' | 'after', rowIndex: number) => handleAddRow(position, rowIndex)}
+            onRemoveRow={(_tableId: string, rowIndex: number) => handleRemoveRow(rowIndex)}
+            onAddColumn={(_tableId: string, position: 'before' | 'after', colIndex: number) => handleAddColumn(position, colIndex)}
+            onRemoveColumn={(_tableId: string, colIndex: number) => handleRemoveColumn(colIndex)}
+            onUpdateColumnType={(_tableId: string, colIndex: number, columnType: 'numeral' | 'categorical') => handleUpdateColumnType(colIndex, columnType)}
             onOperation={onOperation}
-            onUpdateColumnName={(tableId: string, colIndex: number, columnName: string) => handleUpdateColumnName(colIndex, columnName)}
-            onLiftRowToHeader={(tableId: string, rowIndex: number) => handleLiftRowToHeader(rowIndex)}
+            onUpdateColumnName={(_tableId: string, colIndex: number, columnName: string) => handleUpdateColumnName(colIndex, columnName)}
+            onLiftRowToHeader={(_tableId: string, rowIndex: number) => handleLiftRowToHeader(rowIndex)}
             currentSuggestion={currentSuggestion}
           />
         ) : editingVisualizationSpec ? (
