@@ -94,7 +94,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       id: initialTableId,
       instance: initialTable,
       isDirty: false,
-      originalName: `Table ${initialTableId.slice(0, 8)}`
+      originalName: initialTableId.slice(0, 8)
     }];
   });
 
@@ -240,7 +240,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       id: tableId,
       instance: table,
       isDirty: false,
-      originalName: `Table ${tableId.slice(0, 8)}`
+      originalName: tableId.slice(0, 8)
     };
     
     setOpenTables(prev => [...prev, newOpenTable]);
