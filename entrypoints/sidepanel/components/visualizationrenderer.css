@@ -1,0 +1,60 @@
+/*
+ This CSS targets the elements we modified on the backend.
+ It provides the visual feedback for the interaction.
+*/
+
+/* Visualization container styling */
+.visualization-container {
+  position: relative;
+}
+
+.visualization-container svg {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto !important;
+  height: auto !important;
+}
+
+/* The anchor tag wrapper makes the cursor a pointer and prevents navigation */
+.interactive-mark {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+/* Prevent anchor navigation completely */
+.interactive-mark:link,
+.interactive-mark:visited,
+.interactive-mark:hover,
+.interactive-mark:active {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* On hover, increase the stroke width and change the color of the shape inside */
+.interactive-mark:hover > g > path,
+.interactive-mark:hover > g > rect,
+.interactive-mark:hover > g > symbol {
+  stroke: #000000;
+  stroke-width: 2px;
+  stroke-opacity: 1;
+}
+
+/* Additional hover effects for different mark types */
+.interactive-mark:hover > g > circle {
+  stroke: #000000;
+  stroke-width: 2px;
+  stroke-opacity: 1;
+}
+
+/* Hover effects for line marks */
+.interactive-mark:hover > g > line {
+  stroke: #000000;
+  stroke-width: 3px;
+  stroke-opacity: 1;
+}
+
+/* Hover effects for text marks */
+.interactive-mark:hover > g > text {
+  font-weight: bold;
+  fill: #000000;
+}

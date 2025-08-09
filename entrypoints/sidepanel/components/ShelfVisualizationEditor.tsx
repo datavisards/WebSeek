@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import VisualizationRenderer from './visualizationrenderer';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import VisualizationRenderer, { InteractionConfig } from './visualizationrenderer';
 import { Instance, TableInstance, TextInstance } from '../types';
 import './shelfvisualizationeditor.css';
 
@@ -32,6 +32,26 @@ interface Shelf {
   color?: Column[];
 }
 
+// Default interaction configurations for different chart types
+const DEFAULT_INTERACTIONS: Record<string, InteractionConfig> = {
+  point: {
+    hover: { enabled: true },
+    selection: { enabled: true, type: 'box' }
+  },
+  bar: {
+    hover: { enabled: true },
+    selection: { enabled: true, type: 'single' }
+  },
+  line: {
+    hover: { enabled: true },
+    selection: { enabled: false, type: 'single' }
+  },
+  area: {
+    hover: { enabled: true },
+    selection: { enabled: false, type: 'single' }
+  }
+};
+
 // Helper function to generate column names (A, B, C, etc.)
 const getColumnName = (index: number): string => {
   let result = '';
@@ -50,19 +70,19 @@ const profileColumn = (values: (string | number | null)[], columnType: 'numeral'
   const nonNullValues = values.filter(v => v !== null && v !== undefined && v !== '');
   const nullCount = values.length - nonNullValues.length;
   const uniqueValues = new Set(nonNullValues).size;
-  
+
   const profile: Column['profile'] = {
     uniqueValues,
     nullCount,
   };
-  
+
   // Use the column type to determine how to profile
   if (columnType === 'numeral') {
     // For numeric columns, try to parse values and show range
     const numericValues = nonNullValues
       .map(v => typeof v === 'number' ? v : parseFloat(String(v)))
       .filter(v => !isNaN(v));
-    
+
     if (numericValues.length > 0) {
       profile.min = Math.min(...numericValues);
       profile.max = Math.max(...numericValues);
@@ -75,13 +95,13 @@ const profileColumn = (values: (string | number | null)[], columnType: 'numeral'
       const strVal = String(val);
       valueCounts.set(strVal, (valueCounts.get(strVal) || 0) + 1);
     });
-    
+
     profile.topValues = Array.from(valueCounts.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
       .map(([value]) => value);
   }
-  
+
   return profile;
 };
 
@@ -96,44 +116,46 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
     y: [],
     color: []
   });
-  
-  const [chartType, setChartType] = useState<'bar' | 'line' | 'point' | 'area'>('bar');
+
+  const [chartType, setChartType] = useState<'bar' | 'line' | 'point' | 'area'>('point');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
   const [draggedOver, setDraggedOver] = useState<string | null>(null);
+  const [isInteractive, setIsInteractive] = useState<boolean>(true);
+  const [interactionConfig, setInteractionConfig] = useState<InteractionConfig>(DEFAULT_INTERACTIONS.point);
 
   // Extract columns from available instances
   const availableColumns = useMemo((): Column[] => {
     const columns: Column[] = [];
-    
+
     console.log('Available instances:', availableInstances);
-    
+
     availableInstances.forEach(instance => {
       if (instance.type === 'table') {
         const tableInstance = instance as TableInstance;
         const columnNames = tableInstance.columnNames || [];
         const columnTypes = tableInstance.columnTypes || [];
-        
+
         console.log(`Table ${instance.id}:`, {
           rows: tableInstance.rows,
           cols: tableInstance.cols,
           columnNames,
           columnTypes
         });
-        
+
         for (let i = 0; i < tableInstance.cols; i++) {
           const columnName = columnNames[i] || getColumnName(i);
           const columnType = columnTypes[i] || 'categorical';
-          
+
           // Extract column values for profiling
           const columnValues: (string | number | null)[] = [];
           for (let row = 0; row < tableInstance.rows; row++) {
             const cell = tableInstance.cells[row][i];
             columnValues.push(cell && cell.type === 'text' ? cell.content : null);
           }
-          
+
           const profile = profileColumn(columnValues, columnType);
-          
+
           columns.push({
             id: `${instance.id}_col_${i}`,
             name: `${instance.id}: ${columnName}`,
@@ -153,7 +175,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
         });
       }
     });
-    
+
     console.log('Available columns:', columns);
     return columns;
   }, [availableInstances]);
@@ -161,10 +183,10 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
   // Parse initial spec to populate shelves
   useEffect(() => {
     if (!initialSpec || !availableColumns.length) return;
-    
+
     try {
       const spec = typeof initialSpec === 'string' ? JSON.parse(initialSpec) : initialSpec;
-      
+
       // Extract chart type from mark
       if (spec.mark) {
         const markType = typeof spec.mark === 'string' ? spec.mark : spec.mark.type;
@@ -172,7 +194,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           setChartType(markType);
         }
       }
-      
+
       // Extract encoding to populate shelves by matching field names with available columns
       if (spec.encoding) {
         const newShelves: Shelf = {
@@ -180,11 +202,11 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           y: [],
           color: []
         };
-        
+
         // Map x-axis encoding
         if (spec.encoding.x && spec.encoding.x.field) {
-          const matchingColumn = availableColumns.find(col => 
-            col.id === spec.encoding.x.field || 
+          const matchingColumn = availableColumns.find(col =>
+            col.id === spec.encoding.x.field ||
             col.name.split(': ')[1] === spec.encoding.x.title ||
             col.name.split(': ')[1] === spec.encoding.x.field
           );
@@ -192,11 +214,11 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             newShelves.x = [matchingColumn];
           }
         }
-        
+
         // Map y-axis encoding
         if (spec.encoding.y && spec.encoding.y.field) {
-          const matchingColumn = availableColumns.find(col => 
-            col.id === spec.encoding.y.field || 
+          const matchingColumn = availableColumns.find(col =>
+            col.id === spec.encoding.y.field ||
             col.name.split(': ')[1] === spec.encoding.y.title ||
             col.name.split(': ')[1] === spec.encoding.y.field
           );
@@ -204,11 +226,11 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             newShelves.y = [matchingColumn];
           }
         }
-        
+
         // Map color encoding
         if (spec.encoding.color && spec.encoding.color.field) {
-          const matchingColumn = availableColumns.find(col => 
-            col.id === spec.encoding.color.field || 
+          const matchingColumn = availableColumns.find(col =>
+            col.id === spec.encoding.color.field ||
             col.name.split(': ')[1] === spec.encoding.color.title ||
             col.name.split(': ')[1] === spec.encoding.color.field
           );
@@ -216,18 +238,18 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             newShelves.color = [matchingColumn];
           }
         }
-        
+
         // Only update shelves if we found matches
-        if ((newShelves.x && newShelves.x.length) || 
-            (newShelves.y && newShelves.y.length) || 
-            (newShelves.color && newShelves.color.length)) {
+        if ((newShelves.x && newShelves.x.length) ||
+          (newShelves.y && newShelves.y.length) ||
+          (newShelves.color && newShelves.color.length)) {
           setShelves(newShelves);
           console.log('Populated shelves from initial spec:', newShelves);
         }
       }
-      
+
       console.log('Loaded initial spec:', spec);
-      
+
     } catch (error) {
       console.warn('Could not parse initial spec:', error);
     }
@@ -244,11 +266,11 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
   // Get filter options
   const filterOptions = useMemo(() => {
     const options = [{ value: 'all', label: 'All Columns' }];
-    
+
     // Add text instance filter if there are any text instances
     const hasText = availableColumns.some(col => col.instanceType === 'text');
     if (hasText) options.push({ value: 'text', label: 'All Text Instances' });
-    
+
     // Add table instance filters
     const tableInstances = new Set<string>();
     availableColumns.forEach(col => {
@@ -256,16 +278,25 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
         tableInstances.add(col.instanceId);
       }
     });
-    
+
     tableInstances.forEach(instanceId => {
-      options.push({ 
-        value: instanceId, 
-        label: `Table: ${instanceId}` 
+      options.push({
+        value: instanceId,
+        label: `Table: ${instanceId}`
       });
     });
-    
+
     return options;
   }, [availableColumns]);
+
+  // Stable reference for interaction config to prevent unnecessary re-renders
+  const stableInteractionConfig = useMemo(() => ({
+    hover: { enabled: interactionConfig.hover?.enabled || false },
+    selection: { 
+      enabled: interactionConfig.selection?.enabled || false,
+      type: interactionConfig.selection?.type || 'single'
+    }
+  }), [interactionConfig.hover?.enabled, interactionConfig.selection?.enabled, interactionConfig.selection?.type]);
 
   // Generate Vega-Lite spec from shelves
   const generateSpec = useMemo((): object | null => {
@@ -277,21 +308,21 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
 
     // Collect all data sources
     const dataSources = new Map<string, any[]>();
-    
+
     [...(shelves.x || []), ...(shelves.y || []), ...(shelves.color || [])]
       .forEach(column => {
         if (dataSources.has(column.instanceId)) return;
-        
+
         const instance = availableInstances.find(inst => inst.id === column.instanceId);
         if (!instance) {
           console.log('Instance not found:', column.instanceId);
           return;
         }
-        
+
         if (instance.type === 'table') {
           const tableInstance = instance as TableInstance;
           const data: any[] = [];
-          
+
           for (let i = 0; i < tableInstance.rows; i++) {
             const row: any = {};
             for (let j = 0; j < tableInstance.cols; j++) {
@@ -316,7 +347,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
     }
 
     const encoding: any = {};
-    
+
     if (shelves.x?.length) {
       const xColumn = shelves.x[0];
       encoding.x = {
@@ -325,7 +356,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
         title: xColumn.name.split(': ')[1]
       };
     }
-    
+
     if (shelves.y?.length) {
       const yColumn = shelves.y[0];
       encoding.y = {
@@ -334,7 +365,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
         title: yColumn.name.split(': ')[1]
       };
     }
-    
+
     if (shelves.color?.length) {
       const colorColumn = shelves.color[0];
       encoding.color = {
@@ -343,20 +374,104 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
         title: colorColumn.name.split(': ')[1]
       };
     }
-    
 
-    const spec = {
+
+    const spec: any = {
       $schema: "https://vega.github.io/schema/vega-lite/v5.json",
       data: { values: firstDataSource },
       mark: chartType,
       encoding,
-      width: 400,
-      height: 300
+      // Use responsive sizing
+      width: 'container',
+      height: 'container'
     };
+
+    // Add interactivity if enabled
+    if (isInteractive && stableInteractionConfig) {
+      // Add tooltip for hover
+      if (stableInteractionConfig.hover?.enabled) {
+        // Add tooltip to encoding
+        const tooltipFields = [];
+        if (shelves.x?.length) tooltipFields.push(shelves.x[0].id);
+        if (shelves.y?.length) tooltipFields.push(shelves.y[0].id);
+        if (shelves.color?.length) tooltipFields.push(shelves.color[0].id);
+
+        encoding.tooltip = tooltipFields.map(field => ({ field }));
+      }
+
+      // Add selection for interactivity
+      if (stableInteractionConfig.selection?.enabled) {
+        const selectionName = 'brush';
+
+        // Use params instead of selection for Vega-Lite v5+
+        if (!spec.params) {
+          spec.params = [];
+        }
+
+        if (stableInteractionConfig.selection.type === 'box') {
+          // Box selection for scatter plots
+          spec.params.push({
+            name: selectionName,
+            select: {
+              type: 'interval'
+            }
+          });
+        } else if (stableInteractionConfig.selection.type === 'multi') {
+          // Multi-select
+          spec.params.push({
+            name: selectionName,
+            select: {
+              type: 'point',
+              toggle: true
+            }
+          });
+        } else {
+          // Single selection (default)
+          spec.params.push({
+            name: selectionName,
+            select: {
+              type: 'point'
+            }
+          });
+        }
+
+        // Apply selection styling to marks
+        if (typeof spec.mark === 'string') {
+          spec.mark = {
+            type: spec.mark,
+            cursor: 'pointer'
+          };
+        } else {
+          spec.mark.cursor = 'pointer';
+        }
+
+        // Add conditional formatting for selected items
+        const originalColor = encoding.color;
+        if (originalColor) {
+          // If there was already a color encoding, preserve it in the condition
+          encoding.color = {
+            condition: {
+              param: selectionName,
+              ...originalColor
+            },
+            value: 'lightgray'
+          };
+        } else {
+          // Default color scheme for selection
+          encoding.color = {
+            condition: {
+              param: selectionName,
+              value: '#FF6B35'
+            },
+            value: '#1f77b4'
+          };
+        }
+      }
+    }
 
     console.log('Generated spec:', spec);
     return spec;
-  }, [shelves, chartType, availableInstances]);
+  }, [shelves, chartType, availableInstances, isInteractive, stableInteractionConfig]);
 
   const handleDragStart = (e: React.DragEvent, column: Column) => {
     e.dataTransfer.setData('application/json', JSON.stringify(column));
@@ -381,7 +496,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
     setDraggedOver(shelfName);
   };
 
-  const handleDragLeave = (e: React.DragEvent, shelfName: keyof Shelf) => {
+  const handleDragLeave = (e: React.DragEvent) => {
     // Only clear if we're actually leaving this shelf (not entering a child element)
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setDraggedOver(null);
@@ -396,17 +511,20 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
   };
 
   const handleChartTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setChartType(e.target.value as 'bar' | 'line' | 'point' | 'area');
+    const newChartType = e.target.value as 'bar' | 'line' | 'point' | 'area';
+    setChartType(newChartType);
+    // Update interaction configuration based on chart type
+    setInteractionConfig(DEFAULT_INTERACTIONS[newChartType]);
   };
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (!generateSpec || !imageUrl) return;
     onSave(generateSpec, imageUrl);
-  };
+  }, [generateSpec, imageUrl, onSave]);
 
-  const handleImageUrlReady = (url: string) => {
+  const handleImageUrlReady = useCallback((url: string) => {
     setImageUrl(url);
-  };
+  }, []);
 
   return (
     <div className="view-container">
@@ -434,7 +552,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             <section className="chart-type-section">
               <div className="chart-type-row">
                 <label htmlFor="chart-type-select">Chart Type</label>
-                <select 
+                <select
                   id="chart-type-select"
                   className="chart-type-dropdown"
                   value={chartType}
@@ -456,7 +574,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
                     className={`shelf x-shelf ${draggedOver === 'x' ? 'dragged-over' : ''}`}
                     onDrop={(e) => handleDrop(e, 'x')}
                     onDragOver={(e) => handleDragOver(e, 'x')}
-                    onDragLeave={(e) => handleDragLeave(e, 'x')}
+                    onDragLeave={handleDragLeave}
                   >
                     {shelves.x?.map(column => (
                       <div key={column.id} className={`shelf-item ${column.type}`}>
@@ -481,7 +599,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
                     className={`shelf y-shelf ${draggedOver === 'y' ? 'dragged-over' : ''}`}
                     onDrop={(e) => handleDrop(e, 'y')}
                     onDragOver={(e) => handleDragOver(e, 'y')}
-                    onDragLeave={(e) => handleDragLeave(e, 'y')}
+                    onDragLeave={handleDragLeave}
                   >
                     {shelves.y?.map(column => (
                       <div key={column.id} className={`shelf-item ${column.type}`}>
@@ -506,7 +624,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
                     className={`shelf color-shelf ${draggedOver === 'color' ? 'dragged-over' : ''}`}
                     onDrop={(e) => handleDrop(e, 'color')}
                     onDragOver={(e) => handleDragOver(e, 'color')}
-                    onDragLeave={(e) => handleDragLeave(e, 'color')}
+                    onDragLeave={handleDragLeave}
                   >
                     {shelves.color?.map(column => (
                       <div key={column.id} className={`shelf-item ${column.type}`}>
@@ -524,6 +642,81 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
                 </div>
               </div>
             </div>
+
+            <section className="interaction-config-section">
+              <h4>Interactivity</h4>
+              <div className="interaction-controls">
+                <div className="interaction-row">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={isInteractive}
+                      onChange={(e) => setIsInteractive(e.target.checked)}
+                    />
+                    Enable Interactive Mode
+                  </label>
+                </div>
+
+                {isInteractive && (
+                  <>
+                    <div className="interaction-row">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={interactionConfig.hover?.enabled || false}
+                          onChange={(e) => setInteractionConfig(prev => ({
+                            ...prev,
+                            hover: {
+                              ...(prev.hover || {}),
+                              enabled: e.target.checked
+                            }
+                          }))}
+                        />
+                        Show details on hover
+                      </label>
+                    </div>
+
+                    <div className="interaction-row">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={interactionConfig.selection?.enabled || false}
+                          onChange={(e) => setInteractionConfig(prev => ({
+                            ...prev,
+                            selection: {
+                              ...(prev.selection || { type: 'single' }),
+                              enabled: e.target.checked
+                            }
+                          }))}
+                        />
+                        Enable data selection
+                      </label>
+                    </div>
+
+                    {interactionConfig.selection?.enabled && (
+                      <div className="interaction-row">
+                        <label htmlFor="selection-type">Selection Type:</label>
+                        <select
+                          id="selection-type"
+                          value={interactionConfig.selection.type}
+                          onChange={(e) => setInteractionConfig(prev => ({
+                            ...prev,
+                            selection: {
+                              ...prev.selection!,
+                              type: e.target.value as 'single' | 'multi' | 'box'
+                            }
+                          }))}
+                        >
+                          <option value="single">Single Click</option>
+                          <option value="multi">Multi Select</option>
+                          {chartType === 'point' && <option value="box">Box Select</option>}
+                        </select>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </section>
           </div>
 
           {/* Bottom: Available Data */}
@@ -534,12 +727,12 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             {availableColumns.length === 0 && availableInstances.length > 0 && (
               <p className="no-data">No compatible data found</p>
             )}
-            
+
             {/* Filter UI */}
             {filterOptions.length > 1 && (
               <div className="filter-section">
                 <label htmlFor="column-filter" className="filter-label">Filter by:</label>
-                <select 
+                <select
                   id="column-filter"
                   className="filter-dropdown"
                   value={filter}
@@ -553,7 +746,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
                 </select>
               </div>
             )}
-            
+
             <div className="columns-list">
               {filteredColumns.map(column => {
                 const profileText = column.profile ? (() => {
@@ -564,7 +757,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
                   }
                   return `${column.profile.uniqueValues} unique`;
                 })() : '';
-                
+
                 return (
                   <div
                     key={column.id}
@@ -595,13 +788,13 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
         <div className="shelf-editor-right">
           <div className="preview-container">
             {generateSpec ? (
-              <VisualizationRenderer 
-                spec={generateSpec} 
+              <VisualizationRenderer
+                spec={generateSpec}
                 onImageUrlReady={handleImageUrlReady}
               />
             ) : (
               <div className="no-preview">
-                {availableColumns.length === 0 
+                {availableColumns.length === 0
                   ? "Create table instances with data first"
                   : "Drag columns to X or Y axis to see preview"
                 }
@@ -609,9 +802,9 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             )}
           </div>
           {generateSpec && (
-            <div style={{ 
-              fontSize: '0.75rem', 
-              color: '#666', 
+            <div style={{
+              fontSize: '0.75rem',
+              color: '#666',
               padding: '0.75rem',
               borderTop: '1px solid #eee',
               maxHeight: '120px',

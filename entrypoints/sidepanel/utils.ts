@@ -225,23 +225,31 @@ function createInstanceSource(input: any): InstanceSource {
 
 export const getVisualizationThumbnail = async (spec: object): Promise<string> => {
     try {
-        const response = await fetch('http://127.0.0.1:8000/render-vega-lite', {
+        const response = await fetch('http://127.0.0.1:8000/api/render-vega-lite-svg/', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(spec)
+            body: JSON.stringify({
+                ...spec,
+                // Use responsive sizing for better display
+                width: 'container',
+                height: 'container'
+            })
         });
-        if (!response.ok) throw new Error('Failed to fetch image');
-        const blob = await response.blob();
+        if (!response.ok) throw new Error('Failed to fetch visualization');
+        
+        const svgContent = await response.text();
+        // Convert SVG to data URL
+        const svgBlob = new Blob([svgContent], { type: 'image/svg+xml' });
         return await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
             reader.onloadend = () => {
                 resolve(reader.result as string);
             };
             reader.onerror = () => {
-                console.error('Failed to read image blob');
-                reject('Failed to read image blob');
+                console.error('Failed to read SVG blob');
+                reject('Failed to read SVG blob');
             };
-            reader.readAsDataURL(blob);
+            reader.readAsDataURL(svgBlob);
         });
     } catch (err: any) {
         console.error(err.message || err);

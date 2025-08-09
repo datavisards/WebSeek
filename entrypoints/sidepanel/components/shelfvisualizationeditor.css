@@ -53,6 +53,11 @@
 }
 
 /* Chart Type Section */
+.chart-type-section {
+  /* border-bottom: 1px solid #eee; */
+  /* padding-bottom: 0.5rem; */
+  /* margin-bottom: 0.5rem; */
+}
 
 .chart-type-row {
   display: flex;
@@ -389,5 +394,60 @@
   .shelf-editor-center {
     min-width: unset;
   }
-  
+}
+
+/* Interaction Configuration Section */
+.interaction-config-section {
+  border-bottom: 1px solid #eee;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.interaction-config-section h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.interaction-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.interaction-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.65rem;
+}
+
+.interaction-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.interaction-row input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.interaction-row select {
+  padding: 0.2rem 0.3rem;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  background: white;
+  font-size: 0.65rem;
+  cursor: pointer;
+  flex: 1;
+}
+
+.interaction-row select:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }
