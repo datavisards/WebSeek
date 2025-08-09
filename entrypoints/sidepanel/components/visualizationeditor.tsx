@@ -44,6 +44,23 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
     }
   }, [spec]);
 
+  // Extract axis titles from initial spec
+  useEffect(() => {
+    try {
+      const parsed = JSON.parse(spec);
+      if (parsed.encoding) {
+        if (parsed.encoding.x && parsed.encoding.x.axis && parsed.encoding.x.axis.title) {
+          setXAxisTitle(parsed.encoding.x.axis.title);
+        }
+        if (parsed.encoding.y && parsed.encoding.y.axis && parsed.encoding.y.axis.title) {
+          setYAxisTitle(parsed.encoding.y.axis.title);
+        }
+      }
+    } catch (error) {
+      // Ignore parse errors for axis title extraction
+    }
+  }, [initialSpec]); // Only run when initialSpec changes
+
   const handleImportData = (instance: Instance) => {
     if (instance.type === 'table') {
       const data: any[] = [];

@@ -181,39 +181,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     return { x, y };
   };
 
-  // Handle wheel events for zooming
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-
-      const containerRect = container.getBoundingClientRect();
-      const mouseX = e.clientX - containerRect.left;
-      const mouseY = e.clientY - containerRect.top;
-
-      const canvasX = (mouseX - pan.x) / zoom;
-      const canvasY = (mouseY - pan.y) / zoom;
-
-      const zoomFactor = 1.1;
-      const newZoom = e.deltaY < 0
-        ? Math.min(5, zoom * zoomFactor)
-        : Math.max(0.2, zoom / zoomFactor);
-
-      const newPanX = mouseX - canvasX * newZoom;
-      const newPanY = mouseY - canvasY * newZoom;
-
-      setZoom(newZoom);
-      setPan({ x: newPanX, y: newPanY });
-    };
-
-    container.addEventListener('wheel', handleWheel, { passive: false });
-
-    return () => {
-      container.removeEventListener('wheel', handleWheel);
-    };
-  }, [zoom, pan]);
+  // Wheel zoom is now handled directly via onWheel prop on the container div
 
   // Handle drag and drop
 
@@ -2286,7 +2254,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
               className="view-content"
               style={{
                 overflow: 'hidden',
-                userSelect: isPanning || draggingInstanceId ? 'none' : 'auto'
+                userSelect: isPanning || draggingInstanceId ? 'none' : 'auto',
+                position: 'relative',
+                width: '100%',
+                height: '100%'
               }}
               onClick={handleCanvasClick}
               onDrop={handleDrop}
@@ -2300,6 +2271,26 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
+              onWheel={(e) => {
+                e.preventDefault();
+                const containerRect = e.currentTarget.getBoundingClientRect();
+                const mouseX = e.clientX - containerRect.left;
+                const mouseY = e.clientY - containerRect.top;
+
+                const canvasX = (mouseX - pan.x) / zoom;
+                const canvasY = (mouseY - pan.y) / zoom;
+
+                const zoomFactor = 1.1;
+                const newZoom = e.deltaY < 0
+                  ? Math.min(5, zoom * zoomFactor)
+                  : Math.max(0.2, zoom / zoomFactor);
+
+                const newPanX = mouseX - canvasX * newZoom;
+                const newPanY = mouseY - canvasY * newZoom;
+
+                setZoom(newZoom);
+                setPan({ x: newPanX, y: newPanY });
+              }}
               ref={containerRef}
             >
               <div
