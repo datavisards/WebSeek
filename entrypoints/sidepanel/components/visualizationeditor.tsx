@@ -29,6 +29,8 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
   const [importedData, setImportedData] = useState<any | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [xAxisTitle, setXAxisTitle] = useState<string>('');
+  const [yAxisTitle, setYAxisTitle] = useState<string>('');
 
   // Validate the spec whenever it changes and update the parsedSpec state.
   useEffect(() => {
@@ -43,17 +45,23 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
   }, [spec]);
 
   const handleImportData = (instance: Instance) => {
-    // ... (logic is unchanged, but included for completeness)
     if (instance.type === 'table') {
       const data: any[] = [];
       for (let i = 0; i < instance.rows; i++) {
         const row: any = {};
+        let hasContent = false;
         for (let j = 0; j < instance.cols; j++) {
           const cell = instance.cells[i][j];
-          row[`col${j + 1}`] =
-            cell && cell.type === 'text' ? cell.content : null;
+          const value = cell && cell.type === 'text' ? cell.content : null;
+          row[`col${j + 1}`] = value;
+          if (value !== null && value !== undefined && value !== '') {
+            hasContent = true;
+          }
         }
-        data.push(row);
+        // Only add row if it has at least one non-empty cell
+        if (hasContent) {
+          data.push(row);
+        }
       }
       setImportedData(data);
     } else if (instance.type === 'text') {
@@ -66,6 +74,19 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
   const handleInsertData = () => {
     if (!importedData || !parsedSpec) return;
     const newSpec = { ...parsedSpec, data: { values: importedData } };
+    
+    // Apply axis titles if specified
+    if (xAxisTitle || yAxisTitle) {
+      const encoding = newSpec.encoding || {};
+      if (xAxisTitle && encoding.x) {
+        encoding.x = { ...encoding.x, axis: { ...encoding.x.axis, title: xAxisTitle } };
+      }
+      if (yAxisTitle && encoding.y) {
+        encoding.y = { ...encoding.y, axis: { ...encoding.y.axis, title: yAxisTitle } };
+      }
+      newSpec.encoding = encoding;
+    }
+    
     setSpec(JSON.stringify(newSpec, null, 2));
   };
 
@@ -119,6 +140,34 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
               <div className="vis-editor-error">Invalid JSON: {parseError}</div>
             )}
           </div>
+
+          <section className="vis-editor-axis-controls">
+            <h4 className="vis-editor-label">Axis Titles</h4>
+            <div className="vis-editor-axis-inputs">
+              <div className="vis-editor-input-group">
+                <label htmlFor="x-axis-title">X-Axis Title:</label>
+                <input
+                  id="x-axis-title"
+                  type="text"
+                  value={xAxisTitle}
+                  onChange={(e) => setXAxisTitle(e.target.value)}
+                  placeholder="Enter X-axis title"
+                  className="vis-editor-input"
+                />
+              </div>
+              <div className="vis-editor-input-group">
+                <label htmlFor="y-axis-title">Y-Axis Title:</label>
+                <input
+                  id="y-axis-title"
+                  type="text"
+                  value={yAxisTitle}
+                  onChange={(e) => setYAxisTitle(e.target.value)}
+                  placeholder="Enter Y-axis title"
+                  className="vis-editor-input"
+                />
+              </div>
+            </div>
+          </section>
 
           <section className="vis-editor-data-importer">
             <h4 className="vis-editor-label">Import Data from Instance</h4>
