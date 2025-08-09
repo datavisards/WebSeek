@@ -2075,31 +2075,50 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
 
   // Add save/cancel handlers for VisualizationEditor
   const handleSaveVisualization = (spec: object, imageUrl: string) => {
-    const newId = `Visualization${instances.filter(i => i.type === 'visualization').length + 1}`;
-    const newVisualizationInstance: Instance = {
-      id: newId,
-      type: 'visualization',
-      source: createManualSource(),
-      spec,
-      thumbnail: imageUrl,
-      x: 0,
-      y: 0,
-      width: 400,
-      height: 300
-    };
-    setInstances(prev => [
-      ...prev,
-      newVisualizationInstance
-    ]);
-    console.log(newVisualizationInstance);
+    if (originalInstanceId) {
+      // Update existing visualization instance
+      const originalInstance = instances.find(inst => inst.id === originalInstanceId);
+      if (originalInstance && originalInstance.type === 'visualization') {
+        setInstances(prev =>
+          prev.map(inst =>
+            inst.id === originalInstanceId
+              ? { ...inst, spec, thumbnail: imageUrl }
+              : inst
+          )
+        );
+        onOperation(`Updated [${originalInstanceId}](#instance-${originalInstanceId}) visualization spec`, false);
+      }
+    } else {
+      // Create new visualization instance
+      const newId = `Visualization${instances.filter(i => i.type === 'visualization').length + 1}`;
+      const newVisualizationInstance: Instance = {
+        id: newId,
+        type: 'visualization',
+        source: createManualSource(),
+        spec,
+        thumbnail: imageUrl,
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 300
+      };
+      setInstances(prev => [
+        ...prev,
+        newVisualizationInstance
+      ]);
+      console.log(newVisualizationInstance);
+      onOperation(`Created [${newId}](#instance-${newId}) as visualization`, false);
+    }
+    
     setEditingVisualizationSpec(null);
     setAvailableInstances([]);
-    onOperation(`Created [${newId}](#instance-${newId}) as visualization`, false);
+    setOriginalInstanceId(null);
   };
   const handleCancelVisualization = () => {
-    onOperation(`Cancel visualization creation`, false);
+    onOperation(`Cancel visualization ${originalInstanceId ? 'editing' : 'creation'}`, false);
     setEditingVisualizationSpec(null);
     setAvailableInstances([]);
+    setOriginalInstanceId(null);
   };
 
   return (
@@ -2210,6 +2229,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
                 onSave={handleSaveVisualization}
                 onCancel={handleCancelVisualization}
                 availableInstances={availableInstances}
+                initialSpec={editingVisualizationSpec}
               />
             ) : (
               <VisualizationEditor

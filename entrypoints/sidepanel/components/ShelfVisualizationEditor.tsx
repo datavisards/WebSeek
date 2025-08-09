@@ -23,6 +23,7 @@ interface ShelfVisualizationEditorProps {
   onSave: (spec: object, imageUrl: string) => void;
   onCancel: () => void;
   availableInstances: Instance[];
+  initialSpec?: object | string | null;
 }
 
 interface Shelf {
@@ -88,6 +89,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
   onSave,
   onCancel,
   availableInstances,
+  initialSpec,
 }) => {
   const [shelves, setShelves] = useState<Shelf>({
     x: [],
@@ -155,6 +157,81 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
     console.log('Available columns:', columns);
     return columns;
   }, [availableInstances]);
+
+  // Parse initial spec to populate shelves
+  useEffect(() => {
+    if (!initialSpec || !availableColumns.length) return;
+    
+    try {
+      const spec = typeof initialSpec === 'string' ? JSON.parse(initialSpec) : initialSpec;
+      
+      // Extract chart type from mark
+      if (spec.mark) {
+        const markType = typeof spec.mark === 'string' ? spec.mark : spec.mark.type;
+        if (['bar', 'line', 'point', 'area'].includes(markType)) {
+          setChartType(markType);
+        }
+      }
+      
+      // Extract encoding to populate shelves by matching field names with available columns
+      if (spec.encoding) {
+        const newShelves: Shelf = {
+          x: [],
+          y: [],
+          color: []
+        };
+        
+        // Map x-axis encoding
+        if (spec.encoding.x && spec.encoding.x.field) {
+          const matchingColumn = availableColumns.find(col => 
+            col.id === spec.encoding.x.field || 
+            col.name.split(': ')[1] === spec.encoding.x.title ||
+            col.name.split(': ')[1] === spec.encoding.x.field
+          );
+          if (matchingColumn) {
+            newShelves.x = [matchingColumn];
+          }
+        }
+        
+        // Map y-axis encoding
+        if (spec.encoding.y && spec.encoding.y.field) {
+          const matchingColumn = availableColumns.find(col => 
+            col.id === spec.encoding.y.field || 
+            col.name.split(': ')[1] === spec.encoding.y.title ||
+            col.name.split(': ')[1] === spec.encoding.y.field
+          );
+          if (matchingColumn) {
+            newShelves.y = [matchingColumn];
+          }
+        }
+        
+        // Map color encoding
+        if (spec.encoding.color && spec.encoding.color.field) {
+          const matchingColumn = availableColumns.find(col => 
+            col.id === spec.encoding.color.field || 
+            col.name.split(': ')[1] === spec.encoding.color.title ||
+            col.name.split(': ')[1] === spec.encoding.color.field
+          );
+          if (matchingColumn) {
+            newShelves.color = [matchingColumn];
+          }
+        }
+        
+        // Only update shelves if we found matches
+        if ((newShelves.x && newShelves.x.length) || 
+            (newShelves.y && newShelves.y.length) || 
+            (newShelves.color && newShelves.color.length)) {
+          setShelves(newShelves);
+          console.log('Populated shelves from initial spec:', newShelves);
+        }
+      }
+      
+      console.log('Loaded initial spec:', spec);
+      
+    } catch (error) {
+      console.warn('Could not parse initial spec:', error);
+    }
+  }, [initialSpec, availableColumns]);
 
   // Filter columns based on selected filter
   const filteredColumns = useMemo(() => {
