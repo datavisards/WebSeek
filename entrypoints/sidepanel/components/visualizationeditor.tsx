@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import VisualizationRenderer from './visualizationrenderer';
 import { Instance, ProactiveSuggestion } from '../types';
 import GhostInstance from './GhostInstance';
-import './visualizationeditor.css'; // Import the new CSS file
+import './visualizationeditor.css';
 
 interface VisualizationEditorProps {
   initialSpec: object | string;
@@ -90,7 +90,7 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
 
   const handleInsertData = () => {
     if (!importedData || !parsedSpec) return;
-    const newSpec = { ...parsedSpec, data: { values: importedData } };
+    const newSpec: any = { ...parsedSpec, data: { values: importedData } };
     
     // Apply axis titles if specified
     if (xAxisTitle || yAxisTitle) {
