@@ -36,8 +36,9 @@ interface MultiTableEditorProps {
   initialTableId: string | null;
   instances: Instance[];
   htmlContext: Record<string, {pageURL: string, htmlContent: string}>;
-  onSaveTable: (tableId: string, tableName?: string) => string | null;
+  onSaveTable: (tableId: string, tableName?: string, isDirty?: boolean) => string | null;
   onCancel: () => void;
+  onClose: () => void;
   onAddToTable: (tableId: string, instance: Instance, row: number, col: number) => void;
   onRemoveCellContent: (tableId: string, row: number, col: number) => void;
   onEditCellContent: (tableId: string, row: number, col: number, newValue: string) => void;
@@ -63,6 +64,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
   htmlContext,
   onSaveTable,
   onCancel,
+  onClose,
   onAddToTable,
   onRemoveCellContent,
   onEditCellContent,
@@ -1362,7 +1364,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
                       <button 
                         onClick={() => {
                           console.log(`[MultiTableEditor] Saving individual table: ${table.id} (${table.originalName})`);
-                          const newTableId = onSaveTable(table.id, table.originalName);
+                          const newTableId = onSaveTable(table.id, table.originalName, table.isDirty);
                           console.log(`[MultiTableEditor] Save returned newTableId: ${newTableId}`);
                           
                           if (newTableId) {
@@ -1448,7 +1450,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
                   const idChanges: { [oldId: string]: string } = {};
                   dirtyTables.forEach(table => {
                     console.log(`[MultiTableEditor] Saving table: ${table.id} (${table.originalName})`);
-                    const newTableId = onSaveTable(table.id, table.originalName);
+                    const newTableId = onSaveTable(table.id, table.originalName, table.isDirty);
                     console.log(`[MultiTableEditor] Save returned newTableId: ${newTableId} for ${table.id}`);
                     
                     if (newTableId && newTableId !== table.id) {
@@ -1479,9 +1481,9 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
                     setActiveTabId(idChanges[activeTabId]);
                   }
                   
-                  console.log(`[MultiTableEditor] Closing save dialog and canceling editor`);
+                  console.log(`[MultiTableEditor] Closing save dialog and closing editor`);
                   setShowSaveDialog(false);
-                  onCancel();
+                  onClose();
                 }}
                 style={{
                   padding: '8px 16px',

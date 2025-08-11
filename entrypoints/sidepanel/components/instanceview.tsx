@@ -1105,7 +1105,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
       onOperation(`Edit ${instance.type} "${instance.id}" by editing the embedded ${instance.type} in sketch "${newSketch.id}"`, false);
     } else if (instance.type === 'table') {
       let newTable = structuredClone(instance) as TableInstance;
-      // Generate a temporary ID with suffix for editing existing table
+      // Generate a versioned ID for editing existing table
       const existingIds = new Set(instances.map(inst => inst.id));
       let suffix = 1;
       let newId = `${instance.id}_${suffix}`;
@@ -1350,95 +1350,93 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     }));
   };
 
-  const saveTable = () => {
-    console.log(`[instanceview] saveTable called, editingTableId: ${editingTableId}`);
+  const saveTable = (tableId?: string, isDirty?: boolean) => {
+    const targetTableId = tableId || editingTableId;
+    console.log(`[instanceview] saveTable called, targetTableId: ${targetTableId}, isDirty: ${isDirty}`);
     
-    const table = instances.find(inst => inst.id === editingTableId && inst.type === 'table') as TableInstance | undefined;
+    const table = instances.find(inst => inst.id === targetTableId && inst.type === 'table') as TableInstance | undefined;
     console.log(`[instanceview] Found table:`, table ? `${table.id} (${table.rows}x${table.cols})` : 'NOT FOUND');
     
     if (!table) {
-      console.log(`[instanceview] No table found with ID ${editingTableId}, returning null`);
+      console.log(`[instanceview] No table found with ID ${targetTableId}, returning null`);
       return null;
     }
     
-    let newId: string;
-    
-    // Check if this is a temporary ID (contains underscore) or a new table that needs a permanent ID
-    if (table.id.includes('_') || table.id.startsWith('joined_')) {
-      // This is a temporary ID, generate a new permanent one
-      newId = `Table${tableCount + 1}`;
-      console.log(`[instanceview] Generated new permanent ID: ${newId}, tableCount: ${tableCount}`);
-      setTableCount(prev => prev + 1);
-      console.log(`[instanceview] Changing table ID from ${table.id} to ${newId}`);
-      table.id = newId;
-    } else if (table.id.match(/^Table\d+$/)) {
-      // This is already a permanent TableX ID, keep it
-      newId = table.id;
-      console.log(`[instanceview] Keeping existing permanent ID: ${newId}`);
+    if (isDirty === false) {
+      // Table wasn't modified, remove it and return original ID (if exists) or null
+      console.log(`[instanceview] Table not dirty, removing table ${targetTableId}`);
+      setInstances(prev => prev.filter(inst => inst.id !== targetTableId));
+      
+      // Close the editor
+      setEditingTableId(null);
+      setAvailableInstances([]);
+      setOriginalInstanceId(null);
+      
+      return originalInstanceId || null;
     } else {
-      // This is some other format, generate a new permanent one
-      newId = `Table${tableCount + 1}`;
-      console.log(`[instanceview] Generated new permanent ID for unknown format: ${newId}, tableCount: ${tableCount}`);
-      setTableCount(prev => prev + 1);
-      console.log(`[instanceview] Changing table ID from ${table.id} to ${newId}`);
-      table.id = newId;
-    }
-    
-    setInstances(prev => {
-      const updated = prev.map(inst => inst.id === editingTableId ? table : inst);
-      console.log(`[instanceview] Updated instances, table now has ID: ${table.id}`);
-      return updated;
-    });
-    // Log the operation
-    let withstr = "";
-    if (table.cells.some(rowArr => rowArr.some(cell => cell != null))) {
-      withstr = table.cells.map(rowArr => {
-        let embedded = rowArr.filter(cell => cell != null && cell.originalId);
-        return embedded.map(cell => {
-          if (!cell) return '';
-          if (cell.type === 'text') {
-            return `[${cell.content}](#instance-${cell.originalId || cell.id})`;
-          } else if (cell.type === 'image') {
-            return `[${cell.originalId || cell.id}](#instance-${cell.originalId || cell.id})`;
-          } else if (cell.type === 'sketch') {
-            return `[${cell.originalId || cell.id}](#instance-${cell.originalId || cell.id})`;
-          } else if (cell.type === 'table') {
-            return `[${cell.originalId || cell.id}](#instance-${cell.originalId || cell.id})`;
-          }
-        }).join(', ');
-      }).filter(item => item != '').join(', ');
-    }
+      // Table was modified, keep it with current ID
+      console.log(`[instanceview] Table is dirty, keeping table with ID: ${table.id}`);
+      
+      // Log the operation
+      let withstr = "";
+      if (table.cells.some(rowArr => rowArr.some(cell => cell != null))) {
+        withstr = table.cells.map(rowArr => {
+          let embedded = rowArr.filter(cell => cell != null && cell.originalId);
+          return embedded.map(cell => {
+            if (!cell) return '';
+            if (cell.type === 'text') {
+              return `[${cell.content}](#instance-${cell.originalId || cell.id})`;
+            } else if (cell.type === 'image') {
+              return `[${cell.originalId || cell.id}](#instance-${cell.originalId || cell.id})`;
+            } else if (cell.type === 'sketch') {
+              return `[${cell.originalId || cell.id}](#instance-${cell.originalId || cell.id})`;
+            } else if (cell.type === 'table') {
+              return `[${cell.originalId || cell.id}](#instance-${cell.originalId || cell.id})`;
+            }
+          }).join(', ');
+        }).filter(item => item != '').join(', ');
+      }
 
-    if (originalInstanceId) {
-      onOperation(`Saved and closed the table editor. Created [${newId}](#instance-${newId}) from [${originalInstanceId}](#instance-${originalInstanceId})` + (withstr ? ` with ${withstr}` : ''), false);
-    } else {
-      onOperation(`Saved and closed the table editor. Created [${newId}](#instance-${newId})` + (withstr ? ` with ${withstr}` : ''), false);
+      if (originalInstanceId) {
+        onOperation(`Saved and closed the table editor. Created [${table.id}](#instance-${table.id}) from [${originalInstanceId}](#instance-${originalInstanceId})` + (withstr ? ` with ${withstr}` : ''), false);
+      } else {
+        onOperation(`Saved and closed the table editor. Created [${table.id}](#instance-${table.id})` + (withstr ? ` with ${withstr}` : ''), false);
+      }
+      
+      // Close the editor
+      setEditingTableId(null);
+      setAvailableInstances([]);
+      setOriginalInstanceId(null);
+      
+      console.log(`[instanceview] saveTable returning tableId: ${table.id}`);
+      return table.id;
     }
-    
-    console.log(`[instanceview] saveTable returning newId: ${newId}`);
-    return newId;
   };
 
   const cancelTableEdit = () => {
     if (!editingTableId) return;
     
-    // Check if this is a saved table (permanent TableX ID) or unsaved (temporary/new table)
-    const table = instances.find(inst => inst.id === editingTableId && inst.type === 'table');
-    const isPermanentTable = table && table.id.match(/^Table\d+$/);
+    // Always remove the temporary table when canceling
+    console.log(`[instanceview] Cancelling table editor, removing temporary table "${editingTableId}"`);
+    setInstances(prev => prev.filter(inst => inst.id !== editingTableId));
     
-    if (isPermanentTable) {
-      // This is a saved table, just close the editor without removing it
-      console.log(`[instanceview] Closing table editor for saved table "${editingTableId}"`);
-      onOperation(`Closed table editor for "${editingTableId}"`, false);
+    if (originalInstanceId) {
+      onOperation(`Cancelled table editing for "${originalInstanceId}" and closed the table editor`, false);
     } else {
-      // This is an unsaved/temporary table, remove it
-      console.log(`[instanceview] Cancelling and removing unsaved table "${editingTableId}"`);
-      onOperation(`Cancelled table editing for "${editingTableId}" and closed the table editor`, false);
-      setInstances(prev => prev.filter(inst => inst.id !== editingTableId));
+      onOperation(`Cancelled table creation for "${editingTableId}" and closed the table editor`, false);
     }
     
     setEditingTableId(null);
     setAvailableInstances([]);
+    setOriginalInstanceId(null);
+  };
+
+  // Close table editor without cancel logic (for successful saves)
+  const closeTableEditor = () => {
+    console.log(`[instanceview] Closing table editor`);
+    setEditingTableId(null);
+    setAvailableInstances([]);
+    setOriginalInstanceId(null);
   };
 
 
@@ -2233,8 +2231,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
             initialTableId={editingTableId}
             instances={instances}
             htmlContext={htmlContext}
-            onSaveTable={(_tableId: string, _tableName?: string) => saveTable()}
+            onSaveTable={(tableId: string, _tableName?: string, isDirty?: boolean) => saveTable(tableId, isDirty)}
             onCancel={cancelTableEdit}
+            onClose={closeTableEditor}
             onAddToTable={(_tableId: string, instance: Instance, row: number, col: number) => handleAddToTable(instance, row, col)}
             onRemoveCellContent={(_tableId: string, row: number, col: number) => removeCellContent(row, col)}
             onEditCellContent={(_tableId: string, row: number, col: number, value: string) => { 
