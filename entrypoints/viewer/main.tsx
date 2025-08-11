@@ -19,44 +19,83 @@
     }
     
     function highlightElement(element: HTMLElement) {
-        if (!element) return;
+        if (!element) {
+            console.warn('No element provided for highlighting');
+            return;
+        }
         
-        // Scroll element into view
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        console.log('Starting to highlight element:', element);
         
-        // Create highlight overlay
-        const overlay = document.createElement('div');
-        overlay.className = 'highlight-overlay';
-        overlay.style.position = 'absolute';
+        const iframeElement = iframe as HTMLIFrameElement;
+        const iframeDocument = iframeElement.contentDocument!;
         
-        // Get element position relative to the iframe's content
-        const rect = element.getBoundingClientRect();
-        const iframeDocument = (iframe as HTMLIFrameElement).contentDocument!;
-        const scrollTop = iframeDocument.documentElement.scrollTop || iframeDocument.body.scrollTop;
-        const scrollLeft = iframeDocument.documentElement.scrollLeft || iframeDocument.body.scrollLeft;
+        if (!iframeDocument) {
+            console.error('Cannot access iframe document');
+            return;
+        }
         
-        overlay.style.top = `${rect.top + scrollTop}px`;
-        overlay.style.left = `${rect.left + scrollLeft}px`;
-        overlay.style.width = `${rect.width}px`;
-        overlay.style.height = `${rect.height}px`;
+        // First, scroll element into view within the iframe context
+        try {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            console.log('Scrolled element into view');
+            
+            // Wait a moment for smooth scrolling to complete before calculating positions
+            setTimeout(() => {
+                console.log('Recalculating position after scroll...');
+                updateOverlayPosition();
+            }, 600);
+        } catch (error) {
+            console.warn('Error scrolling element into view:', error);
+            // If scrolling fails, create overlay immediately
+            updateOverlayPosition();
+        }
         
-        // Add overlay to iframe document
-        iframeDocument.body.appendChild(overlay);
-        
-        // Remove highlight after 5 seconds
-        setTimeout(() => {
-            if (overlay.parentNode) {
-                overlay.parentNode.removeChild(overlay);
-            }
-        }, 5000);
+        function updateOverlayPosition() {
+            console.log('Highlighting element directly:', element);
+            
+            // Store original styles to restore later
+            const originalBorder = element.style.border;
+            const originalBoxShadow = element.style.boxShadow;
+            const originalOutline = element.style.outline;
+            
+            // Apply highlight directly to the element
+            element.style.border = '3px solid #ff6b35';
+            element.style.boxShadow = '0 0 20px rgba(255, 107, 53, 0.8)';
+            element.style.outline = 'none';
+            element.style.transition = 'all 0.3s ease';
+            
+            console.log('Applied direct highlighting to element');
+            
+            // Remove highlight after 5 seconds
+            setTimeout(() => {
+                element.style.border = originalBorder;
+                element.style.boxShadow = originalBoxShadow;
+                element.style.outline = originalOutline;
+                console.log('Removed direct highlighting from element');
+            }, 5000);
+        }
     }
     
     function findElementByLocator(locator: any, iframeDocument: Document) {
         if (!locator || !iframeDocument) return null;
         
         try {
+            console.log('Searching for element with locator:', locator);
+            
             // Locator is now just a stable ID string
-            return iframeDocument.querySelector(`[data-aid-id="${locator}"]`);
+            const element = iframeDocument.querySelector(`[data-aid-id="${locator}"]`);
+            
+            if (element) {
+                console.log('Found element:', element);
+                return element;
+            } else {
+                console.warn('Element not found with locator:', locator);
+                // Debug: log all elements with data-aid-id attributes
+                const allElements = iframeDocument.querySelectorAll('[data-aid-id]');
+                console.log(`Found ${allElements.length} elements with data-aid-id attributes:`, 
+                    Array.from(allElements).slice(0, 10).map(el => el.getAttribute('data-aid-id')));
+                return null;
+            }
         } catch (error) {
             console.warn('Error finding element by locator:', error);
             return null;
@@ -68,8 +107,10 @@
         const urlParams = new URLSearchParams(window.location.search);
         const snapshotId = urlParams.get('snapshotId');
         const locatorParam = urlParams.get('locator');
+        console.log('Viewer loaded with URL:', window.location.href);
         console.log('Snapshot ID:', snapshotId);
         console.log('Locator parameter:', locatorParam);
+        console.log('All URL params:', Array.from(urlParams.entries()));
         
         if (!snapshotId) {
             showError('No snapshot ID provided');
@@ -78,11 +119,8 @@
         
         let locator = null;
         if (locatorParam) {
-            try {
-                locator = JSON.parse(decodeURIComponent(locatorParam));
-            } catch (error) {
-                console.warn('Failed to parse locator parameter:', error);
-            }
+            locator = decodeURIComponent(locatorParam);
+            console.log('Decoded locator:', locator);
         }
         
         // Fetch snapshot data
@@ -108,15 +146,59 @@
             showContent();
             
             if (locator) {
-                // Give the iframe content a moment to fully render
-                setTimeout(() => {
-                    const targetElement = findElementByLocator(locator, (iframe as HTMLIFrameElement).contentDocument!);
-                    if (targetElement && targetElement instanceof HTMLElement) {
-                        highlightElement(targetElement);
-                    } else {
-                        console.warn('Target element not found in snapshot');
+                console.log('Will attempt to highlight element with locator:', locator);
+                
+                // Function to try highlighting with retries
+                let highlightAttempted = false;
+                let retryTimeouts: number[] = [];
+                
+                const clearAllTimeouts = () => {
+                    retryTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
+                    retryTimeouts = [];
+                };
+                
+                const tryHighlight = (retryCount = 0) => {
+                    if (highlightAttempted) {
+                        console.log('Highlighting already attempted, skipping retry');
+                        return;
                     }
-                }, 500);
+                    
+                    const iframeDocument = (iframe as HTMLIFrameElement).contentDocument;
+                    if (!iframeDocument) {
+                        console.error('Cannot access iframe document for highlighting');
+                        return;
+                    }
+                    
+                    const targetElement = findElementByLocator(locator, iframeDocument);
+                    if (targetElement) {
+                        console.log(`Found target element on attempt ${retryCount + 1}, highlighting...`);
+                        highlightAttempted = true; // Mark as attempted before calling highlightElement
+                        clearAllTimeouts(); // Cancel all pending retry attempts
+                        try {
+                            highlightElement(targetElement as HTMLElement);
+                            console.log('Successfully highlighted element!');
+                            return; // Stop retrying once we succeed
+                        } catch (error) {
+                            console.error('Error highlighting element:', error);
+                            highlightAttempted = false; // Allow retry on error
+                        }
+                    }
+                    
+                    if (retryCount < 5) {
+                        console.log(`Element not found on attempt ${retryCount + 1}, retrying in ${500 * (retryCount + 1)}ms...`);
+                        console.log('Available elements with data-aid-id:', 
+                            Array.from(iframeDocument.querySelectorAll('[data-aid-id]')).slice(0, 5).map(el => el.getAttribute('data-aid-id')));
+                        const timeoutId = setTimeout(() => tryHighlight(retryCount + 1), 500 * (retryCount + 1)) as any;
+                        retryTimeouts.push(timeoutId);
+                    } else {
+                        console.warn('Target element not found after all retries');
+                        console.warn('Looking for locator:', locator);
+                        console.warn('Total elements with data-aid-id:', iframeDocument.querySelectorAll('[data-aid-id]').length);
+                    }
+                };
+                
+                // Start highlighting attempts after iframe loads
+                setTimeout(() => tryHighlight(), 500);
             }
         };
         

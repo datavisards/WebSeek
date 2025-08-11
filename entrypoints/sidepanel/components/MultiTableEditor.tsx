@@ -36,7 +36,7 @@ interface MultiTableEditorProps {
   initialTableId: string | null;
   instances: Instance[];
   htmlContext: Record<string, {pageURL: string, htmlContent: string}>;
-  onSaveTable: (tableId: string, tableName?: string) => void;
+  onSaveTable: (tableId: string, tableName?: string) => string | null;
   onCancel: () => void;
   onAddToTable: (tableId: string, instance: Instance, row: number, col: number) => void;
   onRemoveCellContent: (tableId: string, row: number, col: number) => void;
@@ -132,6 +132,9 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
         };
       }
       return openTable;
+    }).filter(openTable => {
+      // Remove tables that no longer exist in instances (they may have had ID changes)
+      return instances.some(inst => inst.id === openTable.id && inst.type === 'table');
     }));
   }, [instances]);
 
@@ -269,6 +272,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
 
   // Function to mark table as dirty
   const markTableDirty = useCallback((tableId: string) => {
+    console.log(`[MultiTableEditor] Marking table ${tableId} as dirty`);
     setOpenTables(prev => prev.map(t => 
       t.id === tableId ? { ...t, isDirty: true } : t
     ));
@@ -276,20 +280,38 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
 
   // Enhanced handlers that work with multiple tables
   const handleAddToTable = useCallback((instance: Instance, row: number, col: number) => {
-    if (!activeTabId) return;
+    console.log(`[MultiTableEditor] handleAddToTable called: activeTabId=${activeTabId}, row=${row}, col=${col}`);
+    if (!activeTabId) {
+      console.log(`[MultiTableEditor] No activeTabId, returning`);
+      return;
+    }
+    console.log(`[MultiTableEditor] Calling onAddToTable for ${activeTabId}`);
     onAddToTable(activeTabId, instance, row, col);
+    console.log(`[MultiTableEditor] Calling markTableDirty for ${activeTabId}`);
     markTableDirty(activeTabId);
   }, [activeTabId, onAddToTable, markTableDirty]);
 
   const handleRemoveCellContent = useCallback((row: number, col: number) => {
-    if (!activeTabId) return;
+    console.log(`[MultiTableEditor] handleRemoveCellContent called: activeTabId=${activeTabId}, row=${row}, col=${col}`);
+    if (!activeTabId) {
+      console.log(`[MultiTableEditor] No activeTabId, returning`);
+      return;
+    }
+    console.log(`[MultiTableEditor] Calling onRemoveCellContent for ${activeTabId}`);
     onRemoveCellContent(activeTabId, row, col);
+    console.log(`[MultiTableEditor] Calling markTableDirty for ${activeTabId}`);
     markTableDirty(activeTabId);
   }, [activeTabId, onRemoveCellContent, markTableDirty]);
 
   const handleEditCellContent = useCallback((row: number, col: number, newValue: string) => {
-    if (!activeTabId) return;
+    console.log(`[MultiTableEditor] handleEditCellContent called: activeTabId=${activeTabId}, row=${row}, col=${col}, newValue="${newValue}"`);
+    if (!activeTabId) {
+      console.log(`[MultiTableEditor] No activeTabId, returning`);
+      return;
+    }
+    console.log(`[MultiTableEditor] Calling onEditCellContent for ${activeTabId}`);
     onEditCellContent(activeTabId, row, col, newValue);
+    console.log(`[MultiTableEditor] Calling markTableDirty for ${activeTabId}`);
     markTableDirty(activeTabId);
   }, [activeTabId, onEditCellContent, markTableDirty]);
 
@@ -668,8 +690,8 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       }
     };
     
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown, { passive: false } as AddEventListenerOptions);
+    return () => document.removeEventListener('keydown', handleKeyDown, { passive: false } as EventListenerOptions);
   }, [handleCopy, handlePaste]);
 
   // Function to perform join operation
@@ -795,9 +817,15 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
 
   // Function to save all tables
   const handleSaveAll = useCallback(() => {
-    if (openTables.some(t => t.isDirty)) {
+    console.log(`[MultiTableEditor] handleSaveAll called`);
+    const dirtyTables = openTables.filter(t => t.isDirty);
+    console.log(`[MultiTableEditor] Found ${dirtyTables.length} dirty tables:`, dirtyTables.map(t => `${t.id} (${t.originalName})`));
+    
+    if (dirtyTables.length > 0) {
+      console.log(`[MultiTableEditor] Opening save dialog`);
       setShowSaveDialog(true);
     } else {
+      console.log(`[MultiTableEditor] No changes to save, canceling`);
       // No changes to save
       onCancel();
     }
@@ -902,12 +930,42 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
           
           {selectedCell && onCaptureToCell && (
             <button 
-              onClick={() => onCaptureToCell?.(selectedCell.tableId, selectedCell.row, selectedCell.col)}
+              onClick={() => {
+                console.log(`[MultiTableEditor] Capture to Cell clicked: tableId=${selectedCell.tableId}, row=${selectedCell.row}, col=${selectedCell.col}`);
+                onCaptureToCell?.(selectedCell.tableId, selectedCell.row, selectedCell.col);
+                console.log(`[MultiTableEditor] Marking table ${selectedCell.tableId} as dirty after capture`);
+                markTableDirty(selectedCell.tableId);
+              }}
               disabled={!isCaptureEnabled}
             >
               Capture to Cell ({selectedCell.row + 1}, {String.fromCharCode(65 + selectedCell.col)})
             </button>
           )}
+          
+          {selectedCell && (() => {
+            const table = openTables.find(t => t.id === selectedCell.tableId)?.instance;
+            const cell = table?.cells[selectedCell.row]?.[selectedCell.col];
+            const isWebSource = cell?.source?.type === 'web';
+            
+            if (isWebSource) {
+              return (
+                <button 
+                  onClick={() => {
+                    const webSource = cell.source as any;
+                    if (webSource.pageId && webSource.locator) {
+                      const locatorString = encodeURIComponent(webSource.locator);
+                      const baseUrl = chrome.runtime.getURL('viewer.html');
+                      const viewerUrl = `${baseUrl}?snapshotId=${webSource.pageId}&locator=${locatorString}`;
+                      chrome.tabs.create({ url: viewerUrl });
+                    }
+                  }}
+                >
+                  Source
+                </button>
+              );
+            }
+            return null;
+          })()}
         </div>
       </div>
 
@@ -1303,10 +1361,28 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button 
                         onClick={() => {
-                          onSaveTable(table.id, table.originalName);
-                          setOpenTables(prev => prev.map(t => 
-                            t.id === table.id ? { ...t, isDirty: false } : t
-                          ));
+                          console.log(`[MultiTableEditor] Saving individual table: ${table.id} (${table.originalName})`);
+                          const newTableId = onSaveTable(table.id, table.originalName);
+                          console.log(`[MultiTableEditor] Save returned newTableId: ${newTableId}`);
+                          
+                          if (newTableId) {
+                            console.log(`[MultiTableEditor] Updating table ID from ${table.id} to ${newTableId}`);
+                            // Update the table ID in openTables and clear dirty flag
+                            setOpenTables(prev => prev.map(t => 
+                              t.id === table.id ? { ...t, id: newTableId, isDirty: false } : t
+                            ));
+                            // Update activeTabId if this was the active table
+                            if (activeTabId === table.id) {
+                              console.log(`[MultiTableEditor] Updating activeTabId from ${table.id} to ${newTableId}`);
+                              setActiveTabId(newTableId);
+                            }
+                          } else {
+                            console.log(`[MultiTableEditor] No ID change, just clearing dirty flag for ${table.id}`);
+                            // Just clear dirty flag if no ID change
+                            setOpenTables(prev => prev.map(t => 
+                              t.id === table.id ? { ...t, isDirty: false } : t
+                            ));
+                          }
                         }}
                         style={{
                           fontSize: '12px',
@@ -1364,9 +1440,46 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
               
               <button 
                 onClick={() => {
-                  openTables.filter(t => t.isDirty).forEach(table => {
-                    onSaveTable(table.id, table.originalName);
+                  console.log(`[MultiTableEditor] Save All & Close clicked`);
+                  const dirtyTables = openTables.filter(t => t.isDirty);
+                  console.log(`[MultiTableEditor] Found ${dirtyTables.length} dirty tables:`, dirtyTables.map(t => `${t.id} (${t.originalName})`));
+                  
+                  // Save all dirty tables and track ID changes
+                  const idChanges: { [oldId: string]: string } = {};
+                  dirtyTables.forEach(table => {
+                    console.log(`[MultiTableEditor] Saving table: ${table.id} (${table.originalName})`);
+                    const newTableId = onSaveTable(table.id, table.originalName);
+                    console.log(`[MultiTableEditor] Save returned newTableId: ${newTableId} for ${table.id}`);
+                    
+                    if (newTableId && newTableId !== table.id) {
+                      console.log(`[MultiTableEditor] Tracking ID change: ${table.id} -> ${newTableId}`);
+                      idChanges[table.id] = newTableId;
+                    }
                   });
+                  
+                  console.log(`[MultiTableEditor] ID changes tracked:`, idChanges);
+                  
+                  // Update openTables with new IDs and clear dirty flags
+                  setOpenTables(prev => {
+                    const updated = prev.map(t => {
+                      const newId = idChanges[t.id] || t.id;
+                      const result = t.isDirty ? { ...t, id: newId, isDirty: false } : t;
+                      if (t.isDirty) {
+                        console.log(`[MultiTableEditor] Updated table state: ${t.id} -> ${result.id}, dirty: ${t.isDirty} -> ${result.isDirty}`);
+                      }
+                      return result;
+                    });
+                    console.log(`[MultiTableEditor] Updated openTables:`, updated.map(t => `${t.id} (dirty: ${t.isDirty})`));
+                    return updated;
+                  });
+                  
+                  // Update activeTabId if it changed
+                  if (activeTabId && idChanges[activeTabId]) {
+                    console.log(`[MultiTableEditor] Updating activeTabId from ${activeTabId} to ${idChanges[activeTabId]}`);
+                    setActiveTabId(idChanges[activeTabId]);
+                  }
+                  
+                  console.log(`[MultiTableEditor] Closing save dialog and canceling editor`);
                   setShowSaveDialog(false);
                   onCancel();
                 }}

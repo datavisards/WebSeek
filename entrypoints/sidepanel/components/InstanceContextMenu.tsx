@@ -126,18 +126,19 @@ const InstanceContextMenu: React.FC<InstanceContextMenuProps> = ({
                   className="contextmenuoption"
                   onClick={async () => {
                     const webSource = instance.source as any;
+                    console.log('Go to source clicked, webSource:', webSource);
                     if (webSource.pageId && webSource.locator) {
                       try {
-                        const locatorString = encodeURIComponent(JSON.stringify(webSource.locator));
-                        const baseUrl = (window as any).browser?.runtime?.getURL('/viewer.html');
-                        if (!baseUrl) {
-                          throw new Error('Extension runtime not available');
-                        }
-                        const viewerUrl = baseUrl + `?snapshotId=${webSource.pageId}&locator=${locatorString}`;
-                        await (window as any).browser?.tabs?.create({ url: viewerUrl });
+                        const locatorString = encodeURIComponent(webSource.locator);
+                        console.log('Locator string:', locatorString);
+                        const baseUrl = chrome.runtime.getURL('viewer.html');
+                        console.log('Base URL:', baseUrl);
+                        const viewerUrl = `${baseUrl}?snapshotId=${webSource.pageId}&locator=${locatorString}`;
+                        console.log('Generated viewer URL:', viewerUrl);
+                        await chrome.tabs.create({ url: viewerUrl });
                       } catch (error) {
                         console.error('Error opening snapshot viewer:', error);
-                        // Get URL from htmlContext using pageId
+                        // Fallback: Get URL from htmlContext using pageId
                         const pageContext = htmlContext[webSource.pageId];
                         if (pageContext?.pageURL) {
                           const url = new URL(pageContext.pageURL);
@@ -150,7 +151,7 @@ const InstanceContextMenu: React.FC<InstanceContextMenuProps> = ({
                         }
                       }
                     } else {
-                      // Get URL from htmlContext using pageId for direct navigation
+                      // Fallback: Get URL from htmlContext using pageId for direct navigation
                       const pageContext = htmlContext[webSource.pageId];
                       if (pageContext?.pageURL) {
                         const url = new URL(pageContext.pageURL);

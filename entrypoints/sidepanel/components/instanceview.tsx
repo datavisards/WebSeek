@@ -1351,12 +1351,44 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   };
 
   const saveTable = () => {
-    let newId = `Table${tableCount + 1}`;
-    setTableCount(prev => prev + 1);
+    console.log(`[instanceview] saveTable called, editingTableId: ${editingTableId}`);
+    
     const table = instances.find(inst => inst.id === editingTableId && inst.type === 'table') as TableInstance | undefined;
-    if (!table) return;
-    table.id = newId;
-    setInstances(prev => prev.map(inst => inst.id === editingTableId ? table : inst));
+    console.log(`[instanceview] Found table:`, table ? `${table.id} (${table.rows}x${table.cols})` : 'NOT FOUND');
+    
+    if (!table) {
+      console.log(`[instanceview] No table found with ID ${editingTableId}, returning null`);
+      return null;
+    }
+    
+    let newId: string;
+    
+    // Check if this is a temporary ID (contains underscore) or a new table that needs a permanent ID
+    if (table.id.includes('_') || table.id.startsWith('joined_')) {
+      // This is a temporary ID, generate a new permanent one
+      newId = `Table${tableCount + 1}`;
+      console.log(`[instanceview] Generated new permanent ID: ${newId}, tableCount: ${tableCount}`);
+      setTableCount(prev => prev + 1);
+      console.log(`[instanceview] Changing table ID from ${table.id} to ${newId}`);
+      table.id = newId;
+    } else if (table.id.match(/^Table\d+$/)) {
+      // This is already a permanent TableX ID, keep it
+      newId = table.id;
+      console.log(`[instanceview] Keeping existing permanent ID: ${newId}`);
+    } else {
+      // This is some other format, generate a new permanent one
+      newId = `Table${tableCount + 1}`;
+      console.log(`[instanceview] Generated new permanent ID for unknown format: ${newId}, tableCount: ${tableCount}`);
+      setTableCount(prev => prev + 1);
+      console.log(`[instanceview] Changing table ID from ${table.id} to ${newId}`);
+      table.id = newId;
+    }
+    
+    setInstances(prev => {
+      const updated = prev.map(inst => inst.id === editingTableId ? table : inst);
+      console.log(`[instanceview] Updated instances, table now has ID: ${table.id}`);
+      return updated;
+    });
     // Log the operation
     let withstr = "";
     if (table.cells.some(rowArr => rowArr.some(cell => cell != null))) {
@@ -1382,17 +1414,33 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     } else {
       onOperation(`Saved and closed the table editor. Created [${newId}](#instance-${newId})` + (withstr ? ` with ${withstr}` : ''), false);
     }
-    setEditingTableId(null);
-    setAvailableInstances([]);
+    
+    console.log(`[instanceview] saveTable returning newId: ${newId}`);
+    return newId;
   };
 
   const cancelTableEdit = () => {
     if (!editingTableId) return;
-    onOperation(`Cancelled table editing for "${editingTableId}" and closed the table editor`, false);
-    setInstances(prev => prev.filter(inst => inst.id !== editingTableId));
+    
+    // Check if this is a saved table (permanent TableX ID) or unsaved (temporary/new table)
+    const table = instances.find(inst => inst.id === editingTableId && inst.type === 'table');
+    const isPermanentTable = table && table.id.match(/^Table\d+$/);
+    
+    if (isPermanentTable) {
+      // This is a saved table, just close the editor without removing it
+      console.log(`[instanceview] Closing table editor for saved table "${editingTableId}"`);
+      onOperation(`Closed table editor for "${editingTableId}"`, false);
+    } else {
+      // This is an unsaved/temporary table, remove it
+      console.log(`[instanceview] Cancelling and removing unsaved table "${editingTableId}"`);
+      onOperation(`Cancelled table editing for "${editingTableId}" and closed the table editor`, false);
+      setInstances(prev => prev.filter(inst => inst.id !== editingTableId));
+    }
+    
     setEditingTableId(null);
     setAvailableInstances([]);
   };
+
 
   // Handle capture to specific table cell
   const handleCaptureToTableCell = (row: number, col: number) => {
