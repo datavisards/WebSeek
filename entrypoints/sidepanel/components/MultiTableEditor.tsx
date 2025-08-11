@@ -3,7 +3,7 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { browser } from 'wxt/browser';
 import TableGrid from './tablegrid';
 import { TableInstance, Instance, ProactiveSuggestion } from '../types';
-import './tableeditor.css';
+import './MultiTableEditor.css';
 
 // Types for multi-table operations
 interface OpenTable {
