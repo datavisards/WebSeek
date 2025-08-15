@@ -46,9 +46,9 @@ const DEFAULT_INTERACTIONS: Record<string, InteractionConfig> = {
     hover: { enabled: true },
     selection: { enabled: false, type: 'single' }
   },
-  area: {
+  histogram: {
     hover: { enabled: true },
-    selection: { enabled: false, type: 'single' }
+    selection: { enabled: true, type: 'single' }
   }
 };
 
@@ -117,7 +117,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
     color: []
   });
 
-  const [chartType, setChartType] = useState<'bar' | 'line' | 'point' | 'area'>('point');
+  const [chartType, setChartType] = useState<'bar' | 'line' | 'point' | 'histogram'>('point');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
   const [draggedOver, setDraggedOver] = useState<string | null>(null);
@@ -190,7 +190,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
       // Extract chart type from mark
       if (spec.mark) {
         const markType = typeof spec.mark === 'string' ? spec.mark : spec.mark.type;
-        if (['bar', 'line', 'point', 'area'].includes(markType)) {
+        if (['bar', 'line', 'point', 'histogram'].includes(markType)) {
           setChartType(markType);
         }
       }
@@ -376,10 +376,30 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
     }
 
 
+    // Special handling for histograms
+    if (chartType === 'histogram') {
+      // For histograms, we need special encoding
+      if (shelves.x?.length) {
+        const xColumn = shelves.x[0];
+        // For histograms, X should be binned and Y should be count
+        encoding.x = {
+          field: xColumn.id,
+          type: 'quantitative',
+          bin: true,
+          title: xColumn.name.split(': ')[1]
+        };
+        encoding.y = {
+          aggregate: 'count',
+          type: 'quantitative',
+          title: 'Count'
+        };
+      }
+    }
+
     const spec: any = {
       $schema: "https://vega.github.io/schema/vega-lite/v5.json",
       data: { values: firstDataSource },
-      mark: chartType,
+      mark: chartType === 'histogram' ? 'bar' : chartType,
       encoding,
       // Use responsive sizing
       width: 'container',
@@ -511,7 +531,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
   };
 
   const handleChartTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newChartType = e.target.value as 'bar' | 'line' | 'point' | 'area';
+    const newChartType = e.target.value as 'bar' | 'line' | 'point' | 'histogram';
     setChartType(newChartType);
     // Update interaction configuration based on chart type
     setInteractionConfig(DEFAULT_INTERACTIONS[newChartType]);
@@ -561,7 +581,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
                   <option value="bar">Bar Chart</option>
                   <option value="line">Line Chart</option>
                   <option value="point">Scatter Plot</option>
-                  <option value="area">Area Chart</option>
+                  <option value="histogram">Histogram</option>
                 </select>
               </div>
             </section>

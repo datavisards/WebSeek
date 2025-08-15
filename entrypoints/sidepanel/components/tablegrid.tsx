@@ -1075,6 +1075,19 @@ const TableGrid: React.FC<TableGridProps> = ({
     setSelectedRows(allRows);
     setSelectedColumns(allColumns);
     setSelectedCell(null);
+    
+    // Set range selection to cover the entire table
+    const wholeTableRange = {
+      startRow: 0,
+      endRow: effectiveTable.rows - 1,
+      startCol: 0,
+      endCol: effectiveTable.cols - 1
+    };
+    
+    setCurrentRange(wholeTableRange);
+    onRangeSelectionChange?.(wholeTableRange);
+    
+    console.log('Corner clicked - setting whole table range:', wholeTableRange);
   };
 
   // Check if a cell should be highlighted based on row/column selection

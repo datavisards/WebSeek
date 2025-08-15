@@ -26,10 +26,17 @@ interface JoinSuggestion {
 }
 
 interface CopiedData {
-  type: 'cells' | 'rows' | 'columns' | 'region';
-  data: any[][]; // For 'cells' and 'region': string values; for 'rows'/'columns': full cell instances
+  type: 'cells' | 'rows' | 'columns' | 'region' | 'table';
+  data: any[][]; // Full cell instances for all copy types
+  stringData: string[][]; // String representation for system clipboard
   sourceTableId: string;
   sourceRange: { startRow: number; endRow: number; startCol: number; endCol: number };
+  tableMetadata?: { // For whole table copies
+    columnNames?: string[];
+    columnTypes?: ('numeral' | 'categorical')[];
+    rows: number;
+    cols: number;
+  };
 }
 
 interface MultiTableEditorProps {
@@ -319,17 +326,31 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
 
   // Enhanced copy functionality
   const handleCopy = useCallback(() => {
-    if (!activeTabId) return;
+    console.log('=== COPY OPERATION START ===');
+    console.log('activeTabId:', activeTabId);
+    console.log('selectedRange:', selectedRange);
+    console.log('selectedCell:', selectedCell);
+    
+    if (!activeTabId) {
+      console.log('No active tab, aborting copy');
+      return;
+    }
     
     const table = openTables.find(t => t.id === activeTabId)?.instance;
-    if (!table) return;
+    if (!table) {
+      console.log('No table found for activeTabId:', activeTabId);
+      return;
+    }
+    
+    console.log('Table found:', { id: table.id, rows: table.rows, cols: table.cols });
     
     let dataRange = null;
     
     // Determine what to copy based on selection
     if (selectedRange && selectedRange.tableId === activeTabId) {
-      // Copy range
+      // Copy range (including whole table if range covers all cells)
       dataRange = selectedRange;
+      console.log('Copying range:', dataRange);
     } else if (selectedCell && selectedCell.tableId === activeTabId) {
       // Copy single cell
       dataRange = {
@@ -339,41 +360,326 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
         startCol: selectedCell.col,
         endCol: selectedCell.col
       };
+      console.log('Copying single cell:', dataRange);
     } else {
+      console.log('No valid selection found, aborting copy');
       return;
     }
     
-    // Extract data from range
-    const data: string[][] = [];
+    // Check if we're copying the entire table
+    const isWholeTable = dataRange.startRow === 0 && 
+                        dataRange.endRow === table.rows - 1 && 
+                        dataRange.startCol === 0 && 
+                        dataRange.endCol === table.cols - 1;
+    
+    console.log('Copy operation analysis:', {
+      dataRange,
+      tableSize: { rows: table.rows, cols: table.cols },
+      isWholeTable,
+      selectionType: selectedRange ? (isWholeTable ? 'whole-table-range' : 'partial-range') : 'single-cell'
+    });
+    
+    // Extract both full cell instances and string representations
+    const data: any[][] = [];
+    const stringData: string[][] = [];
     for (let row = dataRange.startRow; row <= dataRange.endRow; row++) {
-      const rowData: string[] = [];
+      const rowData: any[] = [];
+      const rowStringData: string[] = [];
       for (let col = dataRange.startCol; col <= dataRange.endCol; col++) {
         const cell = table.cells[row]?.[col];
-        rowData.push(cell && cell.type === 'text' ? cell.content : '');
+        rowData.push(cell); // Store full cell instance
+        
+        // Convert to string representation for clipboard
+        if (cell) {
+          switch (cell.type) {
+            case 'text':
+              rowStringData.push(cell.content);
+              break;
+            case 'image':
+              rowStringData.push(`[IMAGE: ${cell.src}]`);
+              break;
+            case 'sketch':
+              rowStringData.push('[SKETCH]');
+              break;
+            case 'table':
+              rowStringData.push('[TABLE]');
+              break;
+            case 'visualization':
+              rowStringData.push('[VISUALIZATION]');
+              break;
+            default:
+              rowStringData.push('');
+          }
+        } else {
+          rowStringData.push('');
+        }
       }
       data.push(rowData);
+      stringData.push(rowStringData);
     }
     
-    setCopiedData({
-      type: 'region',
+    const copiedDataToSet = {
+      type: isWholeTable ? 'table' : 'region',
       data,
+      stringData,
       sourceTableId: activeTabId,
       sourceRange: {
         startRow: dataRange.startRow,
         endRow: dataRange.endRow,
         startCol: dataRange.startCol,
         endCol: dataRange.endCol
-      }
+      },
+      tableMetadata: isWholeTable ? {
+        columnNames: table.columnNames,
+        columnTypes: table.columnTypes,
+        rows: table.rows,
+        cols: table.cols
+      } : undefined
+    };
+    
+    console.log('Setting copiedData:', {
+      type: copiedDataToSet.type,
+      dataRows: copiedDataToSet.data.length,
+      dataCols: copiedDataToSet.data[0]?.length || 0,
+      sourceTableId: copiedDataToSet.sourceTableId,
+      sourceRange: copiedDataToSet.sourceRange,
+      tableMetadata: copiedDataToSet.tableMetadata
     });
     
-    // Copy to system clipboard as TSV (tab-separated values)
-    const tsvData = data.map(row => row.join('\t')).join('\n');
-    navigator.clipboard?.writeText(tsvData);
+    setCopiedData(copiedDataToSet);
+    
+    console.log('=== COPY OPERATION END ===');
+    
+    // Note: Keeping data in internal clipboard only to avoid permission issues
+    // TSV data is prepared but not written to system clipboard
+    // const tsvData = stringData.map(row => row.join('\t')).join('\n');
+    // navigator.clipboard?.writeText(tsvData);
   }, [selectedCell, selectedRange, activeTabId, openTables]);
 
   // Enhanced paste functionality
   const handlePaste = useCallback(async () => {
-    if (!activeTabId) return;
+    console.log('=== PASTE OPERATION START ===');
+    console.log('copiedData:', copiedData ? { 
+      type: copiedData.type, 
+      sourceTableId: copiedData.sourceTableId,
+      dataRows: copiedData.data?.length,
+      dataCols: copiedData.data?.[0]?.length,
+      tableMetadata: copiedData.tableMetadata
+    } : 'null');
+    console.log('activeTabId:', activeTabId);
+    console.log('selectedCell:', selectedCell);
+    console.log('selectedRange:', selectedRange);
+    
+    // Check if we're pasting a whole table
+    if (copiedData && copiedData.type === 'table') {
+      console.log('Detected whole table paste');
+      
+      // If there's an active table, paste into existing table (default to top-left if no selection)
+      if (activeTabId) {
+        console.log('Active table found, pasting into existing table');
+        
+        // Paste whole table into existing table with expansion
+        const currentTable = openTables.find(t => t.id === activeTabId)?.instance;
+        if (!currentTable) {
+          console.log('Current table not found for activeTabId:', activeTabId);
+          return;
+        }
+        
+        console.log('Current table:', { id: currentTable.id, rows: currentTable.rows, cols: currentTable.cols });
+        
+        const pasteTarget = selectedRange ? 
+          { startRow: selectedRange.startRow, startCol: selectedRange.startCol } :
+          selectedCell ? 
+          { startRow: selectedCell.row, startCol: selectedCell.col } :
+          { startRow: 0, startCol: 0 };
+        
+        console.log('Paste target:', pasteTarget);
+        
+        const dataToPaste = copiedData.data;
+        const metadata = copiedData.tableMetadata!;
+        
+        console.log('Data to paste:', { rows: dataToPaste.length, cols: dataToPaste[0]?.length });
+        console.log('Table metadata:', metadata);
+        
+        // Calculate required dimensions
+        const maxTargetRow = pasteTarget.startRow + metadata.rows - 1;
+        const maxTargetCol = pasteTarget.startCol + metadata.cols - 1;
+        
+        console.log('Required dimensions:', { maxTargetRow, maxTargetCol });
+        console.log('Current table dimensions:', { rows: currentTable.rows, cols: currentTable.cols });
+        
+        // Expand table if necessary
+        const needsRowExpansion = maxTargetRow >= currentTable.rows;
+        const needsColExpansion = maxTargetCol >= currentTable.cols;
+        
+        console.log('Expansion needed:', { needsRowExpansion, needsColExpansion });
+        
+        // Create a function to paste data after table expansion
+        const pasteDataAfterExpansion = () => {
+          console.log('Starting data paste after expansion');
+          let cellsPasted = 0;
+          
+          // Paste all table data
+          for (let dataRow = 0; dataRow < dataToPaste.length; dataRow++) {
+            const targetRow = pasteTarget.startRow + dataRow;
+            for (let dataCol = 0; dataCol < dataToPaste[dataRow].length; dataCol++) {
+              const targetCol = pasteTarget.startCol + dataCol;
+              const cellData = dataToPaste[dataRow][dataCol];
+              
+              if (cellData) {
+                console.log(`Pasting cell [${dataRow},${dataCol}] -> [${targetRow},${targetCol}]:`, cellData);
+                
+                if (cellData.type !== 'text') {
+                  // For non-text cells, use addToTable to preserve full instance
+                  onAddToTable(activeTabId, cellData, targetRow, targetCol);
+                } else {
+                  // For text cells, use editCellContent
+                  onEditCellContent(activeTabId, targetRow, targetCol, cellData.content);
+                }
+                cellsPasted++;
+              }
+            }
+          }
+          
+          console.log(`Finished pasting ${cellsPasted} cells`);
+          markTableDirty(activeTabId);
+          console.log('=== PASTE OPERATION END ===');
+        };
+
+        // Handle table expansion and pasting
+        if (needsRowExpansion || needsColExpansion) {
+          console.log('Table expansion needed, starting expansion process');
+          
+          // First expand the table
+          setTimeout(() => {
+            // Add rows if needed
+            if (needsRowExpansion && onAddRow) {
+              const rowsToAdd = maxTargetRow - currentTable.rows + 1;
+              console.log(`Adding ${rowsToAdd} rows`);
+              
+              for (let i = 0; i < rowsToAdd; i++) {
+                console.log(`Adding row ${i + 1}/${rowsToAdd} at position ${currentTable.rows - 1}`);
+                onAddRow(activeTabId, 'after', currentTable.rows - 1);
+              }
+            }
+            
+            // Add columns if needed
+            if (needsColExpansion && onAddColumn) {
+              const colsToAdd = maxTargetCol - currentTable.cols + 1;
+              console.log(`Adding ${colsToAdd} columns`);
+              
+              for (let i = 0; i < colsToAdd; i++) {
+                console.log(`Adding column ${i + 1}/${colsToAdd} at position ${currentTable.cols - 1}`);
+                onAddColumn(activeTabId, 'after', currentTable.cols - 1);
+              }
+            }
+            
+            console.log('Table expansion complete, waiting for state update before pasting...');
+            // Wait a bit more for the table state to update, then paste
+            setTimeout(pasteDataAfterExpansion, 50);
+          }, 0);
+        } else {
+          console.log('No table expansion needed, pasting immediately');
+          setTimeout(pasteDataAfterExpansion, 0);
+        }
+        
+        if (onOperation) {
+          onOperation(`Pasted entire table into existing table at row ${pasteTarget.startRow + 1}, column ${String.fromCharCode(65 + pasteTarget.startCol)}`);
+        }
+        
+        return;
+      } else {
+        // No active table or specific location - create new table instance
+        const newTableId = `table_${Date.now()}`;
+        const metadata = copiedData.tableMetadata!;
+        
+        const newTable: TableInstance = {
+          id: newTableId,
+          type: 'table',
+          source: { type: 'manual' },
+          rows: metadata.rows,
+          cols: metadata.cols,
+          cells: copiedData.data,
+          columnNames: metadata.columnNames,
+          columnTypes: metadata.columnTypes,
+          x: 50,
+          y: 50,
+          width: 400,
+          height: 300
+        };
+        
+        // Add new table to open tables
+        const newOpenTable: OpenTable = {
+          id: newTableId,
+          instance: newTable,
+          isDirty: true,
+          isNew: true,
+          originalName: `Copy of ${openTables.find(t => t.id === copiedData.sourceTableId)?.originalName || 'Table'}`
+        };
+        
+        setOpenTables(prev => [...prev, newOpenTable]);
+        setActiveTabId(newTableId);
+        
+        // Log the operation
+        if (onOperation) {
+          onOperation(`Pasted table as new table "${newOpenTable.originalName}"`);
+        }
+        
+        return;
+      }
+    }
+    
+    // If no active table, can only paste if we have internal clipboard data
+    if (!activeTabId) {
+      if (copiedData) {
+        // Handle internal clipboard data when no table is active
+        if (copiedData.type === 'table') {
+          // This case is already handled above
+          return;
+        } else {
+          // Create new table from internal clipboard data
+          const dataToPaste = copiedData.data;
+          if (dataToPaste.length > 0) {
+            const newTableId = `table_${Date.now()}`;
+            
+            const newTable: TableInstance = {
+              id: newTableId,
+              type: 'table',
+              source: { type: 'manual' },
+              rows: dataToPaste.length,
+              cols: Math.max(...dataToPaste.map(row => row.length)),
+              cells: dataToPaste,
+              x: 50,
+              y: 50,
+              width: 400,
+              height: 300
+            };
+            
+            const newOpenTable: OpenTable = {
+              id: newTableId,
+              instance: newTable,
+              isDirty: true,
+              isNew: true,
+              originalName: `Pasted Data`
+            };
+            
+            setOpenTables(prev => [...prev, newOpenTable]);
+            setActiveTabId(newTableId);
+            
+            if (onOperation) {
+              onOperation(`Pasted data as new table "${newOpenTable.originalName}"`);
+            }
+            
+            return;
+          }
+        }
+      } else {
+        if (onOperation) {
+          onOperation('No data to paste. Use Ctrl+C to copy data within the table editor first.');
+        }
+      }
+      return;
+    }
     
     let pasteTarget = null;
     
@@ -392,41 +698,89 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       return;
     }
     
-    let dataToPaste: string[][] = [];
+    let dataToPaste: any[][] = [];
+    let isInternalCopy = false;
     
-    // Try to get data from our internal clipboard first
+    // Only use internal clipboard data
     if (copiedData) {
       dataToPaste = copiedData.data;
+      isInternalCopy = true;
     } else {
-      // Fallback to system clipboard - parse TSV
-      try {
-        const clipboardText = await navigator.clipboard.readText();
-        dataToPaste = clipboardText.split('\n').map(row => row.split('\t'));
-      } catch (error) {
-        console.warn('Could not access clipboard:', error);
-        return;
+      // No internal clipboard data available
+      if (onOperation) {
+        onOperation('No data to paste. Use Ctrl+C to copy data within the table editor first.');
       }
+      return;
     }
     
-    // Paste data starting from the target position
-    const currentActiveTabId = activeTabId;
+    if (dataToPaste.length === 0) return;
     
-    // Use setTimeout with 0 delay to batch DOM updates
-    setTimeout(() => {
+    const currentActiveTabId = activeTabId;
+    const table = openTables.find(t => t.id === activeTabId)?.instance;
+    if (!table) return;
+    
+    // Calculate required table dimensions
+    const maxTargetRow = pasteTarget.startRow + dataToPaste.length - 1;
+    const maxTargetCol = pasteTarget.startCol + Math.max(...dataToPaste.map(row => row.length)) - 1;
+    
+    // Expand table if necessary
+    let needsRowExpansion = maxTargetRow >= table.rows;
+    let needsColExpansion = maxTargetCol >= table.cols;
+    
+    // Create a function to paste data after table expansion
+    const pasteDataAfterExpansion = () => {
+      // Paste data
       for (let dataRow = 0; dataRow < dataToPaste.length; dataRow++) {
         const targetRow = pasteTarget.startRow + dataRow;
         for (let dataCol = 0; dataCol < dataToPaste[dataRow].length; dataCol++) {
           const targetCol = pasteTarget.startCol + dataCol;
-          const cellValue = dataToPaste[dataRow][dataCol];
+          const cellData = dataToPaste[dataRow][dataCol];
           
-          if (cellValue) {
-            onEditCellContent(currentActiveTabId, targetRow, targetCol, cellValue);
+          if (cellData) {
+            if (isInternalCopy && cellData.type !== 'text') {
+              // For non-text cells from internal copy, use addToTable to preserve full instance
+              onAddToTable(currentActiveTabId, cellData, targetRow, targetCol);
+            } else if (cellData.type === 'text' || typeof cellData === 'string') {
+              // For text cells, use editCellContent
+              const content = typeof cellData === 'string' ? cellData : cellData.content;
+              if (content) {
+                onEditCellContent(currentActiveTabId, targetRow, targetCol, content);
+              }
+            }
           }
         }
       }
       markTableDirty(currentActiveTabId);
-    }, 0);
-  }, [copiedData, selectedCell, selectedRange, activeTabId, onEditCellContent, markTableDirty]);
+    };
+
+    // Handle table expansion and pasting
+    if (needsRowExpansion || needsColExpansion) {
+      // First expand the table
+      setTimeout(() => {
+        // Add rows if needed
+        if (needsRowExpansion && onAddRow) {
+          const rowsToAdd = maxTargetRow - table.rows + 1;
+          for (let i = 0; i < rowsToAdd; i++) {
+            onAddRow(currentActiveTabId, 'after', table.rows - 1);
+          }
+        }
+        
+        // Add columns if needed
+        if (needsColExpansion && onAddColumn) {
+          const colsToAdd = maxTargetCol - table.cols + 1;
+          for (let i = 0; i < colsToAdd; i++) {
+            onAddColumn(currentActiveTabId, 'after', table.cols - 1);
+          }
+        }
+        
+        // Wait a bit more for the table state to update, then paste
+        setTimeout(pasteDataAfterExpansion, 50);
+      }, 0);
+    } else {
+      // No expansion needed, paste immediately
+      setTimeout(pasteDataAfterExpansion, 0);
+    }
+  }, [copiedData, selectedCell, selectedRange, activeTabId, onEditCellContent, onAddToTable, onAddRow, onAddColumn, markTableDirty, openTables, setOpenTables, setActiveTabId, onOperation]);
 
 
   // Row/Column copy handlers for context menu
@@ -473,6 +827,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     setCopiedData({
       type: 'rows',
       data: [rowCells], // Store full cell instances for internal operations
+      stringData: [rowStringData], // String representation for system clipboard
       sourceTableId: activeTabId,
       sourceRange: {
         startRow: rowIndex,
@@ -482,8 +837,8 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       }
     });
     
-    // Copy string representation to system clipboard
-    navigator.clipboard?.writeText(rowStringData.join('\t'));
+    // Note: Keeping data in internal clipboard only
+    // navigator.clipboard?.writeText(rowStringData.join('\t'));
   }, [activeTabId, openTables]);
 
   const handleColumnCopy = useCallback((colIndex: number) => {
@@ -527,6 +882,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     setCopiedData({
       type: 'columns',
       data: columnCells, // Store full cell instances for internal operations
+      stringData: [columnStringData], // String representation for system clipboard
       sourceTableId: activeTabId,
       sourceRange: {
         startRow: 0,
@@ -536,8 +892,8 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       }
     });
     
-    // Copy string representation to system clipboard
-    navigator.clipboard?.writeText(columnStringData.join('\n'));
+    // Note: Keeping data in internal clipboard only
+    // navigator.clipboard?.writeText(columnStringData.join('\n'));
   }, [activeTabId, openTables]);
 
   // Paste to row/column handlers
@@ -678,9 +1034,68 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     markTableDirty(activeTabId);
   }, [activeTabId, onLiftRowToHeader, markTableDirty]);
 
+  // Clear selection function
+  const handleClear = useCallback(() => {
+    if (!activeTabId) return;
+    
+    const table = openTables.find(t => t.id === activeTabId)?.instance;
+    if (!table) return;
+    
+    // Check if entire table is selected (selectedRange covers the whole table)
+    if (selectedRange && selectedRange.tableId === activeTabId) {
+      const isWholeTable = selectedRange.startRow === 0 && 
+                          selectedRange.endRow === table.rows - 1 && 
+                          selectedRange.startCol === 0 && 
+                          selectedRange.endCol === table.cols - 1;
+                          
+      if (isWholeTable) {
+        // Clear entire table
+        for (let row = 0; row < table.rows; row++) {
+          for (let col = 0; col < table.cols; col++) {
+            onRemoveCellContent(activeTabId, row, col);
+          }
+        }
+        markTableDirty(activeTabId);
+        if (onOperation) {
+          onOperation(`Cleared entire table "${activeTabId}"`);
+        }
+        return;
+      } else {
+        // Clear selected range
+        for (let row = selectedRange.startRow; row <= selectedRange.endRow; row++) {
+          for (let col = selectedRange.startCol; col <= selectedRange.endCol; col++) {
+            onRemoveCellContent(activeTabId, row, col);
+          }
+        }
+        markTableDirty(activeTabId);
+        if (onOperation) {
+          onOperation(`Cleared selected area in table "${activeTabId}"`);
+        }
+        return;
+      }
+    }
+    
+    // Clear single selected cell
+    if (selectedCell && selectedCell.tableId === activeTabId) {
+      onRemoveCellContent(activeTabId, selectedCell.row, selectedCell.col);
+      markTableDirty(activeTabId);
+      if (onOperation) {
+        onOperation(`Cleared cell (${selectedCell.row + 1}, ${String.fromCharCode(65 + selectedCell.col)}) in table "${activeTabId}"`);
+      }
+    }
+  }, [activeTabId, selectedRange, selectedCell, openTables, onRemoveCellContent, markTableDirty, onOperation]);
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if user is in edit mode (input or textarea focused)
+      const activeElement = document.activeElement;
+      const isInEditMode = activeElement && (
+        activeElement.tagName === 'INPUT' || 
+        activeElement.tagName === 'TEXTAREA' || 
+        activeElement.contentEditable === 'true'
+      );
+      
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'c') {
           e.preventDefault();
@@ -689,12 +1104,16 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
           e.preventDefault();
           handlePaste();
         }
+      } else if (e.key === 'Backspace' && !isInEditMode) {
+        // Only handle backspace if not in edit mode
+        e.preventDefault();
+        handleClear();
       }
     };
     
     document.addEventListener('keydown', handleKeyDown, { passive: false } as AddEventListenerOptions);
     return () => document.removeEventListener('keydown', handleKeyDown, { passive: false } as EventListenerOptions);
-  }, [handleCopy, handlePaste]);
+  }, [handleCopy, handlePaste, handleClear]);
 
   // Function to perform join operation
   const performJoin = useCallback((suggestion: JoinSuggestion) => {

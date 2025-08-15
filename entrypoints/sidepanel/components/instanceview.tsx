@@ -40,9 +40,32 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   // Custom hooks
   const { fetchHTMLContent, htmlLoadingStates } = useHTMLContent(updateHTMLContext);
   const instancesRef = useRef<Instance[]>([]);
+
   // Snapshot status indicator state
   const [showSnapshotStatus, setShowSnapshotStatus] = useState(false);
   const [isWaitingForSnapshots, setIsWaitingForSnapshots] = useState(false);
+  const [inferenceInstanceIds, setInferenceInstanceIds] = useState<string[]>([]);
+
+  // Effect to monitor snapshot loading states when indicator is shown
+  useEffect(() => {
+    if (!showSnapshotStatus || inferenceInstanceIds.length === 0) return;
+
+    const hasLoadingStates = Object.values(htmlLoadingStates).some(isLoading => isLoading);
+    const instancesToCheck = instances.filter(inst => inferenceInstanceIds.includes(inst.id));
+    const hasRequiredSnapshots = instancesToCheck.every(inst => 
+      inst.source?.type !== 'web' || 
+      !(inst.source as any)?.pageId || 
+      htmlContextRef.current?.[(inst.source as any)?.pageId]
+    );
+
+    if (hasLoadingStates) {
+      // New loading states detected, switch back to waiting
+      setIsWaitingForSnapshots(true);
+    } else if (hasRequiredSnapshots) {
+      // All snapshots ready, show ready state
+      setIsWaitingForSnapshots(false);
+    }
+  }, [htmlLoadingStates, showSnapshotStatus, inferenceInstanceIds, instances, htmlContextRef]);
   // Counters for different instance types
   const [textCount, setTextCount] = useState(0);
   const textCountRef = useRef(0);
@@ -1727,9 +1750,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   };
 
   const handleInfer = async (instanceIds: string[]) => {
-
     if(import.meta.env.WXT_USE_LLM == "true" && Object.values(htmlLoadingStates).some(isLoading => isLoading)) {
-      // Show snapshot status indicator
+      // Show snapshot status indicator and set the instance IDs for monitoring
+      setInferenceInstanceIds(instanceIds);
       setShowSnapshotStatus(true);
       setIsWaitingForSnapshots(true);
       
@@ -1737,16 +1760,18 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       const waitForSnapshots = () => {
         return new Promise<void>((resolve) => {
           let checkCount = 0;
-          const maxChecks = 20; // 10 seconds timeout (20 * 500ms) - shorter timeout since state updates aren't working properly
+          const maxChecks = 20; // 10 seconds timeout
           
           const checkSnapshots = () => {
             checkCount++;
             if (checkCount > maxChecks) {
               setIsWaitingForSnapshots(false);
               setShowSnapshotStatus(false);
+              setInferenceInstanceIds([]);
               resolve();
               return;
             }
+            
             const hasLoadingStates = Object.values(htmlLoadingStates).some(isLoading => isLoading);
             const instancesToCheck = instances.filter(inst => instanceIds.includes(inst.id));
             const hasRequiredSnapshots = instancesToCheck.every(inst => 
@@ -1755,13 +1780,12 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
               htmlContextRef.current?.[(inst.source as any)?.pageId]
             );
             
-            
-            // Prioritize htmlLoadingStates over hasRequiredSnapshots since sources may be populated lazily
             if (!hasLoadingStates && hasRequiredSnapshots) {
               // Show ready state briefly before hiding
               setIsWaitingForSnapshots(false);
               setTimeout(() => {
                 setShowSnapshotStatus(false);
+                setInferenceInstanceIds([]);
                 resolve();
               }, 1000); // Show "ready" state for 1 second
             } else {
