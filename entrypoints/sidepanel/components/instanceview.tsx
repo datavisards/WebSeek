@@ -15,6 +15,7 @@ import GhostInstance from './GhostInstance';
 import { createEmbeddedTextInstance, createEmbeddedImageInstance, createManualSource } from './instanceview-utils';
 import { useHTMLContent } from './useHTMLContent';
 import { useInputHandlers } from './useInputHandlers';
+import SnapshotStatusIndicator from './SnapshotStatusIndicator';
 import './instanceview.css';
 import { message } from 'vega-lite/types_unstable/log/index.js';
 import { chatWithAgent } from '../api-selector';
@@ -26,7 +27,7 @@ interface InstanceViewProps {
   instances: Instance[];
   setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
   logs: string[];
-  htmlContext: Record<string, {pageURL: string, htmlContent: string}>;
+  htmlContextRef: React.RefObject<Record<string, {pageURL: string, htmlContent: string}>>;
   messages: Message[];
   onOperation: (message: string, trigger?: boolean) => void;
   updateHTMLContext: React.Dispatch<React.SetStateAction<Record<string, {pageURL: string, htmlContent: string}>>>;
@@ -35,10 +36,13 @@ interface InstanceViewProps {
   currentSuggestion?: ProactiveSuggestion; // For ghost preview rendering
 }
 
-const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, onOperation, updateHTMLContext, addMessage, setAgentLoading, currentSuggestion }: InstanceViewProps) => {
+const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages, onOperation, updateHTMLContext, addMessage, setAgentLoading, currentSuggestion }: InstanceViewProps) => {
   // Custom hooks
-  const { fetchHTMLContent } = useHTMLContent(updateHTMLContext);
+  const { fetchHTMLContent, htmlLoadingStates } = useHTMLContent(updateHTMLContext);
   const instancesRef = useRef<Instance[]>([]);
+  // Snapshot status indicator state
+  const [showSnapshotStatus, setShowSnapshotStatus] = useState(false);
+  const [isWaitingForSnapshots, setIsWaitingForSnapshots] = useState(false);
   // Counters for different instance types
   const [textCount, setTextCount] = useState(0);
   const textCountRef = useRef(0);
@@ -442,8 +446,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     dragStartPos.current = null;
   };
 
-  const handleEmbeddedMouseUp = (event: React.MouseEvent<HTMLDivElement>) => {
-    console.log("handleEmbeddedMouseUp called", event);
+  const handleEmbeddedMouseUp = (_event: React.MouseEvent<HTMLDivElement>) => {
     setDraggingEmbeddedId(null);
     dragEmbeddedStart.current = null;
     setSketchResizingItemId(null);
@@ -465,7 +468,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
       const element = document.getElementById(`instance-${instance.id}`);
       return element && element.contains(event.target as Node);
     });
-    console.log("handleCanvasClick called", event, isOnInstance);
 
     if (!isOnInstance) {
       setIsResizing(false);
@@ -755,7 +757,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     let port = browser.runtime.connect({ name: 'side-panel' });
     bgPort.current = port;
     port.onMessage.addListener((msg) => {
-      console.log("UI received FROM BACKGROUND:", msg);
       // Handle HTML content via pageId - fetch asynchronously
       if (msg.pageURL && msg.pageId) {
         fetchHTMLContent(msg.pageId, msg.pageURL);
@@ -767,7 +768,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
       } else if (msg.action === 'snapshot_ready') {
         // Handle snapshot completion - this is when real pageId becomes available
         if (msg.pageId && msg.url) {
-          console.log('Snapshot ready, real pageId available:', msg.pageId);
           
           // Fetch HTML content for the pageId
           fetchHTMLContent(msg.pageId, msg.url);
@@ -775,7 +775,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
       } else if (msg.action === 'screenshot_finished') {
         handleScreenshotFinished(msg);
       } else if (msg.action === 'selection_canceled') {
-        console.log("Element selection canceled");
         setCaptureTarget(null);
         setIsCaptureEnabled(true);
       } else if (msg.action === 'exit_selection') {
@@ -790,7 +789,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   }, []);
 
   const handleElementSelected = (message: any) => {
-    console.log("Element selected:", message, captureTargetRef.current);
     // Check if this is a table cell capture
     if (captureTargetRef.current) {
       handleTableCellCapture(message);
@@ -853,7 +851,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     if (!captureTargetRef.current) return;
 
     const { tableId, row, col } = captureTargetRef.current;
-    console.log("Table ID:", tableId, "Row:", row, "Col:", col, "Instances:", instancesRef.current);
     const table = instancesRef.current.find(inst => inst.id === tableId && inst.type === 'table') as TableInstance | undefined;
 
     if (!table) {
@@ -997,7 +994,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   const handleCaptureStart = () => {
     // send message via the background port
     if (bgPort.current) {
-      console.log("Sending message to start element selection", bgPort.current);
       bgPort.current.postMessage({ action: 'start_element_selection' });
       setIsCaptureEnabled(false);
     }
@@ -1005,7 +1001,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
 
   const handleScreenshotStart = () => {
     if (bgPort.current) {
-      console.log("Sending message to start screenshot capture", bgPort.current);
       bgPort.current.postMessage({ action: 'start_screenshot_capture' });
       setIsCaptureEnabled(false);
     }
@@ -1014,7 +1009,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   // Add keyboard escape handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      console.log("Key pressed:", e.key);
       if (e.key === 'Escape') {
         if (!isCaptureEnabled || selectedInstanceIdRef.current || editingSketchId) {
           e.preventDefault();
@@ -1030,7 +1024,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         // Check if we're focused on an input field
         const focused = document.activeElement;
-        console.log(focused)
         const isInputFocused = focused && (
           focused.tagName === 'INPUT' ||
           focused.tagName === 'TEXTAREA' ||
@@ -1302,7 +1295,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   // Handle adding to table cell (for both click and drag-and-drop)
   const handleAddToTable = useCallback((instance: Instance, row: number, col: number) => {
     if (!editingTableId) return;
-    console.log("Adding to table cell", instance, row, col);
     onOperation(`Add ${instance.type} "${instance.id}" to table cell (${row + 1}, ${String.fromCharCode(65 + col)}) in table "${editingTableId}"`);
 
     let embedded: EmbeddedInstance | null = null;
@@ -1337,7 +1329,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
 
   // Remove content from table cell
   const removeCellContent = (row: number, col: number) => {
-    console.log(row, col, "Removing cell content");
     if (!editingTableId) return;
     onOperation(`Remove content from table cell (${row + 1}, ${String.fromCharCode(65 + col)}) in table "${editingTableId}"`);
     setInstances(prev => prev.map(inst => {
@@ -1352,19 +1343,15 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
 
   const saveTable = (tableId?: string, isDirty?: boolean) => {
     const targetTableId = tableId || editingTableId;
-    console.log(`[instanceview] saveTable called, targetTableId: ${targetTableId}, isDirty: ${isDirty}`);
     
     const table = instances.find(inst => inst.id === targetTableId && inst.type === 'table') as TableInstance | undefined;
-    console.log(`[instanceview] Found table:`, table ? `${table.id} (${table.rows}x${table.cols})` : 'NOT FOUND');
     
     if (!table) {
-      console.log(`[instanceview] No table found with ID ${targetTableId}, returning null`);
       return null;
     }
     
     if (isDirty === false) {
       // Table wasn't modified, remove it and return original ID (if exists) or null
-      console.log(`[instanceview] Table not dirty, removing table ${targetTableId}`);
       setInstances(prev => prev.filter(inst => inst.id !== targetTableId));
       
       // Close the editor
@@ -1375,7 +1362,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
       return originalInstanceId || null;
     } else {
       // Table was modified, keep it with current ID
-      console.log(`[instanceview] Table is dirty, keeping table with ID: ${table.id}`);
       
       // Log the operation
       let withstr = "";
@@ -1408,7 +1394,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
       setAvailableInstances([]);
       setOriginalInstanceId(null);
       
-      console.log(`[instanceview] saveTable returning tableId: ${table.id}`);
       return table.id;
     }
   };
@@ -1417,7 +1402,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
     if (!editingTableId) return;
     
     // Always remove the temporary table when canceling
-    console.log(`[instanceview] Cancelling table editor, removing temporary table "${editingTableId}"`);
     setInstances(prev => prev.filter(inst => inst.id !== editingTableId));
     
     if (originalInstanceId) {
@@ -1433,7 +1417,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
 
   // Close table editor without cancel logic (for successful saves)
   const closeTableEditor = () => {
-    console.log(`[instanceview] Closing table editor`);
     setEditingTableId(null);
     setAvailableInstances([]);
     setOriginalInstanceId(null);
@@ -1449,7 +1432,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
 
     // Start capture process
     if (bgPort.current) {
-      console.log("Sending message to start element selection for table cell", bgPort.current);
       bgPort.current.postMessage({
         action: 'start_element_selection'
       });
@@ -1694,7 +1676,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
 
   const handleInstanceContextMenu = (e: React.MouseEvent, instanceId: string) => {
     e.preventDefault();
-    console.log("Context menu triggered for instance ID:", instanceId);
     let instanceIds: string[] = [instanceId]; // Instances to handle in context menu
 
     // If we are in the select mode, use the selected instance IDs
@@ -1702,7 +1683,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
       instanceIds = selectedInstanceIds;
     }
 
-    console.log("Context menu instances:", instanceIds);
     if (!instanceIds || instanceIds.length === 0) {
       console.warn("No instances selected for context menu");
       return;
@@ -1747,7 +1727,53 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
   };
 
   const handleInfer = async (instanceIds: string[]) => {
-    console.log(`Analyzing instances ${instanceIds.join(', ')}`);
+
+    if(import.meta.env.WXT_USE_LLM == "true" && Object.values(htmlLoadingStates).some(isLoading => isLoading)) {
+      // Show snapshot status indicator
+      setShowSnapshotStatus(true);
+      setIsWaitingForSnapshots(true);
+      
+      // Wait for HTML context to be available
+      const waitForSnapshots = () => {
+        return new Promise<void>((resolve) => {
+          let checkCount = 0;
+          const maxChecks = 20; // 10 seconds timeout (20 * 500ms) - shorter timeout since state updates aren't working properly
+          
+          const checkSnapshots = () => {
+            checkCount++;
+            if (checkCount > maxChecks) {
+              setIsWaitingForSnapshots(false);
+              setShowSnapshotStatus(false);
+              resolve();
+              return;
+            }
+            const hasLoadingStates = Object.values(htmlLoadingStates).some(isLoading => isLoading);
+            const instancesToCheck = instances.filter(inst => instanceIds.includes(inst.id));
+            const hasRequiredSnapshots = instancesToCheck.every(inst => 
+              inst.source?.type !== 'web' || 
+              !(inst.source as any)?.pageId || 
+              htmlContextRef.current?.[(inst.source as any)?.pageId]
+            );
+            
+            
+            // Prioritize htmlLoadingStates over hasRequiredSnapshots since sources may be populated lazily
+            if (!hasLoadingStates && hasRequiredSnapshots) {
+              // Show ready state briefly before hiding
+              setIsWaitingForSnapshots(false);
+              setTimeout(() => {
+                setShowSnapshotStatus(false);
+                resolve();
+              }, 1000); // Show "ready" state for 1 second
+            } else {
+              setTimeout(checkSnapshots, 500); // Check every 500ms
+            }
+          };
+          checkSnapshots();
+        });
+      };
+      
+      await waitForSnapshots();
+    }
     
     // Stop proactive suggestions when user starts inference
     proactiveService.stopSuggestions();
@@ -1776,7 +1802,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
         // If using LLM, we need to generate the context first
         const { imageContext, textContext } = await generateInstanceContext(targetInstances);
         // let result = await parseLogWithAgent(logs, textContext, imageContext, htmlContext, instance.id);
-        let result = await chatWithAgent('infer', userMsg, messages, textContext, imageContext, htmlContext, logs);
+        let result = await chatWithAgent('infer', userMsg, messages, textContext, imageContext, htmlContextRef.current, logs);
         message = result.message;
         newInstances = result.instances || [];
       } else {
@@ -2152,7 +2178,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
         ...prev,
         newVisualizationInstance
       ]);
-      console.log(newVisualizationInstance);
       onOperation(`Created [${newId}](#instance-${newId}) as visualization`, false);
     }
     
@@ -2230,7 +2255,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
           <MultiTableEditor
             initialTableId={editingTableId}
             instances={instances}
-            htmlContext={htmlContext}
+            htmlContext={htmlContextRef.current}
             onSaveTable={(tableId: string, _tableName?: string, isDirty?: boolean) => saveTable(tableId, isDirty)}
             onCancel={cancelTableEdit}
             onClose={closeTableEditor}
@@ -2308,7 +2333,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
             <InstanceContextMenu
               contextMenu={contextMenu}
               instances={instances}
-              htmlContext={htmlContext}
+              htmlContext={htmlContextRef.current}
               closeContextMenu={closeContextMenu}
               handleRename={handleRename}
               handleInfer={handleInfer}
@@ -2634,6 +2659,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContext, messages, on
           onCancel={() => setRenamingInstance(null)}
         />
       )}
+      <SnapshotStatusIndicator
+        isVisible={showSnapshotStatus}
+        isWaiting={isWaitingForSnapshots}
+      />
     </>
   );
 };

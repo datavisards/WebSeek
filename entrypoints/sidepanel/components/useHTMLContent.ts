@@ -37,10 +37,8 @@ export const useHTMLContent = (updateHTMLContext: React.Dispatch<React.SetStateA
             htmlContent: cleanedHTML
           }
         }));
-        console.log("HTML fetched and cached for pageId:", pageId);
       } else if (response.status === 404 && retryCount < maxRetries) {
         // Snapshot not ready yet, retry after delay
-        console.log(`Snapshot not ready for pageId: ${pageId}, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries + 1})`);
         setTimeout(() => {
           fetchHTMLContent(pageId, pageURL, retryCount + 1);
         }, retryDelay);
@@ -50,7 +48,6 @@ export const useHTMLContent = (updateHTMLContext: React.Dispatch<React.SetStateA
       }
     } catch (error) {
       if (retryCount < maxRetries) {
-        console.log(`Error fetching snapshot for pageId: ${pageId}, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries + 1})`);
         setTimeout(() => {
           fetchHTMLContent(pageId, pageURL, retryCount + 1);
         }, retryDelay);
@@ -60,7 +57,8 @@ export const useHTMLContent = (updateHTMLContext: React.Dispatch<React.SetStateA
       }
     } finally {
       // Only set loading to false if we're not retrying
-      if (retryCount >= maxRetries || htmlCache.current[pageId]) {
+      const shouldClearLoading = retryCount >= maxRetries || htmlCache.current[pageId];
+      if (shouldClearLoading) {
         setHtmlLoadingStates(prev => ({ ...prev, [pageId]: false }));
       }
     }

@@ -101,7 +101,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
   });
 
   const [activeTabId, setActiveTabId] = useState<string | null>(initialTableId);
-  const [selectedCell, setSelectedCell] = useState<{ tableId: string; row: number; col: number } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{ tableId: string; row: number; col: number; originalRow?: number } | null>(null);
   const [selectedRange, setSelectedRange] = useState<{ tableId: string; startRow: number; endRow: number; startCol: number; endCol: number } | null>(null);
   const [copiedData, setCopiedData] = useState<CopiedData | null>(null);
   const [showJoinPanel, setShowJoinPanel] = useState(false);
@@ -614,7 +614,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
   }, [copiedData, activeTabId, onEditCellContent, onAddToTable, onRemoveCellContent, markTableDirty, onOperation]);
 
   // Cell selection handler
-  const handleCellSelectionChange = useCallback((cell: { row: number; col: number } | null) => {
+  const handleCellSelectionChange = useCallback((cell: { row: number; col: number; originalRow?: number } | null) => {
     if (cell && activeTabId) {
       setSelectedCell({ tableId: activeTabId, ...cell });
       // Clear range selection when individual cell is selected
@@ -933,8 +933,10 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
           {selectedCell && onCaptureToCell && (
             <button 
               onClick={() => {
-                console.log(`[MultiTableEditor] Capture to Cell clicked: tableId=${selectedCell.tableId}, row=${selectedCell.row}, col=${selectedCell.col}`);
-                onCaptureToCell?.(selectedCell.tableId, selectedCell.row, selectedCell.col);
+                // Use original row index if available for data operations
+                const rowToUse = selectedCell.originalRow ?? selectedCell.row;
+                console.log(`[MultiTableEditor] Capture to Cell clicked: tableId=${selectedCell.tableId}, row=${rowToUse}, col=${selectedCell.col}`);
+                onCaptureToCell?.(selectedCell.tableId, rowToUse, selectedCell.col);
                 console.log(`[MultiTableEditor] Marking table ${selectedCell.tableId} as dirty after capture`);
                 markTableDirty(selectedCell.tableId);
               }}
@@ -946,7 +948,9 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
           
           {selectedCell && (() => {
             const table = openTables.find(t => t.id === selectedCell.tableId)?.instance;
-            const cell = table?.cells[selectedCell.row]?.[selectedCell.col];
+            // Use original row index if available, otherwise fall back to display row index
+            const rowToUse = selectedCell.originalRow ?? selectedCell.row;
+            const cell = table?.cells[rowToUse]?.[selectedCell.col];
             const isWebSource = cell?.source?.type === 'web';
             
             if (isWebSource) {

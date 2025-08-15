@@ -12,7 +12,7 @@ interface TableGridProps {
   onEditCellContent: (row: number, col: number, newValue: string) => void;
   setDraggingInstanceId: React.Dispatch<React.SetStateAction<string | null>>;
   isReadOnly?: boolean;
-  onCellSelectionChange?: (selectedCell: { row: number, col: number } | null) => void;
+  onCellSelectionChange?: (selectedCell: { row: number, col: number, originalRow?: number } | null) => void;
   onAddRow?: (position: 'before' | 'after', rowIndex: number) => void;
   onRemoveRow?: (rowIndex: number) => void;
   onAddColumn?: (position: 'before' | 'after', colIndex: number) => void;
@@ -76,7 +76,7 @@ const TableGrid: React.FC<TableGridProps> = ({
   // Multi-selection states
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [selectedColumns, setSelectedColumns] = useState<Set<number>>(new Set());
-  const [selectedCell, setSelectedCell] = useState<{ row: number, col: number } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<{ row: number, col: number, originalRow?: number } | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean;
     type: 'row' | 'column';
@@ -850,8 +850,8 @@ const TableGrid: React.FC<TableGridProps> = ({
     }
   }, [contextMenu]);
 
-  const handleCellClick = (row: number, col: number) => {
-    setSelectedCell({ row, col });
+  const handleCellClick = (row: number, col: number, originalRow?: number) => {
+    setSelectedCell({ row, col, originalRow });
     setSelectedRows(new Set());
     setSelectedColumns(new Set());
     setEditingCell(null);
@@ -863,9 +863,9 @@ const TableGrid: React.FC<TableGridProps> = ({
     }
   };
 
-  const handleContentClick = (e: React.MouseEvent, row: number, col: number) => {
+  const handleContentClick = (e: React.MouseEvent, row: number, col: number, originalRow?: number) => {
     e.stopPropagation();
-    setSelectedCell({ row, col });
+    setSelectedCell({ row, col, originalRow });
     setSelectedRows(new Set());
     setSelectedColumns(new Set());
     // Don't enter edit mode on single click - only select the cell
@@ -999,7 +999,9 @@ const TableGrid: React.FC<TableGridProps> = ({
       }
 
       if (newRow !== selectedCell.row || newCol !== selectedCell.col) {
-        setSelectedCell({ row: newRow, col: newCol });
+        // Find the original row index for the new display row
+        const newOriginalRow = newRow < filteredAndSortedRows.length ? filteredAndSortedRows[newRow].originalIndex : newRow;
+        setSelectedCell({ row: newRow, col: newCol, originalRow: newOriginalRow });
         setSelectedRows(new Set());
         setSelectedColumns(new Set());
         setEditingCell(null);
@@ -1535,7 +1537,7 @@ const TableGrid: React.FC<TableGridProps> = ({
                 setDraggingInstanceId(null);
                 setHoveredCell(null);
               }}
-              onClick={isReadOnly || isEditing ? undefined : () => handleCellClick(displayRowIndex, colIndex)}
+              onClick={isReadOnly || isEditing ? undefined : () => handleCellClick(displayRowIndex, colIndex, originalRowIndex)}
               onMouseDown={isReadOnly || isEditing ? undefined : (e) => handleCellMouseDown(e, originalRowIndex, colIndex)}
               onMouseEnter={() => handleCellMouseEnter(originalRowIndex, colIndex)}
               onDoubleClick={isReadOnly || isEditing ? undefined : () => {
@@ -1589,7 +1591,7 @@ const TableGrid: React.FC<TableGridProps> = ({
                     height: '100%',
                     userSelect: isReadOnly ? 'none' : undefined
                   }}
-                  onClick={isReadOnly ? undefined : (e) => handleContentClick(e, displayRowIndex, colIndex)}
+                  onClick={isReadOnly ? undefined : (e) => handleContentClick(e, displayRowIndex, colIndex, originalRowIndex)}
                 >
                   {cell ? renderEmbeddedContent(cell, evaluateFormula) : null}
                   {!isReadOnly && !isEditing && (

@@ -163,7 +163,7 @@ const SidePanel = () => {
         instances={instances} 
         setInstances={setInstances} 
         logs={logs} 
-        htmlContext={htmlContext} 
+        htmlContextRef={htmlContextRef} 
         messages={messages} 
         onOperation={addLog} 
         updateHTMLContext={setHtmlContexts} 
