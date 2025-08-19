@@ -199,6 +199,40 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     captureTargetRef.current = captureTarget;
   }, [textCount, imageCount, sketchCount, tableCount, instances, selectedInstanceId, deletedInstances, captureTarget]);
 
+  // Add non-passive wheel event listener for zoom functionality
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const containerRect = container.getBoundingClientRect();
+      const mouseX = e.clientX - containerRect.left;
+      const mouseY = e.clientY - containerRect.top;
+
+      const canvasX = (mouseX - pan.x) / zoom;
+      const canvasY = (mouseY - pan.y) / zoom;
+
+      const zoomFactor = 1.1;
+      const newZoom = e.deltaY < 0
+        ? Math.min(5, zoom * zoomFactor)
+        : Math.max(0.2, zoom / zoomFactor);
+
+      const newPanX = mouseX - canvasX * newZoom;
+      const newPanY = mouseY - canvasY * newZoom;
+
+      setZoom(newZoom);
+      setPan({ x: newPanX, y: newPanY });
+    };
+
+    // Add event listener with passive: false to allow preventDefault
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [pan.x, pan.y, zoom, setZoom, setPan]);
+
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = (screenX: number, screenY: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -1394,7 +1428,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           return embedded.map(cell => {
             if (!cell) return '';
             if (cell.type === 'text') {
-              return `[${cell.content}](#instance-${cell.originalId || cell.id})`;
+              return `[${cell.content || ''}](#instance-${cell.originalId || cell.id})`;
             } else if (cell.type === 'image') {
               return `[${cell.originalId || cell.id}](#instance-${cell.originalId || cell.id})`;
             } else if (cell.type === 'sketch') {
@@ -1624,7 +1658,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
             const newRow = [...row];
             const cell = newRow[colIndex];
             
-            if (cell && cell.type === 'text') {
+            if (cell && cell.type === 'text' && cell.content) {
               const extractedValue = extractNumericalValue(cell.content);
               newRow[colIndex] = {
                 ...cell,
@@ -1678,7 +1712,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         // Extract text content from cells in the row
         const newColumnNames = rowToLift.map(cell => {
           if (cell && cell.type === 'text') {
-            return cell.content;
+            return cell.content || '';
           }
           return '';
         });
@@ -2387,26 +2421,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
-              onWheel={(e) => {
-                e.preventDefault();
-                const containerRect = e.currentTarget.getBoundingClientRect();
-                const mouseX = e.clientX - containerRect.left;
-                const mouseY = e.clientY - containerRect.top;
-
-                const canvasX = (mouseX - pan.x) / zoom;
-                const canvasY = (mouseY - pan.y) / zoom;
-
-                const zoomFactor = 1.1;
-                const newZoom = e.deltaY < 0
-                  ? Math.min(5, zoom * zoomFactor)
-                  : Math.max(0.2, zoom / zoomFactor);
-
-                const newPanX = mouseX - canvasX * newZoom;
-                const newPanY = mouseY - canvasY * newZoom;
-
-                setZoom(newZoom);
-                setPan({ x: newPanX, y: newPanY });
-              }}
               ref={containerRef}
             >
               <div
@@ -2583,6 +2597,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                                     }}
                                   >
                                     {(() => {
+                                      // Handle null content
+                                      if (!cell.content) return '';
+                                      
                                       // For formulas, show calculated result in thumbnail
                                       const content = cell.content.startsWith('=') 
                                         ? evaluateFormulaInTable(cell.content, instance)

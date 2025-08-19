@@ -213,7 +213,7 @@ const TableGrid: React.FC<TableGridProps> = ({
     columnFilters.forEach((filter, colIndex) => {
       filteredRows = filteredRows.filter(({ row }) => {
         const cell = row[colIndex];
-        const cellValue = cell && cell.type === 'text' ? cell.content.trim() : '';
+        const cellValue = cell && cell.type === 'text' && cell.content ? cell.content.trim() : '';
         
         if (filter.type === 'categorical' && filter.values && filter.values.size > 0) {
           // For categorical filters, check if the cell value is in the selected values
@@ -264,7 +264,7 @@ const TableGrid: React.FC<TableGridProps> = ({
       let valB = '';
       
       if (cellA && cellA.type === 'text') {
-        const content = cellA.content.trim();
+        const content = cellA.content ? cellA.content.trim() : '';
         if (content.startsWith('=')) {
           const calculated = evaluateFormula(content);
           // If formula evaluation fails, use the formula text for sorting
@@ -275,7 +275,7 @@ const TableGrid: React.FC<TableGridProps> = ({
       }
       
       if (cellB && cellB.type === 'text') {
-        const content = cellB.content.trim();
+        const content = cellB.content ? cellB.content.trim() : '';
         if (content.startsWith('=')) {
           const calculated = evaluateFormula(content);
           // If formula evaluation fails, use the formula text for sorting
@@ -398,7 +398,7 @@ const TableGrid: React.FC<TableGridProps> = ({
     const cell = table.cells[row]?.[col];
     if (!cell || cell.type !== 'text') return 0;
     const textCell = cell as EmbeddedTextInstance;
-    const content = textCell.content.trim();
+    const content = textCell.content ? textCell.content.trim() : '';
     
     // Skip formulas to avoid infinite recursion
     if (content.startsWith('=')) return 0;
@@ -513,7 +513,7 @@ const TableGrid: React.FC<TableGridProps> = ({
               const cell = table.cells[row]?.[col];
               // Only count cells that actually have content (non-empty text cells)
               if (cell?.type === 'text') {
-                const content = (cell as EmbeddedTextInstance).content.trim();
+                const content = (cell as EmbeddedTextInstance).content ? (cell as EmbeddedTextInstance).content.trim() : '';
                 // Skip formulas to avoid circular dependencies and only count non-empty content
                 if (!content.startsWith('=') && content !== '') {
                   const value = parseFloat(content);
@@ -537,7 +537,7 @@ const TableGrid: React.FC<TableGridProps> = ({
             const cell = table.cells[r]?.[ref.col];
             // Only count cells that actually have content (non-empty text cells)
             if (cell?.type === 'text') {
-              const content = (cell as EmbeddedTextInstance).content.trim();
+              const content = (cell as EmbeddedTextInstance).content ? (cell as EmbeddedTextInstance).content.trim() : '';
               // Skip formulas to avoid circular dependencies and only count non-empty content
               if (!content.startsWith('=') && content !== '') {
                 const value = parseFloat(content);
@@ -723,7 +723,7 @@ const TableGrid: React.FC<TableGridProps> = ({
     for (let row = 1; row < table.rows; row++) { // Start from row 1 to have examples
       for (let col = 0; col < table.cols; col++) {
         const cell = table.cells[row]?.[col];
-        if (!cell || cell.type !== 'text' || (cell as EmbeddedTextInstance).content.trim() !== '') {
+        if (!cell || cell.type !== 'text' || ((cell as EmbeddedTextInstance).content && (cell as EmbeddedTextInstance).content.trim() !== '')) {
           continue; // Skip non-empty cells
         }
         
@@ -1447,7 +1447,7 @@ const TableGrid: React.FC<TableGridProps> = ({
             columnType={table.columnTypes?.[openFilterDropdown] || 'categorical'}
             data={table.cells.map(row => {
               const cell = row[openFilterDropdown];
-              return cell && cell.type === 'text' ? cell.content.trim() : '';
+              return cell && cell.type === 'text' && cell.content ? cell.content.trim() : '';
             })}
             currentFilter={columnFilters.get(openFilterDropdown)}
             onFilterChange={(filter) => {
@@ -1807,6 +1807,10 @@ function renderEmbeddedContent(embedded: EmbeddedInstance, evaluateFormula?: (fo
   switch (embedded.type) {
     case 'text':
       const textContent = embedded.content;
+      // Handle null content safely
+      if (!textContent) {
+        return <span style={{ color: '#999', fontStyle: 'italic' }}></span>;
+      }
       const isFormulaCell = textContent.startsWith('=');
       const displayContent = (isFormulaCell && evaluateFormula) 
         ? evaluateFormula(textContent) 

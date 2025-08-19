@@ -194,7 +194,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
               // Collect all text values from left column
               for (let row = 0; row < leftTable.rows; row++) {
                 const cell = leftTable.cells[row]?.[leftCol];
-                if (cell && cell.type === 'text' && cell.content.trim()) {
+                if (cell && cell.type === 'text' && cell.content && cell.content.trim()) {
                   leftValues.add(cell.content.trim().toLowerCase());
                 }
               }
@@ -202,7 +202,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
               // Collect all text values from right column  
               for (let row = 0; row < rightTable.rows; row++) {
                 const cell = rightTable.cells[row]?.[rightCol];
-                if (cell && cell.type === 'text' && cell.content.trim()) {
+                if (cell && cell.type === 'text' && cell.content && cell.content.trim()) {
                   rightValues.add(cell.content.trim().toLowerCase());
                 }
               }
