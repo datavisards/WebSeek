@@ -7,6 +7,8 @@
 
 import { MACRO_TOOLS, validateToolCall } from './macro-tools';
 import { executeMacroTool } from './macro-tool-executor';
+import { Instance } from './types';
+import { normalizeTableInstance } from './utils';
 
 // Example tool calls for testing with real WebSeek functionality
 const exampleToolCalls = [
@@ -172,9 +174,46 @@ export function testToolValidation() {
 export async function testToolExecution() {
   console.log('=== Tool Execution Tests ===');
   
+  // Create mock instances for testing
+  const mockInstances: Instance[] = [
+    normalizeTableInstance({
+      id: 'Table1',
+      type: 'table',
+      source: { type: 'manual' },
+      rows: 3,
+      cols: 3,
+      cells: [
+        [
+          { type: 'text', content: 'Alice', id: 'cell1', source: { type: 'manual' } },
+          { type: 'text', content: '25', id: 'cell2', source: { type: 'manual' } },
+          { type: 'text', content: 'Engineer', id: 'cell3', source: { type: 'manual' } }
+        ],
+        [
+          { type: 'text', content: 'Bob', id: 'cell4', source: { type: 'manual' } },
+          { type: 'text', content: '30', id: 'cell5', source: { type: 'manual' } },
+          { type: 'text', content: 'Designer', id: 'cell6', source: { type: 'manual' } }
+        ],
+        [
+          { type: 'text', content: 'Carol', id: 'cell7', source: { type: 'manual' } },
+          { type: 'text', content: '28', id: 'cell8', source: { type: 'manual' } },
+          { type: 'text', content: 'Manager', id: 'cell9', source: { type: 'manual' } }
+        ]
+      ],
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300
+    })
+  ];
+  
+  // Mock update function for testing
+  const mockUpdateInstances = (newInstances: Instance[]) => {
+    console.log('Mock update instances called with:', newInstances.length, 'instances');
+  };
+  
   for (const toolCall of exampleToolCalls) {
     try {
-      const result = await executeMacroTool(toolCall);
+      const result = await executeMacroTool(toolCall, mockInstances, mockUpdateInstances);
       console.log(`Executed ${toolCall.function}:`, {
         success: result.success,
         message: result.message,

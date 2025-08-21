@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import { ProactiveSuggestion, InstanceEvent } from '../types';
 import { proactiveService } from '../proactive-service-enhanced';
+import { normalizeTableInstance } from '../utils';
 
 const SuggestionTester: React.FC = () => {
   const [testResults, setTestResults] = useState<string[]>([]);
@@ -17,7 +18,7 @@ const SuggestionTester: React.FC = () => {
     const testInstanceEvent: InstanceEvent = {
       action: 'update',
       targetId: 'test-table-1',
-      instance: {
+      instance: normalizeTableInstance({
         id: 'test-table-1',
         type: 'table',
         rows: 2,
@@ -33,7 +34,7 @@ const SuggestionTester: React.FC = () => {
           ]
         ],
         source: { type: 'manual' }
-      }
+      })
     };
 
     return {

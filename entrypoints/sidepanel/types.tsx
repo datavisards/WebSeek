@@ -135,8 +135,8 @@ export interface TableInstance extends BaseInstance {
   rows: number;
   cols: number;
   cells: Array<Array<EmbeddedInstance | null>>;
-  columnTypes?: ColumnType[];
-  columnNames?: string[]; // Custom column names, defaults to A, B, C...
+  columnTypes: ColumnType[]; // Required: column types for each column
+  columnNames: string[]; // Required: column names for each column
   x?: number;
   y?: number;
   width?: number;

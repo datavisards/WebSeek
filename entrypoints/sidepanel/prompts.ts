@@ -70,7 +70,7 @@ The type of "instances" is InstanceEvent[], which is defined as follows:
           | { type: 'instance', id: string, instance: EmbeddedInstance, x: number, y: number, width: number, height: number };
         
         export interface SketchInstance extends BaseInstance { type: 'sketch'; content: SketchItem[]; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
-        export interface TableInstance extends BaseInstance { type: 'table'; rows: number; cols: number; cells: Array<Array<EmbeddedInstance | null>>; columnTypes?: ('numeral' | 'categorical')[]; x?: number; y?: number; width?: number; height?: number; }
+        export interface TableInstance extends BaseInstance { type: 'table'; rows: number; cols: number; cells: Array<Array<EmbeddedInstance | null>>; columnNames: string[]; columnTypes: ('numeral' | 'categorical')[]; x?: number; y?: number; width?: number; height?: number; }
         export interface VisualizationInstance extends BaseInstance { type: 'visualization'; spec: object; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
 
         /** The main union type for all standalone instances. */
@@ -266,7 +266,7 @@ export type Locator = string; // Stable ID (AID)
           | { type: 'instance', id: string, instance: EmbeddedInstance, x: number, y: number, width: number, height: number };
         
         export interface SketchInstance extends BaseInstance { type: 'sketch'; content: SketchItem[]; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
-        export interface TableInstance extends BaseInstance { type: 'table'; rows: number; cols: number; cells: Array<Array<EmbeddedInstance | null>>; columnTypes?: ('numeral' | 'categorical')[]; x?: number; y?: number; width?: number; height?: number; }
+        export interface TableInstance extends BaseInstance { type: 'table'; rows: number; cols: number; cells: Array<Array<EmbeddedInstance | null>>; columnNames: string[]; columnTypes: ('numeral' | 'categorical')[]; x?: number; y?: number; width?: number; height?: number; }
         export interface VisualizationInstance extends BaseInstance { type: 'visualization'; spec: object; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
 
         /** The main union type for all standalone instances. */
@@ -383,7 +383,7 @@ The type of "instances" in suggestions is InstanceEvent[], defined as:
         // Instance types (all extend BaseInstance):
         TextInstance: { type: 'text'; content: string; x?: number; y?: number; width?: number; height?: number; }
         ImageInstance: { type: 'image'; src: string; x?: number; y?: number; width?: number; height?: number; }
-        TableInstance: { type: 'table'; rows: number; cols: number; cells: Array<Array<EmbeddedInstance | null>>; columnTypes?: ('numeral' | 'categorical')[]; x?: number; y?: number; width?: number; height?: number; }
+        TableInstance: { type: 'table'; rows: number; cols: number; cells: Array<Array<EmbeddedInstance | null>>; columnNames: string[]; columnTypes: ('numeral' | 'categorical')[]; x?: number; y?: number; width?: number; height?: number; }
         SketchInstance: { type: 'sketch'; content: SketchItem[]; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
         VisualizationInstance: { type: 'visualization'; spec: object; thumbnail?: string; x?: number; y?: number; width?: number; height?: number; }
 

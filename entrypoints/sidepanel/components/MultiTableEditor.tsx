@@ -2,7 +2,8 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { browser } from 'wxt/browser';
 import TableGrid from './tablegrid';
-import { TableInstance, Instance, ProactiveSuggestion } from '../types';
+import { TableInstance, Instance, ProactiveSuggestion, ColumnType } from '../types';
+import { indexToLetters, normalizeTableInstance } from '../utils';
 import './MultiTableEditor.css';
 
 // Types for multi-table operations
@@ -32,8 +33,8 @@ interface CopiedData {
   sourceTableId: string;
   sourceRange: { startRow: number; endRow: number; startCol: number; endCol: number };
   tableMetadata?: { // For whole table copies
-    columnNames?: string[];
-    columnTypes?: ('numeral' | 'categorical')[];
+    columnNames: string[]; // Required
+    columnTypes: ('numeral' | 'categorical')[]; // Required
     rows: number;
     cols: number;
   };
@@ -104,9 +105,12 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     
     if (!initialTable) return [];
     
+    // Normalize the table to ensure it has required columnNames and columnTypes
+    const normalizedTable = normalizeTableInstance(initialTable) as TableInstance;
+    
     return [{
       id: initialTableId,
-      instance: initialTable,
+      instance: normalizedTable,
       isDirty: false,
       originalName: initialTableId.slice(0, 8)
     }];
@@ -255,7 +259,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     
     const newOpenTable: OpenTable = {
       id: tableId,
-      instance: table,
+      instance: normalizeTableInstance(table),
       isDirty: false,
       originalName: tableId.slice(0, 8)
     };
@@ -616,7 +620,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
         // Add new table to open tables
         const newOpenTable: OpenTable = {
           id: newTableId,
-          instance: newTable,
+          instance: normalizeTableInstance(newTable),
           isDirty: true,
           isNew: true,
           originalName: `Copy of ${openTables.find(t => t.id === copiedData.sourceTableId)?.originalName || 'Table'}`
@@ -654,6 +658,8 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
               rows: dataToPaste.length,
               cols: Math.max(...dataToPaste.map(row => row.length)),
               cells: dataToPaste,
+              columnNames: Array.from({ length: Math.max(...dataToPaste.map(row => row.length)) }, (_, i) => indexToLetters(i)),
+              columnTypes: Array.from({ length: Math.max(...dataToPaste.map(row => row.length)) }, () => 'categorical' as ColumnType),
               x: 50,
               y: 50,
               width: 400,
@@ -662,7 +668,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
             
             const newOpenTable: OpenTable = {
               id: newTableId,
-              instance: newTable,
+              instance: normalizeTableInstance(newTable),
               isDirty: true,
               isNew: true,
               originalName: `Pasted Data`
@@ -1200,7 +1206,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     // Add joined table to open tables
     const newOpenTable: OpenTable = {
       id: joinedTableId,
-      instance: joinedTable,
+      instance: normalizeTableInstance(joinedTable),
       isDirty: true,
       isNew: true,
       originalName: `${openTables.find(t => t.id === suggestion.leftTableId)?.originalName || 'Left'} ${suggestion.joinType.toUpperCase()} ${openTables.find(t => t.id === suggestion.rightTableId)?.originalName || 'Right'}`

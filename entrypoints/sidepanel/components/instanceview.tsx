@@ -1,7 +1,7 @@
 import { browser, type Browser } from 'wxt/browser';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Instance, EmbeddedInstance, SketchItem, TextInstance, SketchInstance, TableInstance, Message } from '../types';
-import { getInstanceGeometry, generateInstanceContext, generateId, generateTypedId, generateEditingId, createSketchThumbnail, updateInstances, evaluateFormulaInTable } from '../utils';
+import { getInstanceGeometry, generateInstanceContext, generateId, generateTypedId, generateEditingId, createSketchThumbnail, updateInstances, evaluateFormulaInTable, normalizeTableInstance } from '../utils';
 import TextEditor from './texteditor';
 import SketchEditor from './sketcheditor';
 import TrashView from './trashview';
@@ -624,7 +624,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     } else if (instance.type === 'table') {
       // Create a full TableInstance with rows, cols, and cells
       const tableInstance = instance as TableInstance;
-      embedded = {
+      embedded = normalizeTableInstance({
         type: 'table',
         id: generateId(),
         source: createManualSource(),
@@ -636,7 +636,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         y: 50,
         width: getInstanceGeometry(instance).width,
         height: getInstanceGeometry(instance).height
-      };
+      });
     }
 
     if (embedded) {
@@ -1371,7 +1371,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
 
     const newId = `Table${tableCount + 1}`;
     setTableCount(prev => prev + 1);
-    const newTable: Instance = {
+    const newTable: Instance = normalizeTableInstance({
       id: newId,
       type: 'table',
       source: createManualSource(),
@@ -1382,7 +1382,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       y: 0,
       width: 400,
       height: 300
-    };
+    });
 
     setEditingTableId(newId);
     setInstances(prev => [...prev, newTable]);
@@ -2183,7 +2183,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       }
       return [embedded];
     });
-    const newTable: Instance = {
+    const newTable: Instance = normalizeTableInstance({
       id: newId,
       type: 'table',
       source: createManualSource(),
@@ -2194,7 +2194,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       y: 0,
       width: 400,
       height: 50 + 60 * rows
-    };
+    });
     setInstances(prev => [...prev, newTable]);
     onOperation(`Created [${newId}](#instance-${newId}) as table from batch selection: ${selected.map(inst => `[${inst.id}](#instance-${inst.id})`).join(', ')}`);
     setSelectedInstanceIds([]);

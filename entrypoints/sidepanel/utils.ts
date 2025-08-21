@@ -321,6 +321,28 @@ export const indexToLetters = (index: number): string => {
 };
 
 /**
+ * Normalizes a table instance to ensure it has required columnNames and columnTypes
+ * This is needed for backward compatibility with existing table instances
+ */
+export const normalizeTableInstance = (table: any): any => {
+    if (table.type !== 'table') return table;
+    
+    const normalizedTable = { ...table };
+    
+    // Ensure columnNames exist
+    if (!normalizedTable.columnNames || normalizedTable.columnNames.length !== normalizedTable.cols) {
+        normalizedTable.columnNames = Array.from({ length: normalizedTable.cols }, (_, i) => indexToLetters(i));
+    }
+    
+    // Ensure columnTypes exist
+    if (!normalizedTable.columnTypes || normalizedTable.columnTypes.length !== normalizedTable.cols) {
+        normalizedTable.columnTypes = Array.from({ length: normalizedTable.cols }, () => 'categorical' as const);
+    }
+    
+    return normalizedTable;
+};
+
+/**
  * Injects stable IDs into all elements in a document for reliable element tracking.
  * Uses deterministic ID generation based on element structure for consistency across reloads.
  * This creates a bridge between original DOM and cleaned DOM.
@@ -791,7 +813,7 @@ async function parseTableInstance(input: any): Promise<TableInstance | EmbeddedT
         originalId: input.originalId,
     };
 
-    return table;
+    return normalizeTableInstance(table);
 }
 
 async function parseVisualizationInstance(input: any): Promise<VisualizationInstance> {
@@ -1515,4 +1537,4 @@ export const evaluateFormulaInTable = (formula: string, table: any): string => {
   }
 };
 
-export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, cleanHTML, generateInstanceContext, generateId, parseInstance, mapToObject, updateInstances, areInstancesContentEqual, evaluateFormulaInTable };
+export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, normalizeTableInstance, cleanHTML, generateInstanceContext, generateId, parseInstance, mapToObject, updateInstances, areInstancesContentEqual, evaluateFormulaInTable };
