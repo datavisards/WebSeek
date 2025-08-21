@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Message, Instance, ChatType } from '../types';
 import { chatWithAgent } from '../api-selector';
 import { generateInstanceContext, detectMarkdown, renderMarkdown, generateId, updateInstances } from '../utils';
-import { contextService } from '../context-service';
 import { proactiveService } from '../proactive-service-enhanced';
 import './chattab.css';
 
@@ -176,7 +175,6 @@ const ChatTab: React.FC<ChatTabProps> = ({
         
         if (import.meta.env.WXT_USE_LLM == "true") {
             const { imageContext, textContext } = await generateInstanceContext(currentInstances);
-            const logs = contextService.getLogs();
             let result = await chatWithAgent(chatType, userMessage,
                 conversationHistory,
                 textContext,

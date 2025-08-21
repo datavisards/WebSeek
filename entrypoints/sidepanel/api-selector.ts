@@ -12,11 +12,11 @@ export const chatWithAgent = async (
     htmlContext?: Record<string, {pageURL: string, htmlContent: string}>,
     logs?: string[],
 ) => {
-    if (USE_LLM) {
-        const apiModule = await import('./apis_old');
-        return apiModule.chatWithAgent(chatType, userMessage, conversationHistory, instanceContext, imageContext, htmlContext, logs);
-    } else {
+    // if (USE_LLM) {
         const apiModule = await import('./apis');
-        return apiModule.chatWithAgent(chatType, userMessage);
-    }
+        return apiModule.chatWithAgent(chatType, userMessage, conversationHistory, instanceContext, imageContext, htmlContext, logs);
+    // } else {
+    //     const apiModule = await import('./apis');
+    //     return apiModule.chatWithAgent(chatType, userMessage);
+    // }
 };

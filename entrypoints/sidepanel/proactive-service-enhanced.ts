@@ -1,6 +1,5 @@
 import { Instance, Message, ProactiveSuggestion } from './types';
-import { contextService } from './context-service';
-import { chatWithAgent } from './apis_old';
+import { chatWithAgent } from './apis';
 import { generateInstanceContext } from './utils';
 import { triggerEngine } from './trigger-engine';
 import { suggestionUIController } from './suggestion-ui-controller';
@@ -412,9 +411,9 @@ class EnhancedProactiveService {
       // First, check if any trigger rules are activated
       const workspaceName = localStorage.getItem('webseek_workspace_name') || 'this project';
       const context = {
-        instances: this.currentContext.instances || contextService.getInstances(),
-        messages: this.currentContext.messages || contextService.getMessages(),
-        htmlContexts: this.currentContext.htmlContexts || contextService.getHtmlContexts(),
+        instances: this.currentContext.instances || [],
+        messages: this.currentContext.messages || [],
+        htmlContexts: this.currentContext.htmlContexts || {},
         logs: logs,
         workspaceName: workspaceName
       };
@@ -1296,9 +1295,9 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
 
     try {
       // Use provided context or get current context
-      const currentInstances = this.currentContext.instances || contextService.getInstances();
-      const currentMessages = this.currentContext.messages || contextService.getMessages();
-      const currentHtmlContexts = this.currentContext.htmlContexts || contextService.getHtmlContexts();
+      const currentInstances = this.currentContext.instances || [];
+      const currentMessages = this.currentContext.messages || [];
+      const currentHtmlContexts = this.currentContext.htmlContexts || {};
 
       // Check if we have enough context to make suggestions
       // For context-independent suggestions, we don't need HTML context
@@ -1540,7 +1539,7 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
 
       // Record for undo if needed
       if (suggestion.undoable) {
-        const previousState = contextService.getInstances();
+        const previousState = this.currentContext.instances || [];
         
         // Apply the suggestion operations
         if (suggestion.instances && suggestion.instances.length > 0) {
@@ -1555,7 +1554,7 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
           }
           
           // Record for undo
-          const currentState = contextService.getInstances();
+          const currentState = this.currentContext.instances || [];
           suggestionUndoManager.recordSuggestionApplication(
             suggestion,
             suggestion.instances,
@@ -1743,26 +1742,8 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
   private async handleInstanceOperations(operations: any[]) {
     console.log('[EnhancedProactiveService] Applying instance operations:', operations);
     
-    // Apply operations to the context service
-    for (const operation of operations) {
-      switch (operation.action) {
-        case 'add':
-          if (operation.instance) {
-            contextService.addInstance(operation.instance);
-          }
-          break;
-        case 'remove':
-          if (operation.targetId) {
-            contextService.removeInstance(operation.targetId);
-          }
-          break;
-        case 'update':
-          if (operation.targetId && operation.instance) {
-            contextService.updateInstance(operation.targetId, operation.instance);
-          }
-          break;
-      }
-    }
+    // Operations are now handled directly by the sidepanel through updateContext()
+    // No need to apply operations to a separate context service
   }
 
   // Legacy compatibility methods

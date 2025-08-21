@@ -13,8 +13,8 @@ interface MacroSuggestionPanelProps {
   suggestions: ProactiveSuggestion[];
   onAccept: (suggestionId: string) => void;
   onDismiss: (suggestionId: string) => void;
-  onExecuteTool: (toolCall: { function: string; parameters: any }) => void;
-  onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }) => void;
+  onExecuteTool: (toolCall: { function: string; parameters: any }, suggestionId: string) => void;
+  onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => void;
   className?: string;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -70,10 +70,10 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
     
     if (suggestion.toolSequence && onExecuteToolSequence) {
       console.log('[MacroSuggestionPanel] Executing tool sequence:', suggestion.toolSequence);
-      onExecuteToolSequence(suggestion.toolSequence);
+      onExecuteToolSequence(suggestion.toolSequence, suggestion.id);
     } else if (suggestion.toolCall) {
       console.log('[MacroSuggestionPanel] Executing single tool call:', suggestion.toolCall);
-      onExecuteTool(suggestion.toolCall);
+      onExecuteTool(suggestion.toolCall, suggestion.id);
     } else {
       console.log('[MacroSuggestionPanel] No tool call or sequence found, accepting suggestion:', suggestion.id);
       onAccept(suggestion.id);

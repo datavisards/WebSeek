@@ -310,22 +310,30 @@ const SidePanel = () => {
   }, []);
 
   // Tool execution handler for macro suggestions
-  const handleExecuteTool = useCallback(async (toolCall: { function: string; parameters: any }) => {
-    console.log('[SidePanel] Executing tool:', toolCall);
+  const handleExecuteTool = useCallback(async (toolCall: { function: string; parameters: any }, suggestionId: string) => {
+    console.log('[SidePanel] Executing tool:', toolCall, 'for suggestion:', suggestionId);
     
     try {
       const result = await executeMacroTool(toolCall, instances, setInstances);
       console.log('[SidePanel] Tool execution result:', result);
       
       if (result.success) {
-        // Show success message or handle the result as needed
+        // Remove the applied suggestion first
+        proactiveService.dismissSuggestion(suggestionId);
+        
+        // Small delay to ensure suggestion dismissal is processed before log triggers new generation
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        // Add log for the successful execution
         addLog(`Tool executed successfully: ${result.message}`, {
           type: 'tool-executed',
           context: { toolCall, result },
           metadata: { toolFunction: toolCall.function }
         });
+        
+        console.log('[SidePanel] Successfully executed tool and removed suggestion:', suggestionId);
       } else {
-        // Show error message
+        // Show error message but don't remove suggestion
         addLog(`Tool execution failed: ${result.message}`, {
           type: 'tool-execution-error',
           context: { toolCall, result },
@@ -342,8 +350,8 @@ const SidePanel = () => {
     }
   }, [addLog, instances]);
 
-  const handleExecuteToolSequence = useCallback(async (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }) => {
-    console.log('[SidePanel] Executing tool sequence:', toolSequence);
+  const handleExecuteToolSequence = useCallback(async (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => {
+    console.log('[SidePanel] Executing tool sequence:', toolSequence, 'for suggestion:', suggestionId);
     
     try {
       const { executeCompositeSuggestion } = await import('./macro-tool-executor');
@@ -351,12 +359,22 @@ const SidePanel = () => {
       console.log('[SidePanel] Tool sequence execution result:', result);
       
       if (result.success) {
+        // Remove the applied suggestion first
+        proactiveService.dismissSuggestion(suggestionId);
+        
+        // Small delay to ensure suggestion dismissal is processed before log triggers new generation
+        await new Promise(resolve => setTimeout(resolve, 50));
+        
+        // Add log for the successful execution
         addLog(`Tool sequence executed successfully: ${result.message}`, {
           type: 'tool-sequence-executed',
           context: { toolSequence, result },
           metadata: { goal: toolSequence.goal }
         });
+        
+        console.log('[SidePanel] Successfully executed tool sequence and removed suggestion:', suggestionId);
       } else {
+        // Show error message but don't remove suggestion
         addLog(`Tool sequence execution failed: ${result.message}`, {
           type: 'tool-sequence-execution-error',
           context: { toolSequence, result },

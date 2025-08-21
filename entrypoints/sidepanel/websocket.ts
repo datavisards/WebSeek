@@ -1,5 +1,4 @@
 import { Instance, Message } from './types';
-import { contextService } from './context-service';
 
 // WebSocket connection state
 let ws: WebSocket | null = null;
@@ -258,19 +257,27 @@ class WebSocketService {
 
   // Context API methods
   private async getHtmlContent(url?: string): Promise<any> {
-    return await contextService.getHtmlContent(url);
+    // TODO: Implement direct HTML content retrieval
+    // This would need to interface with the content script or background script
+    return { success: false, error: 'HTML content retrieval not implemented' };
   }
 
   private async getMetadata(instanceIds?: string[]): Promise<any> {
-    return await contextService.getMetadata(instanceIds);
+    // TODO: Implement direct metadata retrieval
+    // This would need to access instance data from the current context
+    return { success: false, error: 'Metadata retrieval not implemented' };
   }
 
   private async getImageContent(instanceIds?: string[]): Promise<any> {
-    return await contextService.getImageContent(instanceIds);
+    // TODO: Implement direct image content retrieval
+    // This would need to access image data from instances
+    return { success: false, error: 'Image content retrieval not implemented' };
   }
 
   private async getChatHistory(): Promise<any> {
-    return await contextService.getChatHistory();
+    // TODO: Implement direct chat history retrieval
+    // This would need to access chat messages from the current session
+    return { success: false, error: 'Chat history retrieval not implemented' };
   }
 
   // Start ping interval
