@@ -524,16 +524,9 @@ class EnhancedProactiveService {
       const isInTableEditor = this.isCurrentlyInEditorContext();
       const isInMainSidepanel = this.isCurrentlyInMainSidepanel();
       
-      // Be more permissive with micro suggestions - generate them if:
-      // 1. We have micro rules AND user is in table editor context, OR
-      // 2. We have micro rules AND the interaction is relevant, OR
-      // 3. We have micro rules and are NOT in main sidepanel (fallback for editor detection)
-      // This ensures micro suggestions appear more reliably
-      const shouldGenerateMicroSuggestions = microRules.length > 0 && (
-        isInTableEditor || 
-        this.isLatestInteractionRelevantForMicroSuggestions(recentActions, logs) ||
-        !isInMainSidepanel  // Fallback: if not clearly in main sidepanel, allow micro suggestions
-      );
+      // Generate micro suggestions ONLY when we can positively confirm user is in editor context
+      // This prevents micro suggestions from showing when user is out of an editor
+      const shouldGenerateMicroSuggestions = microRules.length > 0 && isInTableEditor;
       
       // Generate macro suggestions if:
       // 1. We have macro rules AND user is in main sidepanel (instance view), OR
@@ -937,11 +930,14 @@ class EnhancedProactiveService {
     
     // Check for table editor specifically
     const isInTableEditor = activeElement && (
+      activeElement.closest('.table-container') ||
+      activeElement.closest('.table-grid') ||
       activeElement.closest('.table-editor') ||
       activeElement.closest('[class*="table"]') ||
       activeElement.closest('[class*="editor"]') ||
       activeElement.closest('.cell') ||
-      activeElement.closest('[class*="cell"]')
+      activeElement.closest('[class*="cell"]') ||
+      activeElement.closest('.editing')
     );
     
     // Check for general editors
@@ -954,7 +950,26 @@ class EnhancedProactiveService {
       activeElement.closest('[contenteditable="true"]')
     );
     
-    return !!(isInTableEditor || isInEditor);
+    const result = !!(isInTableEditor || isInEditor);
+    
+    // Debug logging for context detection
+    if (result) {
+      console.log('[EnhancedProactiveService] Editor context detected:', {
+        activeElement: activeElement?.tagName,
+        activeElementClass: activeElement?.className,
+        isInTableEditor: !!isInTableEditor,
+        isInEditor: !!isInEditor
+      });
+    } else {
+      // Also log when NOT in editor context to help debug
+      console.log('[EnhancedProactiveService] NOT in editor context:', {
+        activeElement: activeElement?.tagName,
+        activeElementClass: activeElement?.className,
+        noActiveElement: !activeElement
+      });
+    }
+    
+    return result;
   }
 
   /**
