@@ -176,9 +176,52 @@ export interface InstanceEvent {
 }
 
 // Proactive suggestion - reuse existing chatWithAgent response format
+// Suggestion scope classification
+export type SuggestionScope = 'micro' | 'macro';
+
+// Presentation modality classification
+export type PresentationModality = 'in-situ' | 'peripheral';
+
+// Suggestion priority level
+export type SuggestionPriority = 'high' | 'medium' | 'low';
+
+// Enhanced ProactiveSuggestion interface
 export interface ProactiveSuggestion {
-  message: string; // Brief description of what this suggestion will do
-  instances: InstanceEvent[]; // Instance updates to apply
   id: string; // Unique identifier for tracking
+  message: string; // Brief description of what this suggestion will do
+  detailedDescription?: string; // More detailed explanation for peripheral suggestions
+  instances: InstanceEvent[]; // Instance updates to apply
+  scope: SuggestionScope; // micro or macro
+  modality: PresentationModality; // in-situ or peripheral
+  priority: SuggestionPriority; // high, medium, or low
+  confidence: number; // AI confidence score (0-1)
+  contextualData?: any; // Additional context for the suggestion
+  triggerEvent?: string; // What user action triggered this suggestion
+  estimatedImpact?: string; // Brief description of what will change
+  category: string; // Category like 'data-extraction', 'data-cleaning', etc.
+  timestamp: number; // When the suggestion was created
+  undoable: boolean; // Whether this suggestion can be undone
+}
+
+// User action types that can trigger suggestions
+export interface UserActionEvent {
+  type: string; // Type of action (e.g., 'element-selected', 'cell-edited', 'table-created')
+  timestamp: number;
+  context: any; // Context data relevant to the action
+  instanceId?: string; // ID of the instance being acted upon
+  metadata?: any; // Additional metadata
+}
+
+// Trigger rule for when to generate suggestions
+export interface SuggestionTriggerRule {
+  id: string;
+  name: string;
+  description: string;
+  pattern: (events: UserActionEvent[], context: any) => boolean;
+  suggestionType: string;
+  scope: SuggestionScope;
+  modality: PresentationModality;
+  priority: SuggestionPriority;
+  debounceMs?: number; // Optional debounce time
 }
 

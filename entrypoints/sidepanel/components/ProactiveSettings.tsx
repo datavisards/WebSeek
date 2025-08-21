@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { proactiveService, ProactiveSettings as Settings } from '../proactive-service';
+import { proactiveService, ProactiveSettings as Settings } from '../proactive-service-enhanced';
 import './ProactiveSettings.css';
 
 interface ProactiveSettingsProps {

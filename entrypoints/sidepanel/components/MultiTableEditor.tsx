@@ -419,7 +419,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     }
     
     const copiedDataToSet = {
-      type: isWholeTable ? 'table' : 'region',
+      type: isWholeTable ? 'table' as const : 'region' as const,
       data,
       stringData,
       sourceTableId: activeTabId,
@@ -1093,7 +1093,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       const isInEditMode = activeElement && (
         activeElement.tagName === 'INPUT' || 
         activeElement.tagName === 'TEXTAREA' || 
-        activeElement.contentEditable === 'true'
+        (activeElement as HTMLElement).contentEditable === 'true'
       );
       
       if (e.ctrlKey || e.metaKey) {
@@ -1354,9 +1354,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
               onClick={() => {
                 // Use original row index if available for data operations
                 const rowToUse = selectedCell.originalRow ?? selectedCell.row;
-                console.log(`[MultiTableEditor] Capture to Cell clicked: tableId=${selectedCell.tableId}, row=${rowToUse}, col=${selectedCell.col}`);
                 onCaptureToCell?.(selectedCell.tableId, rowToUse, selectedCell.col);
-                console.log(`[MultiTableEditor] Marking table ${selectedCell.tableId} as dirty after capture`);
                 markTableDirty(selectedCell.tableId);
               }}
               disabled={!isCaptureEnabled}
@@ -1586,7 +1584,10 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
 
       {/* Active Table Content */}
       {activeTable && (
-        <div className="table-container" style={{ position: 'relative' }}>
+        <div 
+          className={`table-container ${currentSuggestion ? 'has-suggestions' : ''}`} 
+          style={{ position: 'relative' }}
+        >
           <TableGrid
             table={activeTable.instance}
             instances={instances}

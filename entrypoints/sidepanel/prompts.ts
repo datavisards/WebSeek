@@ -410,3 +410,354 @@ export const getPrompt = (chatType: ChatType, htmlContextString: string, instanc
         throw new Error(`Unsupported chat type: ${chatType}`);
     }
 };
+
+/**
+ * Create rule-based suggestion prompt for the LLM
+ */
+export const createRuleBasedSuggestionPrompt = (
+  scope: string, 
+  triggeredRules: any[], 
+  recentActions: any[], 
+  logs: string[],
+  suggestionHistory?: Map<string, any>,
+  workspaceName?: string
+): string => {
+    const ruleDescriptions = triggeredRules.map(rule => 
+      `- ${rule.name}: ${rule.description} (Priority: ${rule.priority})`
+    ).join('\n');
+
+    // Create detailed constraints for each triggered rule
+    const ruleConstraints = createRuleConstraints(triggeredRules);
+
+    // Create suggestion history context
+    const historyContext = createSuggestionHistoryContext(suggestionHistory, triggeredRules);
+
+    // Create workspace context if available
+    const workspaceContext = workspaceName && workspaceName !== 'this project' ? 
+      `\n**WORKSPACE CONTEXT:**\nWorkspace Name: "${workspaceName}"\nWhen suggesting websites, resources, or making project-specific recommendations, use this specific workspace name ("${workspaceName}") instead of generic terms like "your project" or "this project".` : 
+      `\n**WORKSPACE CONTEXT:**\nProject Name: "${workspaceName || 'this project'}"\nWhen suggesting websites, resources, or making project-specific recommendations, refer to this specific project context.`;
+
+    return `
+You are WebSeek's proactive AI assistant. You must provide ${scope} suggestions based on SPECIFIC TRIGGERED RULES.
+
+**STRICT RULE COMPLIANCE:**
+- You MUST only suggest actions that directly address the triggered rules listed below
+- You CANNOT create suggestions for rules that were not triggered
+- You CANNOT use categories other than the rule IDs provided
+- You MUST include valid ruleIds in every suggestion
+
+**CRITICAL: NO REDUNDANT SUGGESTIONS**
+- NEVER suggest changes that result in identical or trivially different content
+- Your suggestions MUST provide genuine value and meaningful improvements
+- If you cannot suggest meaningful improvements, return success: false
+- For table updates: The suggested table MUST have new data, more rows, additional columns, or enhanced content
+
+**CURRENT SCOPE: ${scope.toUpperCase()}**
+${scope === 'macro' ? 
+  `- Focus on high-level workflow improvements, multi-instance operations, and interface-wide suggestions
+- MACRO SUGGESTIONS: Do NOT include instance operations in the "instances" array - leave it empty []
+- Macro suggestions provide guidance, external resources, and workflow advice
+- They are displayed in the peripheral AI suggestions panel, NOT as ghost previews` : 
+  `- Focus on immediate, contextual improvements within the current editing context (table editor, cell operations)
+- MICRO SUGGESTIONS: Include specific instance operations in the "instances" array
+- Micro suggestions provide direct data manipulation and show ghost previews
+- They are displayed as preview instances in the main workspace`}
+${workspaceContext}
+
+**TRIGGERED RULES:**
+The following heuristic rules have been triggered and require suggestions:
+${ruleDescriptions}
+
+**SUGGESTION HISTORY CONTEXT:**
+${historyContext}
+
+**DETAILED RULE CONSTRAINTS:**
+Before generating suggestions, you MUST verify these detailed constraints for each triggered rule:
+${ruleConstraints}
+
+**RULE REQUIREMENT:**
+You MUST provide suggestions that address at least one of the triggered rules above AND satisfy their detailed constraints. Do not provide generic suggestions.
+
+**CRITICAL INSTRUCTION - RETURN success: false WHEN APPROPRIATE:**
+If NONE of the triggered rules have their detailed constraints satisfied, you MUST return:
+{
+  "success": false,
+  "message": "No valid suggestions available - rule constraints not met",
+  "instances": [],
+  "suggestions": []
+}
+
+**SPECIAL ATTENTION FOR TABLE-CELL-COMPLETION:**
+If "table-cell-completion" is triggered but the table is already complete (contains most/all webpage items and data fields), you MUST return success: false. Do NOT suggest trivial additions like:
+- Adding columns that don't provide meaningful value
+- Suggesting minor formatting changes  
+- Proposing identical or near-identical content
+- Adding rows when no more similar items exist on the webpage
+
+**MANDATORY COMPLETENESS CHECK:**
+Before suggesting table completion, verify:
+1. Are there actually more similar items on the webpage to extract?
+2. Are there meaningful data fields missing from the table?
+3. Would the suggestion provide substantial value to the user?
+If the answer to any of these is NO, return success: false.
+
+**RECENT USER ACTIONS:**
+${recentActions.length > 0 ? recentActions.map((action, i) => `${i + 1}. ${action.type}: ${JSON.stringify(action.context)}`).join('\n') : 'No recent actions'}
+
+**RECENT LOGS:**
+${logs.slice(-10).join('\n')}
+
+**INSTRUCTIONS:**
+1. Analyze the triggered rules and recent actions
+2. Verify that detailed constraints are met for each rule
+3. If NO rules have satisfied constraints, return success: false with empty suggestions
+4. ONLY provide suggestions if at least one rule's constraints are genuinely satisfied
+5. For ${scope} suggestions: ${scope === 'micro' ? 'Focus on immediate assistance for the current editing task' : 'Focus on workflow improvements across multiple instances'}
+
+**CRITICAL CATEGORY REQUIREMENT:**
+The "category" field in your response MUST be one of the following rule IDs that were triggered:
+${triggeredRules.map(r => `- "${r.id}"`).join('\n')}
+
+**CRITICAL RULE ID REQUIREMENT:**
+The "ruleIds" array MUST contain the rule ID(s) that your suggestion addresses. It cannot be empty and must reference only the triggered rules listed above.
+
+**RESPONSE FORMAT:**
+Return strictly JSON with this structure:
+{
+  "success": boolean, // false if no rule constraints are satisfied
+  "message": string, // Explain why no suggestions if success is false
+  "instances": InstanceEvent[], // ${scope === 'macro' ? 'MUST be empty [] for macro suggestions' : 'Required for micro suggestions - specific instance operations'}
+  "suggestions": [{ // Empty array if success is false
+    "message": string,
+    "scope": "${scope}",
+    "modality": "${scope === 'macro' ? 'peripheral' : 'in-situ'}",
+    "priority": "high|medium|low",
+    "confidence": number,
+    "category": string, // MUST be one of: ${triggeredRules.map(r => r.id).join(', ')}
+    "ruleIds": string[] // MUST contain at least one of: ${triggeredRules.map(r => r.id).join(', ')}
+  }]
+}
+
+${scope === 'macro' ? 
+  `**IMPORTANT FOR MACRO SUGGESTIONS:**
+- The "instances" array MUST always be empty [] 
+- Macro suggestions provide guidance, recommendations, and external resources
+- They do NOT modify workspace instances directly
+- Focus on workflow advice, external websites, and high-level suggestions` :
+  `**IMPORTANT FOR MICRO SUGGESTIONS:**
+- The "instances" array contains specific operations to modify workspace data
+- These create ghost previews that users can accept or reject
+- Focus on immediate data manipulation and completion tasks`}
+
+**EXAMPLE FOR RULE "suggest-useful-websites":**
+If suggesting websites, your response must include:
+- category: "suggest-useful-websites"
+- ruleIds: ["suggest-useful-websites"]
+- message should contain actual website URLs like "Visit [DPReview](https://www.dpreview.com) for camera reviews..."
+
+Provide suggestions for the triggered rules: ${triggeredRules.map(r => r.id).join(', ')}`;
+};
+
+/**
+ * Create detailed constraint descriptions for triggered rules
+ */
+export const createRuleConstraints = (triggeredRules: any[]): string => {
+    const constraints = triggeredRules.map(rule => {
+      switch (rule.id) {
+        case 'table-cell-completion':
+          return `• ${rule.name}: You MUST verify that captured webpage elements have POSITIONAL, STRUCTURAL, or SEMANTIC relationships before suggesting completion. 
+
+**CRITICAL REQUIREMENT: NEVER SUGGEST AN IDENTICAL TABLE**
+- The suggested table MUST be meaningfully different from the current table
+- You MUST add NEW data, expand rows, or improve structure
+- If you cannot make meaningful improvements, return success: false
+
+**COMPLETENESS DETECTION - CRITICAL CHECK:**
+Before suggesting any completion, you MUST verify:
+1. **Count Available Items**: Analyze HTML context to count TOTAL similar elements on the webpage
+2. **Count Current Items**: Check how many items are already in the current table
+3. **Completion Assessment**: If current table contains ALL or MOST available items from the webpage, return success: false
+4. **Data Field Assessment**: If all meaningful data fields are already captured, return success: false
+
+**STRICT COMPLETION CRITERIA:**
+- If table already contains 80%+ of available webpage items → return success: false
+- If no additional meaningful columns can be added → return success: false  
+- If no more similar items exist on the webpage → return success: false
+- If adding more columns would just duplicate existing data → return success: false
+
+**PROGRESSIVE SUGGESTION STRATEGY:**
+1. **Analyze HTML context** to count TOTAL available similar elements on the webpage
+2. **Determine current table state** - how many rows/cells are already filled
+3. **Choose appropriate suggestion scope ONLY if meaningful additions exist:**
+   - If user has filled only a few cells in first row: Suggest completing the CURRENT ROW with additional data fields
+   - If user has completed one or multiple full rows: Suggest adding MORE ROWS or the ENTIRE TABLE with additional products/items from the webpage
+   - If the number of items in the webpage is far more than the number of rows in the current table: Suggest expanding table to accommodate MORE webpage items
+
+**REQUIRED TABLE IMPROVEMENTS (choose at least ONE, or return success: false):**
+- Add MORE ROWS with additional items from the same webpage (ONLY if more items exist)
+- Add MORE COLUMNS with additional data fields (ONLY if meaningful fields exist that aren't captured)
+- Enhance EXISTING CELLS with more detailed information (ONLY if current cells lack important details)
+- Extract ADDITIONAL SIMILAR ITEMS from the webpage that aren't yet in the table (ONLY if such items exist)
+
+**HTML Context Analysis - MANDATORY:**
+- You MUST count similar elements in HTML context (e.g., "Found 16 product listings on this Amazon page")
+- Compare this count with current table rows - if already extracted most/all items, return success: false
+- Look for additional data fields that could be valuable (reviews, ratings, stock status) - if none exist or already captured, return success: false
+
+**Relationship Validation - Check if elements:**
+    - Are from the same product list/search results
+    - Have consistent data types (all products, all prices, all descriptions)
+    - Follow the same webpage structure/format
+    - Can provide additional value when combined
+
+**EXAMPLE SCENARIOS:**
+
+✅ **GOOD SUGGESTIONS (when meaningful additions exist):**
+- "Complete table by extracting all 16 camera products from this Amazon page (currently showing only 3)"
+- "Add more product details: ratings, review count, Prime status (currently missing from table)"
+- "Extract 10 more products from this search results page to compare options"
+
+❌ **MUST RETURN success: false (when table is complete):**
+- Table has 15 items, webpage has 16 items (95% complete - return success: false)
+- Table already captures all meaningful data fields available on webpage
+- No additional similar items exist on the webpage to extract
+- Adding suggested columns would duplicate existing information
+
+**ABSOLUTE REQUIREMENT:**
+If you cannot identify meaningful, substantial improvements to the table (more rows with new items OR more columns with new data fields), you MUST return:
+{
+  "success": false,
+  "message": "Table appears complete - all available items and data fields have been extracted",
+  "instances": [],
+  "suggestions": []
+}
+
+DO NOT suggest trivial additions or formatting changes. DO NOT suggest completion if you cannot make meaningful improvements to the table.`;
+        
+        case 'column-pattern-analysis':
+          return `• ${rule.name}: You MUST verify that data in table columns shows clear patterns (data types, formats, relationships) before suggesting analysis. Analyze:
+    - Consistent data types within columns
+    - Format patterns (dates, numbers, text structures)
+    - Value relationships between columns
+    - Missing data patterns`;
+        
+        case 'visualization-suggestion':
+          return `• ${rule.name}: You MUST verify that table data is suitable for visualization before suggesting charts. Check:
+    - Presence of quantitative or categorical data
+    - Sufficient data points for meaningful visualization
+    - Clear variable relationships
+    - Data completeness and quality`;
+        
+        case 'cross-instance-duplication':
+          return `• ${rule.name}: You MUST verify that elements across instances are genuinely related or part of a collection before suggesting consolidation. Check:
+    - Similar data structures or schemas
+    - Common source domains or contexts
+    - Logical relationships between datasets
+    - Potential for meaningful merging`;
+        
+        case 'workflow-automation':
+          return `• ${rule.name}: You MUST verify that user actions form a repeatable pattern before suggesting automation. Analyze:
+    - Consistent action sequences
+    - Similar operation contexts
+    - Potential for parameterization
+    - Clear automation benefits`;
+        
+        case 'data-quality-improvement':
+          return `• ${rule.name}: You MUST identify specific data quality issues before suggesting improvements. Check for:
+    - Missing values or incomplete records
+    - Inconsistent formatting
+    - Duplicate entries
+    - Invalid or outlier values`;
+
+        case 'table-sorting-filtering':
+          return `• ${rule.name}: You MUST verify that table data is suitable for sorting or filtering operations. Check:
+    - Tables with sufficient data rows (>3 rows)
+    - Columns with varied content that can be meaningfully sorted
+    - Data types that support comparison operations
+    - Clear benefit from organizing the data differently`;
+
+        case 'fill-missing-values':
+          return `• ${rule.name}: You MUST identify patterns that can guide missing value imputation. Check for:
+    - Empty cells within structured data patterns
+    - Surrounding values that suggest interpolation opportunities
+    - Column data types that support reasonable imputation methods
+    - Missing data percentage that makes filling worthwhile (10%-80% missing)`;
+
+        case 'interactive-filtering-highlighting':
+          return `• ${rule.name}: You MUST verify that linked data exists for meaningful interactive filtering. Check:
+    - Presence of both tabular data and visualizations
+    - Common data fields that can be linked between instances
+    - User benefit from cross-filtering capabilities
+    - Technical feasibility of implementing the interaction`;
+
+        case 'suggest-useful-websites':
+          return `• ${rule.name}: You MUST suggest websites that are genuinely relevant to the workspace context. Check:
+    - Workspace name provides clear topic/domain indication
+    - Suggested websites should directly relate to the workspace theme
+    - Consider the type of data already present (e.g., financial data → financial websites)
+    - Prioritize authoritative, useful sources over generic results
+    - Include 3-5 specific, actionable website suggestions with brief explanations
+    - Focus on websites that could provide additional data or context for the current work
+    
+**REQUIRED RESPONSE FORMAT FOR THIS RULE:**
+    - category: "suggest-useful-websites"
+    - ruleIds: ["suggest-useful-websites"] 
+    - message: Must contain actual URLs in formats like:
+      * "Visit [Site Name](https://url.com) for purpose"
+      * "Check out Site Name: https://url.com for purpose"
+      * "Try Site Name (https://url.com) for purpose"
+    - instances: MUST be empty array [] - this rule provides external guidance, NOT workspace modifications
+    
+**EXAMPLE MESSAGE:**
+"Visit [DPReview](https://www.dpreview.com) for in-depth camera reviews and [B&H Photo](https://www.bhphotovideo.com) for technical specifications to supplement your Product Research."
+    
+DO NOT suggest data extraction or table completion - this rule is ONLY for suggesting external websites.
+DO NOT include any instance operations in the instances array.`;
+        
+        default:
+          return `• ${rule.name}: Verify that the rule conditions are genuinely met based on user context and actions.`;
+      }
+    }).join('\n');
+
+    return constraints || 'No specific constraints for triggered rules.';
+};
+
+/**
+ * Create suggestion history context for progressive suggestions
+ */
+export const createSuggestionHistoryContext = (
+  suggestionHistory?: Map<string, any>,
+  triggeredRules?: any[]
+): string => {
+  if (!suggestionHistory || suggestionHistory.size === 0) {
+    return 'No previous suggestions in this session.';
+  }
+
+  const relevantHistory = Array.from(suggestionHistory.values()).filter(entry => {
+    return triggeredRules?.some(rule => rule.id === entry.ruleId);
+  });
+
+  if (relevantHistory.length === 0) {
+    return 'No previous suggestions for these specific rules.';
+  }
+
+  const historyText = relevantHistory.map(entry => {
+    const timeSince = Date.now() - entry.acceptedAt;
+    const timeAgo = timeSince < 60000 ? 'just now' : 
+                   timeSince < 300000 ? 'a few minutes ago' : 'recently';
+    
+    return `- Rule "${entry.ruleId}" was previously triggered ${timeAgo} with level "${entry.level}" suggestion (type: ${entry.suggestionType})`;
+  }).join('\n');
+
+  // Special warning for repeated table completion attempts
+  const tableCompletionAttempts = relevantHistory.filter(entry => 
+    entry.ruleId === 'table-cell-completion' || entry.suggestionType?.includes('completion')
+  );
+  
+  let completionWarning = '';
+  if (tableCompletionAttempts.length >= 2) {
+    completionWarning = `\n\n**⚠️ REPEATED TABLE COMPLETION WARNING:**\nTable completion has been suggested ${tableCompletionAttempts.length} times recently. This may indicate the table is already complete. Before suggesting completion again, verify there are actually more meaningful items to extract from the webpage. If the table is substantially complete, return success: false instead.`;
+  }
+
+  return `Previous suggestion activity:\n${historyText}${completionWarning}\n\nConsider this history when determining the appropriate suggestion level and avoid repeating the same suggestion type.`;
+};

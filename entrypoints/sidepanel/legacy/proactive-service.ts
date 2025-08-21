@@ -4,15 +4,15 @@
  */
 
 import { suggestionGenerator } from './suggestion-generator';
-import { triggerEngine } from './trigger-engine';
-import { contextService } from './context-service';
-import { suggestionUIController } from './suggestion-ui-controller';
-import { actionMonitor } from './action-monitor';
+import { triggerEngine } from '../trigger-engine';
+import { contextService } from '../context-service';
+import { suggestionUIController } from '../suggestion-ui-controller';
+import { actionMonitor } from '../action-monitor';
 import { 
   ProactiveSuggestion, 
   SuggestionTriggerRule, 
   UserActionEvent
-} from './types';
+} from '../types';
 
 export interface ProactiveSettings {
   enabled: boolean;

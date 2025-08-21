@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface InstanceViewHeaderProps {
   webToolsOpen: boolean;
@@ -7,6 +7,8 @@ interface InstanceViewHeaderProps {
   setInstanceToolsOpen: (value: boolean | ((prev: boolean) => boolean)) => void;
   isCaptureEnabled: boolean;
   mode: string;
+  workspaceName: string;
+  onWorkspaceNameChange: (newName: string) => void;
   handleCaptureStart: () => void;
   handleScreenshotStart: () => void;
   handleCreateSketch: () => void;
@@ -22,6 +24,8 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
   setInstanceToolsOpen,
   isCaptureEnabled,
   mode,
+  workspaceName,
+  onWorkspaceNameChange,
   handleCaptureStart,
   handleScreenshotStart,
   handleCreateSketch,
@@ -29,9 +33,79 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
   handleCreateVisualization,
   handleModeSwitch,
 }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingName, setEditingName] = useState(workspaceName);
+
+  const handleStartEdit = () => {
+    setEditingName(workspaceName);
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = () => {
+    const trimmedName = editingName.trim();
+    if (trimmedName && trimmedName !== workspaceName) {
+      onWorkspaceNameChange(trimmedName);
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingName(workspaceName);
+    setIsEditing(false);
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSaveEdit();
+    } else if (e.key === 'Escape') {
+      handleCancelEdit();
+    }
+  };
+
+  const displayName = workspaceName || 'Instance View';
+
   return (
-    <div className="view-title-container">
-      <h3 style={{ margin: 0 }}>Instances</h3>
+    <div className="view-title-container" style={{ paddingRight: '50px' }}>
+      {isEditing ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <input
+            type="text"
+            value={editingName}
+            onChange={(e) => setEditingName(e.target.value.slice(0, 30))}
+            onKeyDown={handleKeyPress}
+            onBlur={handleSaveEdit}
+            autoFocus
+            style={{
+              fontSize: '1.17em',
+              fontWeight: 'bold',
+              border: '1px solid #ccc',
+              borderRadius: '4px',
+              padding: '2px 6px',
+              margin: 0,
+              minWidth: '150px',
+              maxWidth: '300px'
+            }}
+            placeholder="Workspace name (max 30 chars)"
+          />
+          <span style={{ fontSize: '0.8em', color: '#666' }}>
+            {editingName.length}/30
+          </span>
+        </div>
+      ) : (
+        <h3 
+          style={{ 
+            margin: 0, 
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}
+          onClick={handleStartEdit}
+          title="Click to rename workspace"
+        >
+          {displayName}
+        </h3>
+      )}
       
       {/* Web Tools Dropdown */}
       <div style={{ display: 'inline-block', position: 'relative' }}>
@@ -153,7 +227,7 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
         }}
         title={mode === 'select' ? 'Switch to Hand Tool' : 'Switch to Selection Tool'}
       >
-        {mode === 'select' ? 'Selection Mode' : 'Hand Tool'}
+        {mode === 'select' ? 'Select' : 'Hand'}
       </button>
     </div>
   );

@@ -1467,7 +1467,7 @@ const TableGrid: React.FC<TableGridProps> = ({
       )}
 
       {/* Row Headers */}
-      {Array.from({ length: filteredAndSortedRows.length }, (_, displayRowIndex) => {
+      {Array.from({ length: effectiveTable.rows }, (_, displayRowIndex) => {
         const originalRowIndex = displayRowIndex < filteredAndSortedRows.length ? filteredAndSortedRows[displayRowIndex].originalIndex : displayRowIndex;
         return (
           <div
@@ -1494,7 +1494,7 @@ const TableGrid: React.FC<TableGridProps> = ({
       })}
 
       {/* Content Cells */}
-      {Array.from({ length: filteredAndSortedRows.length }, (_, displayRowIndex) => 
+      {Array.from({ length: effectiveTable.rows }, (_, displayRowIndex) => 
         Array.from({ length: effectiveTable.cols }, (_, colIndex) => {
           // Get cell and original row index for suggestion detection
           let cell;
@@ -1504,9 +1504,14 @@ const TableGrid: React.FC<TableGridProps> = ({
             // Use filtered and sorted data and get original row index
             cell = filteredAndSortedRows[displayRowIndex].row[colIndex];
             originalRowIndex = filteredAndSortedRows[displayRowIndex].originalIndex;
+          } else if (displayRowIndex < table.rows && colIndex < table.cols) {
+            // Beyond filtered data but within original table - show original data for ghost rendering
+            cell = table.cells[displayRowIndex]?.[colIndex];
+            originalRowIndex = displayRowIndex;
           } else {
-            // Beyond filtered table dimensions - don't show anything
-            return null;
+            // Beyond original table - this is for ghost suggestions only
+            cell = null;
+            originalRowIndex = displayRowIndex;
           }
           
           const isHovered = hoveredCell?.row === displayRowIndex && hoveredCell?.col === colIndex;

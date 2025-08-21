@@ -10,6 +10,12 @@
   overflow: scroll;
 }
 
+/* When table has suggestions, maintain scrollable behavior within parent bounds */
+.table-container.has-suggestions {
+  overflow: auto;
+  /* Remove fixed height constraints to respect parent container bounds */
+}
+
 .available-instances {
   padding: 10px;
   background: #f9f9f9;

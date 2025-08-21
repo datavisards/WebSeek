@@ -20,6 +20,12 @@
   border-radius: 10px;
   overflow: hidden; /* prevent content overflow */
   position: relative;
+  transition: flex 0.3s ease;
+}
+
+/* When tool view is collapsed, expand instance view */
+.side-panel:has(.tool-view.collapsed) .view-container:not(.tool-view) {
+  flex: 8;
 }
 
 .operation-view {

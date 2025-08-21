@@ -3,7 +3,7 @@ import { Message, Instance, ChatType } from '../types';
 import { chatWithAgent } from '../api-selector';
 import { generateInstanceContext, detectMarkdown, renderMarkdown, generateId, updateInstances } from '../utils';
 import { contextService } from '../context-service';
-import { proactiveService } from '../proactive-service';
+import { proactiveService } from '../proactive-service-enhanced';
 import './chattab.css';
 
 interface ChatTabProps {

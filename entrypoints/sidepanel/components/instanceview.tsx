@@ -20,7 +20,7 @@ import './instanceview.css';
 import { message } from 'vega-lite/types_unstable/log/index.js';
 import { chatWithAgent } from '../api-selector';
 import { ProactiveSuggestion } from '../types';
-import { proactiveService } from '../proactive-service';
+import { proactiveService } from '../proactive-service-enhanced';
 
 // Props interface for the component
 interface InstanceViewProps {
@@ -29,14 +29,21 @@ interface InstanceViewProps {
   logs: string[];
   htmlContextRef: React.RefObject<Record<string, {pageURL: string, htmlContent: string}>>;
   messages: Message[];
-  onOperation: (message: string, trigger?: boolean) => void;
+  workspaceName: string;
+  onWorkspaceNameChange: (newName: string) => void;
+  onOperation: (message: string, trigger?: boolean, actionDetails?: {
+    type: string;
+    context?: any;
+    instanceId?: string;
+    metadata?: any;
+  }) => void;
   updateHTMLContext: React.Dispatch<React.SetStateAction<Record<string, {pageURL: string, htmlContent: string}>>>;
   addMessage: (message: Message) => void;
   setAgentLoading: (loading: boolean) => void;
   currentSuggestion?: ProactiveSuggestion; // For ghost preview rendering
 }
 
-const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages, onOperation, updateHTMLContext, addMessage, setAgentLoading, currentSuggestion }: InstanceViewProps) => {
+const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages, workspaceName, onWorkspaceNameChange, onOperation, updateHTMLContext, addMessage, setAgentLoading, currentSuggestion }: InstanceViewProps) => {
   // Custom hooks
   const { fetchHTMLContent, htmlLoadingStates } = useHTMLContent(updateHTMLContext);
   const instancesRef = useRef<Instance[]>([]);
@@ -951,7 +958,24 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           return inst;
         }));
 
-        onOperation(`Appended text to cell (${row + 1}, ${String.fromCharCode(65 + col)}) from [${message.pageId}](${message.pageURL})`);
+        const logMessage = `Appended text to cell (${row + 1}, ${String.fromCharCode(65 + col)}) from [${message.pageId}](${message.pageURL})`;
+        onOperation(logMessage, true, {
+          type: 'cell-edited',
+          context: { 
+            value: 'web-content',
+            message: logMessage,
+            pageId: message.pageId,
+            cellPosition: `${String.fromCharCode(65 + col)}${row + 1}`,
+            contentType: 'text'
+          },
+          instanceId: undefined, // No specific instanceId for web captures
+          metadata: { 
+            column: col, 
+            row: row,
+            editType: 'web-capture',
+            sourceType: 'web'
+          }
+        });
       } else {
         alert('Cannot append text to a cell containing non-text content. Please remove the existing content first.');
       }
@@ -979,7 +1003,24 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           return inst;
         }));
 
-        onOperation(`Added image to cell (${row + 1}, ${String.fromCharCode(65 + col)}) from [${message.pageId}](${message.pageURL})`);
+        const logMessage = `Added image to cell (${row + 1}, ${String.fromCharCode(65 + col)}) from [${message.pageId}](${message.pageURL})`;
+        onOperation(logMessage, true, {
+          type: 'cell-edited',
+          context: { 
+            value: 'web-content',
+            message: logMessage,
+            pageId: message.pageId,
+            cellPosition: `${String.fromCharCode(65 + col)}${row + 1}`,
+            contentType: 'image'
+          },
+          instanceId: undefined, // No specific instanceId for web captures
+          metadata: { 
+            column: col, 
+            row: row,
+            editType: 'web-capture',
+            sourceType: 'web'
+          }
+        });
       } else {
         alert('Cannot add image to a cell that already contains content. Please remove the existing content first.');
       }
@@ -1346,13 +1387,38 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setEditingTableId(newId);
     setInstances(prev => [...prev, newTable]);
     setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
-    onOperation(`Opened table editor to created a new table with ID "${newId}"`, false);
+    
+    const logMessage = `Opened table editor to created a new table with ID "${newId}"`;
+    onOperation(logMessage, false, {
+      type: 'table-selected',
+      context: { message: logMessage, editorOpened: true },
+      instanceId: newId
+    });
   };
 
   // Handle adding to table cell (for both click and drag-and-drop)
   const handleAddToTable = useCallback((instance: Instance, row: number, col: number) => {
     if (!editingTableId) return;
-    onOperation(`Add ${instance.type} "${instance.id}" to table cell (${row + 1}, ${String.fromCharCode(65 + col)}) in table "${editingTableId}"`);
+    
+    const message = `Add ${instance.type} "${instance.id}" to table cell (${row + 1}, ${String.fromCharCode(65 + col)}) in table "${editingTableId}"`;
+    
+    // Record action directly instead of parsing from log message
+    onOperation(message, true, {
+      type: 'cell-edited',
+      context: { 
+        value: instance.id, 
+        message,
+        tableId: editingTableId,
+        cellPosition: `${String.fromCharCode(65 + col)}${row + 1}`
+      },
+      instanceId: editingTableId,
+      metadata: { 
+        column: col, 
+        row: row,
+        instanceId: instance.id,
+        editType: 'add-content'
+      }
+    });
 
     let embedded: EmbeddedInstance | null = null;
 
@@ -1894,7 +1960,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
 
   const handleRename = (instance: Instance) => {
     setRenamingInstance(instance);
-    onOperation(`Open rename modal to rename ${instance.type} "${instance.id}"`);
   };
 
   const updateInstanceReferences = useCallback((oldId: string, newId: string) => {
@@ -2381,6 +2446,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
               setInstanceToolsOpen={setInstanceToolsOpen}
               isCaptureEnabled={isCaptureEnabled}
               mode={mode}
+              workspaceName={workspaceName}
+              onWorkspaceNameChange={onWorkspaceNameChange}
               handleCaptureStart={handleCaptureStart}
               handleScreenshotStart={handleScreenshotStart}
               handleCreateSketch={handleCreateSketch}

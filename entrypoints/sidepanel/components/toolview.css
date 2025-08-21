@@ -1,12 +1,58 @@
 /* toolview.css - Shared styles */
+.view-title-container {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    position: relative;
+}
+
 .tab-button {
   cursor: pointer;
   transition: all 0.2s;
   font-weight: 500;
   margin: 0 10px 0 0;
   border-bottom: 2px solid #ccc;
+  white-space: nowrap;
+}
+
+.tab-button.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tab-button:hover:not(.disabled) {
+  border-bottom: 2px solid #6ba3f5;
 }
 
 .tab-button.active {
   border-bottom: 2px solid #4a90e2;
+}
+
+.collapse-toggle-container {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+}
+
+.collapse-toggle {
+    background: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.2s ease;
+    margin-left: 8px;
+}
+
+.collapse-toggle:hover {
+    background-color: #e0e0e0;
+}
+
+.tool-view.collapsed {
+    flex: 0 0 auto !important;
+}
+
+.tool-view.collapsed .view-content {
+    display: none;
 }

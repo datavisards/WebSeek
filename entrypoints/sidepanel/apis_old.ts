@@ -35,6 +35,7 @@ export async function chatWithAgent(
 ): Promise<{
     message: string;
     instances?: any[];
+    suggestions?: any[];
 }> {
     try {
         console.log("imageContext:", imageContext)
@@ -105,7 +106,8 @@ export async function chatWithAgent(
         if (!jsonContent) {
           return {
             message: content,
-            instances: []
+            instances: [],
+            suggestions: []
           };
         }
 
@@ -113,20 +115,23 @@ export async function chatWithAgent(
             console.error('LLM response indicates failure:', jsonContent.error_message);
             return {
                 message: jsonContent.error_message || 'Error: LLM response indicated failure.',
-                instances: []
+                instances: [],
+                suggestions: []
             };
         }
 
         // Return structured result
         return {
             message: jsonContent.message || 'Sorry, I encountered an error while processing your request. Please try again.',
-            instances: jsonContent.instances || []
+            instances: jsonContent.instances || [],
+            suggestions: jsonContent.suggestions || []
         };
     } catch (error) {
         console.error('Error in chat with agent:', error);
         return {
             message: 'Sorry, I encountered an error while processing your request. Please try again.',
-            instances: []
+            instances: [],
+            suggestions: []
         };
     }
 }
