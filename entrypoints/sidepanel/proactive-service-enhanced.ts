@@ -1218,7 +1218,8 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
           category: aiSuggestion.category || 'general',
           timestamp: Date.now(),
           undoable: scope === 'micro', // Only micro suggestions are undoable since they modify instances
-          toolCall: aiSuggestion.toolCall // Include tool call for macro suggestions
+          toolCall: aiSuggestion.toolCall, // Include tool call for macro suggestions
+          toolSequence: aiSuggestion.toolSequence // Include tool sequence for composite macro suggestions
         };
         
         // Use the validated ruleIds

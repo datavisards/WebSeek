@@ -1344,6 +1344,36 @@ const evaluateMathExpressionInUtils = (expr: string): number => {
   return result;
 };
 
+/**
+ * Extracts numerical value from text content, handling common formatting like currency
+ * This is the same logic used in the UI for column type conversion
+ */
+export const extractNumericalValue = (content: string): number => {
+    // Remove all non-numeric characters except decimal points and minus signs
+    let cleaned = content.replace(/[^0-9.-]/g, '');
+    
+    // Handle multiple decimal points - keep only the first one
+    const firstDecimalIndex = cleaned.indexOf('.');
+    if (firstDecimalIndex !== -1) {
+        const beforeDecimal = cleaned.substring(0, firstDecimalIndex + 1);
+        const afterDecimal = cleaned.substring(firstDecimalIndex + 1).replace(/\./g, '');
+        cleaned = beforeDecimal + afterDecimal;
+    }
+    
+    // Handle multiple minus signs - keep only the first one if it's at the beginning
+    if (cleaned.includes('-')) {
+        const isNegative = cleaned.startsWith('-');
+        cleaned = cleaned.replace(/-/g, '');
+        if (isNegative) {
+            cleaned = '-' + cleaned;
+        }
+    }
+    
+    // Parse the cleaned string as a number
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? 0 : parsed;
+};
+
 export const evaluateFormulaInTable = (formula: string, table: any): string => {
   try {
     // Remove leading = sign

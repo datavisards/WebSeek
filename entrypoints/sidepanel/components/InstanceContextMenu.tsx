@@ -121,12 +121,28 @@ const InstanceContextMenu: React.FC<InstanceContextMenuProps> = ({
           {(() => {
             const instance = instances.find(i => i.id === contextMenu.instanceIds[0]);
             if (instance?.source.type === 'web') {
+              const webSource = instance.source as any;
+              const isSorted = webSource.sortingApplied;
+              
               return (
                 <div
                   className="contextmenuoption"
                   onClick={async () => {
-                    const webSource = instance.source as any;
                     console.log('Go to source clicked, webSource:', webSource);
+                    
+                    // Show warning if cell was moved by sorting
+                    if (isSorted) {
+                      const proceed = confirm(
+                        '⚠️ This cell was moved from its original position due to table sorting.\n\n' +
+                        'The source link points to the original position, not the current position in the sorted table.\n\n' +
+                        'Do you want to proceed to the original source location?'
+                      );
+                      if (!proceed) {
+                        closeContextMenu();
+                        return;
+                      }
+                    }
+                    
                     if (webSource.pageId && webSource.locator) {
                       try {
                         const locatorString = encodeURIComponent(webSource.locator);
@@ -166,7 +182,7 @@ const InstanceContextMenu: React.FC<InstanceContextMenuProps> = ({
                     closeContextMenu();
                   }}
                 >
-                  Go to Source
+                  {isSorted ? '⚠️ Go to Original Source' : 'Go to Source'}
                 </div>
               );
             }

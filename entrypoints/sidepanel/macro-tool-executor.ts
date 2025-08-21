@@ -5,6 +5,7 @@
 
 import { validateToolCall } from './macro-tools';
 import { TableInstance, VisualizationInstance, Instance } from './types';
+import { extractNumericalValue } from './utils';
 
 export class MacroToolExecutor {
   
@@ -51,6 +52,9 @@ export class MacroToolExecutor {
         case 'mergeInstances':
           return await this.executeMergeInstances(toolCall.parameters, currentInstances, updateInstances);
         
+        case 'convertColumnType':
+          return await this.executeConvertColumnType(toolCall.parameters, currentInstances, updateInstances);
+        
         default:
           return {
             success: false,
@@ -61,6 +65,94 @@ export class MacroToolExecutor {
       return {
         success: false,
         message: `Tool execution error: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  }
+
+  /**
+   * Execute a sequence of tool calls for composite suggestions
+   */
+  static async executeToolSequence(
+    toolSequence: {
+      goal: string;
+      steps: Array<{
+        description: string;
+        toolCall: { function: string; parameters: any };
+      }>;
+    },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string; result?: any }> {
+    console.log(`🚀 Starting tool sequence execution: ${toolSequence.goal}`);
+    console.log(`📋 Total steps: ${toolSequence.steps.length}`);
+    
+    const results: any[] = [];
+    let instances = [...currentInstances];
+    
+    try {
+      // Execute each step in sequence
+      for (let i = 0; i < toolSequence.steps.length; i++) {
+        const step = toolSequence.steps[i];
+        
+        console.log(`\n⚡ Step ${i + 1}/${toolSequence.steps.length}: ${step.description}`);
+        console.log(`🔧 Tool: ${step.toolCall.function}`);
+        console.log(`📄 Parameters:`, step.toolCall.parameters);
+        
+        // Create a temporary update function to track intermediate changes
+        let stepInstances = instances;
+        const stepUpdateInstances = (newInstances: Instance[]) => {
+          console.log(`📊 Step ${i + 1} updated ${newInstances.length} instances`);
+          stepInstances = newInstances;
+        };
+        
+        // Execute the tool for this step
+        const stepResult = await this.executeTool(
+          step.toolCall,
+          instances,
+          stepUpdateInstances
+        );
+        
+        console.log(`✅ Step ${i + 1} result:`, stepResult);
+        
+        if (!stepResult.success) {
+          console.error(`❌ Step ${i + 1} failed: ${stepResult.message}`);
+          return {
+            success: false,
+            message: `Step ${i + 1} failed: ${stepResult.message}. Goal: ${toolSequence.goal}`
+          };
+        }
+        
+        // Update instances for next step
+        instances = stepInstances;
+        results.push({
+          step: i + 1,
+          description: step.description,
+          result: stepResult.result
+        });
+        
+        console.log(`✨ Step ${i + 1} completed successfully`);
+      }
+      
+      console.log(`🎉 All steps completed. Applying final changes to ${instances.length} instances`);
+      
+      // Apply final changes
+      updateInstances(instances);
+      
+      return {
+        success: true,
+        message: `Successfully completed all ${toolSequence.steps.length} steps for: ${toolSequence.goal}`,
+        result: {
+          goal: toolSequence.goal,
+          steps: results,
+          totalSteps: toolSequence.steps.length
+        }
+      };
+      
+    } catch (error) {
+      console.error(`💥 Tool sequence execution error:`, error);
+      return {
+        success: false,
+        message: `Tool sequence execution error: ${error instanceof Error ? error.message : String(error)}`
       };
     }
   }
@@ -110,28 +202,50 @@ export class MacroToolExecutor {
     currentInstances: Instance[], 
     updateInstances: (newInstances: Instance[]) => void
   ): Promise<{ success: boolean; message: string; result?: any }> {
+    console.log(`🔄 Sorting table:`, params);
+    
     try {
       const tableInstance = currentInstances.find(inst => inst.id === params.instanceId && inst.type === 'table') as TableInstance;
       
       if (!tableInstance) {
+        console.error(`❌ Table instance '${params.instanceId}' not found`);
         return {
           success: false,
           message: `Table instance '${params.instanceId}' not found`
         };
       }
 
+      console.log(`📋 Found table with ${tableInstance.rows} rows, ${tableInstance.cols} columns`);
+      console.log(`🔍 Column names:`, tableInstance.columnNames);
+      console.log(`🏷️ Column types:`, tableInstance.columnTypes);
+
       // Find column index by name
       const columnIndex = tableInstance.columnNames?.indexOf(params.columnName);
       if (columnIndex === undefined || columnIndex === -1) {
+        console.error(`❌ Column '${params.columnName}' not found`);
         return {
           success: false,
-          message: `Column '${params.columnName}' not found in table '${params.instanceId}'`
+          message: `Column '${params.columnName}' not found in table '${params.instanceId}'. Available columns: ${tableInstance.columnNames.join(', ')}`
         };
       }
+
+      console.log(`📍 Sorting by column '${params.columnName}' at index ${columnIndex}`);
 
       // Create sorted version of the table
       const sortedCells = [...tableInstance.cells];
       const columnType = tableInstance.columnTypes?.[columnIndex] || 'categorical';
+      
+      console.log(`🏷️ Column type: ${columnType}`);
+      console.log(`📊 Sorting order: ${params.order}`);
+
+      // Log first few values before sorting
+      console.log(`🔍 Sample values before sorting:`, 
+        sortedCells.slice(0, 3).map((row, i) => {
+          const cell = row[columnIndex];
+          const value = cell && cell.type === 'text' ? cell.content || '' : '';
+          return `Row ${i}: "${value}"`;
+        })
+      );
       
       sortedCells.sort((rowA, rowB) => {
         const cellA = rowA[columnIndex];
@@ -151,44 +265,213 @@ export class MacroToolExecutor {
           const numB = Number(valB);
           if (!isNaN(numA) && !isNaN(numB)) {
             comparison = numA - numB;
+            console.log(`🔢 Comparing numbers: ${numA} vs ${numB} = ${comparison}`);
           } else {
             comparison = valA.localeCompare(valB);
+            console.log(`📝 Comparing strings: "${valA}" vs "${valB}" = ${comparison}`);
           }
         } else {
           comparison = valA.localeCompare(valB);
+          console.log(`📝 Comparing strings: "${valA}" vs "${valB}" = ${comparison}`);
         }
         
         return params.order === 'asc' ? comparison : -comparison;
       });
 
-      // Create new sorted table instance
-      const sortedTableId = `${params.instanceId}_sorted_${Date.now()}`;
+      // Preserve source information but mark cells as sorted (position changed)
+      console.log(`🔄 Marking sorted cells with position-changed metadata`);
+      const sortedCellsWithSourcePreserved = sortedCells.map(row => 
+        row.map(cell => {
+          if (cell && cell.source.type === 'web') {
+            // Preserve web source but add metadata indicating position changed due to sorting
+            return {
+              ...cell,
+              source: {
+                ...cell.source,
+                sortingApplied: true, // Custom flag to indicate cell was moved by sorting
+                originalPosition: true // Indicates source points to original, not current position
+              } as any
+            };
+          }
+          return cell;
+        })
+      );
+
+      // Log first few values after sorting
+      console.log(`✅ Sample values after sorting:`, 
+        sortedCellsWithSourcePreserved.slice(0, 3).map((row, i) => {
+          const cell = row[columnIndex];
+          const value = cell && cell.type === 'text' ? cell.content || '' : '';
+          return `Row ${i}: "${value}"`;
+        })
+      );
+
+      // Create updated table instance (modify in place instead of creating new one)
       const sortedTable: TableInstance = {
         ...tableInstance,
-        id: sortedTableId,
-        cells: sortedCells,
-        x: (tableInstance.x || 0) + 50,
-        y: (tableInstance.y || 0) + 50
+        cells: sortedCellsWithSourcePreserved
       };
 
-      // Add to context
-      updateInstances([...currentInstances, sortedTable]);
+      console.log(`🔄 Updating original table instance in place`);
+
+      // Update the original table instead of creating a new one
+      const updatedInstances = currentInstances.map(inst => 
+        inst.id === params.instanceId ? sortedTable : inst
+      );
+      updateInstances(updatedInstances);
+
+      console.log(`🎉 Table sorting completed successfully`);
 
       return {
         success: true,
-        message: `Created sorted table '${sortedTableId}' sorted by '${params.columnName}' (${params.order})`,
+        message: `Sorted table '${params.instanceId}' by column '${params.columnName}' in ${params.order}ending order`,
         result: {
           action: 'tableSort',
-          originalInstanceId: params.instanceId,
-          newInstanceId: sortedTableId,
+          instanceId: params.instanceId,
           columnName: params.columnName,
-          order: params.order
+          order: params.order,
+          rowCount: sortedCellsWithSourcePreserved.length
         }
       };
     } catch (error) {
+      console.error(`💥 Table sorting error:`, error);
       return {
         success: false,
         message: `Failed to sort table: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  }
+
+  /**
+   * Convert a table column from one type to another
+   */
+  private static async executeConvertColumnType(
+    params: { instanceId: string; columnName: string; targetType: 'numerical' | 'categorical'; cleaningPattern?: string; replaceWith?: string },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string; result?: any }> {
+    console.log(`🔄 Converting column type:`, params);
+    
+    try {
+      // Find the table instance
+      const tableInstance = currentInstances.find(
+        inst => inst.id === params.instanceId && inst.type === 'table'
+      ) as TableInstance | undefined;
+
+      if (!tableInstance) {
+        console.error(`❌ Table instance '${params.instanceId}' not found`);
+        return {
+          success: false,
+          message: `Table instance '${params.instanceId}' not found`
+        };
+      }
+
+      console.log(`📋 Found table with ${tableInstance.rows} rows, ${tableInstance.cols} columns`);
+      console.log(`🔍 Current column names:`, tableInstance.columnNames);
+      console.log(`🏷️ Current column types:`, tableInstance.columnTypes);
+
+      // Find the column index
+      const columnIndex = tableInstance.columnNames.indexOf(params.columnName);
+      if (columnIndex === -1) {
+        console.error(`❌ Column '${params.columnName}' not found`);
+        return {
+          success: false,
+          message: `Column '${params.columnName}' not found in table '${params.instanceId}'. Available columns: ${tableInstance.columnNames.join(', ')}`
+        };
+      }
+
+      console.log(`📍 Column '${params.columnName}' found at index ${columnIndex}`);
+
+      // Prepare conversion
+      const cleaningRegex = params.cleaningPattern ? new RegExp(params.cleaningPattern, 'g') : null;
+      const replaceWith = params.replaceWith || '';
+      
+      console.log(`🧹 Cleaning pattern: ${params.cleaningPattern || 'none'}`);
+      console.log(`🔄 Target type: ${params.targetType}`);
+      
+      let convertedCount = 0;
+      let skippedCount = 0;
+      
+      // Create new cells with converted values
+      const convertedCells = tableInstance.cells.map((row, rowIndex) => {
+        if (row[columnIndex] && row[columnIndex].type === 'text') {
+          let content = row[columnIndex].content as string;
+          const originalContent = content;
+          
+          // Apply cleaning pattern if specified
+          if (cleaningRegex) {
+            content = content.replace(cleaningRegex, replaceWith);
+            if (content !== originalContent) {
+              console.log(`🧹 Row ${rowIndex}: "${originalContent}" → "${content}"`);
+            }
+          }
+          
+          // Convert based on target type
+          if (params.targetType === 'numerical') {
+            // Use the same logic as the UI for numerical conversion
+            const numValue = extractNumericalValue(content);
+            if (numValue !== 0 || content.trim() === '0' || content.trim() === '0.0') {
+              console.log(`🔢 Row ${rowIndex}: "${content}" → ${numValue}`);
+              convertedCount++;
+              return row.map((cell, idx) => 
+                idx === columnIndex && cell ? { ...cell, content: numValue.toString() } : cell
+              );
+            } else {
+              console.log(`⚠️ Row ${rowIndex}: "${content}" → skipped (couldn't convert)`);
+              skippedCount++;
+            }
+          }
+          // For categorical or failed numerical conversion, keep as string
+          return row.map((cell, idx) => 
+            idx === columnIndex && cell ? { ...cell, content: content.trim() } : cell
+          );
+        }
+        return row;
+      });
+
+      console.log(`📊 Conversion summary: ${convertedCount} converted, ${skippedCount} skipped`);
+
+      // Update column type
+      const updatedColumnTypes = [...tableInstance.columnTypes];
+      updatedColumnTypes[columnIndex] = params.targetType === 'numerical' ? 'numeral' : 'categorical';
+
+      console.log(`🏷️ Updated column types:`, updatedColumnTypes);
+
+      // Create updated table instance (modify in place for this operation)
+      const updatedTable: TableInstance = {
+        ...tableInstance,
+        cells: convertedCells,
+        columnTypes: updatedColumnTypes
+      };
+
+      console.log(`✅ Table updated successfully`);
+
+      // Update instances
+      const updatedInstances = currentInstances.map(inst => 
+        inst.id === params.instanceId ? updatedTable : inst
+      );
+      updateInstances(updatedInstances);
+
+      console.log(`🎉 Column conversion completed successfully`);
+
+      return {
+        success: true,
+        message: `Converted column '${params.columnName}' to ${params.targetType} type in table '${params.instanceId}' (${convertedCount} cells converted, ${skippedCount} skipped)`,
+        result: {
+          action: 'convertColumnType',
+          instanceId: params.instanceId,
+          columnName: params.columnName,
+          targetType: params.targetType,
+          cleaningPattern: params.cleaningPattern,
+          convertedCount,
+          skippedCount
+        }
+      };
+    } catch (error) {
+      console.error(`💥 Column conversion error:`, error);
+      return {
+        success: false,
+        message: `Failed to convert column type: ${error instanceof Error ? error.message : String(error)}`
       };
     }
   }
@@ -870,4 +1153,43 @@ export const executeMacroTool = async (
   updateInstances: (newInstances: Instance[]) => void
 ) => {
   return await MacroToolExecutor.executeTool(toolCall, currentInstances, updateInstances);
+};
+
+/**
+ * Execute a composite macro suggestion (supports both single tools and tool sequences)
+ */
+export const executeCompositeSuggestion = async (
+  suggestion: {
+    toolCall?: { function: string; parameters: any };
+    toolSequence?: {
+      goal: string;
+      steps: Array<{
+        description: string;
+        toolCall: { function: string; parameters: any };
+      }>;
+    };
+  },
+  currentInstances: Instance[],
+  updateInstances: (newInstances: Instance[]) => void
+): Promise<{ success: boolean; message: string; result?: any }> => {
+  if (suggestion.toolSequence) {
+    // Execute as a composite suggestion
+    return await MacroToolExecutor.executeToolSequence(
+      suggestion.toolSequence,
+      currentInstances,
+      updateInstances
+    );
+  } else if (suggestion.toolCall) {
+    // Execute as a single tool call
+    return await MacroToolExecutor.executeTool(
+      suggestion.toolCall,
+      currentInstances,
+      updateInstances
+    );
+  } else {
+    return {
+      success: false,
+      message: "Suggestion must contain either toolCall or toolSequence"
+    };
+  }
 };

@@ -1356,15 +1356,33 @@ const TableGrid: React.FC<TableGridProps> = ({
                   onDoubleClick={() => handleColumnNameEdit(colIndex)}
                   style={{ 
                     cursor: isReadOnly ? 'default' : 'pointer',
-                    maxWidth: '80px',  // Set maximum width for column headers
+                    maxWidth: '80px',  // Reduced back to 80px for stricter truncation
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
-                    display: 'inline-block'
+                    display: 'inline-block',
+                    fontSize: (() => {
+                      const columnName = getColumnName(colIndex);
+                      // More aggressive font sizing based on column name length
+                      if (columnName.length > 15) return '9px';
+                      if (columnName.length > 12) return '10px';
+                      if (columnName.length > 8) return '11px';
+                      return '12px'; // Default size, reduced from 13px
+                    })(),
+                    lineHeight: '1.0' // Tighter line height
                   }}
                   title={(isReadOnly ? '' : 'Double-click to edit column name. ') + `Full name: ${getColumnName(colIndex)}`}
                 >
-                  {getColumnName(colIndex)}
+                  {(() => {
+                    const columnName = getColumnName(colIndex);
+                    // More aggressive truncation for very long column names
+                    if (columnName.length > 18) {
+                      return columnName.substring(0, 15) + '...';
+                    } else if (columnName.length > 12) {
+                      return columnName.substring(0, 12) + '..';
+                    }
+                    return columnName;
+                  })()}
                 </span>
               )}
               <span

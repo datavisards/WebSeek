@@ -538,9 +538,19 @@ Return strictly JSON with this structure:
     "confidence": number,
     "category": string, // MUST be one of: ${triggeredRules.map(r => r.id).join(', ')}
     "ruleIds": string[], // MUST contain at least one of: ${triggeredRules.map(r => r.id).join(', ')}
-    ${scope === 'macro' ? `"toolCall"?: { // Optional for macro suggestions - specifies how to apply the suggestion
+    ${scope === 'macro' ? `"toolCall"?: { // Optional for simple macro suggestions - single tool execution
       "function": string, // Tool function name (e.g., "openPage", "tableSort", "tableFilter")
       "parameters": object // Tool-specific parameters
+    },
+    "toolSequence"?: { // Optional for composite macro suggestions - multi-step operations
+      "goal": string, // High-level goal description (e.g., "Sort table by price")
+      "steps": Array<{
+        "description": string, // Human-readable step description
+        "toolCall": {
+          "function": string, // Tool function name
+          "parameters": object // Tool parameters
+        }
+      }>
     }` : ''}
   }]
 }
@@ -551,24 +561,70 @@ ${scope === 'macro' ?
 - Macro suggestions provide guidance, recommendations, and external resources
 - They do NOT modify workspace instances directly
 - Focus on workflow advice, external websites, and high-level suggestions
-- When applicable, include a "toolCall" to specify how the suggestion should be applied
+- Use "toolCall" for simple suggestions OR "toolSequence" for composite suggestions that require multiple steps
+- NEVER include both "toolCall" and "toolSequence" in the same suggestion
 
-**EXAMPLE MACRO SUGGESTION WITH TOOL:**
+**WHEN TO USE COMPOSITE SUGGESTIONS (toolSequence):**
+Use toolSequence when the user's goal requires prerequisite steps. Common scenarios:
+- Sorting string-formatted numbers (e.g., "$99.99" prices) - requires conversion then sorting
+- Advanced data cleaning - requires multiple transformation steps
+- Complex table operations - requires preparation steps before the main operation
+
+**EXAMPLE SIMPLE MACRO SUGGESTION:**
 {
-  "message": "Sort your product table by price to identify pricing trends",
+  "message": "Open camera review website to research product features",
+  "scope": "macro",
+  "modality": "peripheral", 
+  "priority": "medium",
+  "confidence": 0.85,
+  "category": "suggest-useful-websites",
+  "ruleIds": ["suggest-useful-websites"],
+  "toolCall": {
+    "function": "openPage",
+    "parameters": {
+      "url": "https://www.dpreview.com",
+      "description": "Professional camera reviews and buying guides"
+    }
+  }
+}
+
+**EXAMPLE COMPOSITE MACRO SUGGESTION:**
+{
+  "message": "Sort your product table by price (lowest to highest)",
   "scope": "macro",
   "modality": "peripheral",
-  "priority": "high",
+  "priority": "high", 
   "confidence": 0.9,
   "category": "table-sorting-filtering",
   "ruleIds": ["table-sorting-filtering"],
-  "toolCall": {
-    "function": "tableSort",
-    "parameters": {
-      "instanceId": "products_123",
-      "columnName": "price",
-      "order": "desc"
-    }
+  "toolSequence": {
+    "goal": "Sort table by price (lowest to highest)",
+    "steps": [
+      {
+        "description": "Convert 'Price' column to numbers (e.g., '$499.99' → 499.99)",
+        "toolCall": {
+          "function": "convertColumnType",
+          "parameters": {
+            "instanceId": "products_table",
+            "columnName": "B",
+            "targetType": "numerical",
+            "cleaningPattern": "[\\\\$,]",
+            "replaceWith": ""
+          }
+        }
+      },
+      {
+        "description": "Sort table by converted price column",
+        "toolCall": {
+          "function": "tableSort", 
+          "parameters": {
+            "instanceId": "products_table",
+            "columnName": "B",
+            "order": "asc"
+          }
+        }
+      }
+    ]
   }
 }` :
   `**IMPORTANT FOR MICRO SUGGESTIONS:**

@@ -14,7 +14,10 @@ interface MacroSuggestionPanelProps {
   onAccept: (suggestionId: string) => void;
   onDismiss: (suggestionId: string) => void;
   onExecuteTool: (toolCall: { function: string; parameters: any }) => void;
+  onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }) => void;
   className?: string;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
@@ -22,7 +25,10 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
   onAccept,
   onDismiss,
   onExecuteTool,
-  className = ''
+  onExecuteToolSequence,
+  className = '',
+  isCollapsed = false,
+  onToggleCollapse
 }) => {
   const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null);
   
@@ -54,9 +60,22 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
   };
 
   const handleApplyTool = (suggestion: ProactiveSuggestion) => {
-    if (suggestion.toolCall) {
+    console.log('[MacroSuggestionPanel] Applying suggestion:', {
+      id: suggestion.id,
+      hasToolSequence: !!suggestion.toolSequence,
+      hasToolCall: !!suggestion.toolCall,
+      hasOnExecuteToolSequence: !!onExecuteToolSequence,
+      suggestion: suggestion
+    });
+    
+    if (suggestion.toolSequence && onExecuteToolSequence) {
+      console.log('[MacroSuggestionPanel] Executing tool sequence:', suggestion.toolSequence);
+      onExecuteToolSequence(suggestion.toolSequence);
+    } else if (suggestion.toolCall) {
+      console.log('[MacroSuggestionPanel] Executing single tool call:', suggestion.toolCall);
       onExecuteTool(suggestion.toolCall);
     } else {
+      console.log('[MacroSuggestionPanel] No tool call or sequence found, accepting suggestion:', suggestion.id);
       onAccept(suggestion.id);
     }
   };
@@ -90,13 +109,27 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
   };
 
   return (
-    <div className={`macro-suggestion-panel ${className}`}>
+    <div className={`macro-suggestion-panel ${isCollapsed ? 'collapsed' : ''} ${className}`}>
       <div className="panel-header">
         <h3>AI Suggestions</h3>
-        <span className="suggestion-count">{macroSuggestions.length}</span>
+        <div className="header-controls">
+          <span className="suggestion-count">{macroSuggestions.length}</span>
+          {onToggleCollapse && (
+            <div className="collapse-toggle-container">
+              <button
+                className="collapse-toggle"
+                onClick={onToggleCollapse}
+                title={isCollapsed ? 'Expand AI suggestions' : 'Collapse AI suggestions'}
+              >
+                {isCollapsed ? '▲' : '▼'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       
-      <div className="suggestions-list">
+      {!isCollapsed && (
+        <div className="suggestions-list">
         {macroSuggestions.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">💡</div>
@@ -214,11 +247,22 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
 
             <div className="suggestion-actions">
               <button
-                className={`accept-btn ${suggestion.toolCall ? 'tool-action' : ''}`}
+                className={`accept-btn ${(suggestion.toolCall || suggestion.toolSequence) ? 'tool-action' : ''}`}
                 onClick={() => handleApplyTool(suggestion)}
-                title={suggestion.toolCall ? `Execute ${getToolDisplayName(suggestion.toolCall.function)}` : "Accept this suggestion"}
+                title={
+                  suggestion.toolSequence 
+                    ? `Execute ${suggestion.toolSequence.steps.length} step sequence: ${suggestion.toolSequence.goal}`
+                    : suggestion.toolCall 
+                      ? `Execute ${getToolDisplayName(suggestion.toolCall.function)}` 
+                      : "Accept this suggestion"
+                }
               >
-                {suggestion.toolCall ? (
+                {suggestion.toolSequence ? (
+                  <>
+                    <span className="tool-icon">🔄</span>
+                    Apply Sequence ({suggestion.toolSequence.steps.length} steps)
+                  </>
+                ) : suggestion.toolCall ? (
                   <>
                     <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
                     Apply
@@ -244,6 +288,7 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
           ))
         )}
       </div>
+      )}
     </div>
   );
 };

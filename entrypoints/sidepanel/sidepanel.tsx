@@ -36,6 +36,9 @@ const SidePanel = () => {
   
   // Tool view collapse state
   const [isToolViewCollapsed, setIsToolViewCollapsed] = useState(false);
+  
+  // AI suggestion panel collapse state
+  const [isSuggestionPanelCollapsed, setIsSuggestionPanelCollapsed] = useState(false);
 
   const addLog = (message: string, actionDetails?: {
     type: string;
@@ -339,6 +342,37 @@ const SidePanel = () => {
     }
   }, [addLog, instances]);
 
+  const handleExecuteToolSequence = useCallback(async (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }) => {
+    console.log('[SidePanel] Executing tool sequence:', toolSequence);
+    
+    try {
+      const { executeCompositeSuggestion } = await import('./macro-tool-executor');
+      const result = await executeCompositeSuggestion({ toolSequence }, instances, setInstances);
+      console.log('[SidePanel] Tool sequence execution result:', result);
+      
+      if (result.success) {
+        addLog(`Tool sequence executed successfully: ${result.message}`, {
+          type: 'tool-sequence-executed',
+          context: { toolSequence, result },
+          metadata: { goal: toolSequence.goal }
+        });
+      } else {
+        addLog(`Tool sequence execution failed: ${result.message}`, {
+          type: 'tool-sequence-execution-error',
+          context: { toolSequence, result },
+          metadata: { goal: toolSequence.goal }
+        });
+      }
+    } catch (error) {
+      console.error('[SidePanel] Tool sequence execution error:', error);
+      addLog(`Tool sequence execution error: ${error instanceof Error ? error.message : String(error)}`, {
+        type: 'tool-sequence-execution-error',
+        context: { toolSequence, error: String(error) },
+        metadata: { goal: toolSequence.goal }
+      });
+    }
+  }, [addLog, instances]);
+
   const handleDismissAllSuggestions = useCallback(() => {
     proactiveService.clearSuggestions();
   }, []);
@@ -350,6 +384,11 @@ const SidePanel = () => {
   // Tool view collapse toggle
   const handleToggleToolViewCollapse = useCallback(() => {
     setIsToolViewCollapsed(prev => !prev);
+  }, []);
+
+  // AI suggestion panel collapse toggle
+  const handleToggleSuggestionPanelCollapse = useCallback(() => {
+    setIsSuggestionPanelCollapsed(prev => !prev);
   }, []);
 
   // Global keyboard event handler for suggestion acceptance and dismissal
@@ -427,6 +466,9 @@ const SidePanel = () => {
         onAccept={handleAcceptSuggestion}
         onDismiss={handleDismissSuggestion}
         onExecuteTool={handleExecuteTool}
+        onExecuteToolSequence={handleExecuteToolSequence}
+        isCollapsed={isSuggestionPanelCollapsed}
+        onToggleCollapse={handleToggleSuggestionPanelCollapse}
       />
       
       <SuggestionIndicator

@@ -6,7 +6,7 @@
  */
 
 import { MACRO_TOOLS, validateToolCall } from './macro-tools';
-import { executeMacroTool } from './macro-tool-executor';
+import { executeMacroTool, executeCompositeSuggestion } from './macro-tool-executor';
 import { Instance } from './types';
 import { normalizeTableInstance } from './utils';
 
@@ -83,6 +83,85 @@ const exampleToolCalls = [
       sourceInstanceId: "main_dataset",
       newName: "backup_dataset",
       modifications: { x: 100, y: 100 }
+    }
+  }
+];
+
+// Example composite suggestions that solve the price sorting problem
+const exampleCompositeSuggestions = [
+  {
+    toolSequence: {
+      goal: "Sort table by price (lowest to highest)",
+      steps: [
+        {
+          description: "Convert 'Price' column from text to numbers (e.g., '$499.99' → 499.99)",
+          toolCall: {
+            function: "convertColumnType",
+            parameters: {
+              instanceId: "Table1",
+              columnName: "B", // Assuming price is in column B
+              targetType: "numerical",
+              cleaningPattern: "[\\$,]", // Remove $ and commas
+              replaceWith: ""
+            }
+          }
+        },
+        {
+          description: "Sort table by converted price column",
+          toolCall: {
+            function: "tableSort",
+            parameters: {
+              instanceId: "Table1",
+              columnName: "B",
+              order: "asc"
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    toolSequence: {
+      goal: "Clean phone numbers and create customer analysis",
+      steps: [
+        {
+          description: "Standardize phone number format by removing special characters",
+          toolCall: {
+            function: "searchAndReplace",
+            parameters: {
+              instanceId: "customer_data",
+              searchPattern: "[^0-9]",
+              replaceWith: "",
+              useRegex: true,
+              columnName: "C" // Phone column
+            }
+          }
+        },
+        {
+          description: "Convert phone numbers to categorical type for analysis",
+          toolCall: {
+            function: "convertColumnType",
+            parameters: {
+              instanceId: "customer_data",
+              columnName: "C",
+              targetType: "categorical"
+            }
+          }
+        },
+        {
+          description: "Create visualization of customer distribution",
+          toolCall: {
+            function: "createVisualization",
+            parameters: {
+              sourceInstanceId: "customer_data",
+              chartType: "bar",
+              xAxis: "A", // Customer name
+              yAxis: "C", // Phone (for count)
+              title: "Customer Phone Number Analysis"
+            }
+          }
+        }
+      ]
     }
   }
 ];
@@ -184,19 +263,19 @@ export async function testToolExecution() {
       cols: 3,
       cells: [
         [
-          { type: 'text', content: 'Alice', id: 'cell1', source: { type: 'manual' } },
-          { type: 'text', content: '25', id: 'cell2', source: { type: 'manual' } },
-          { type: 'text', content: 'Engineer', id: 'cell3', source: { type: 'manual' } }
+          { type: 'text', content: 'Camera A', id: 'cell1', source: { type: 'manual' } },
+          { type: 'text', content: '$499.99', id: 'cell2', source: { type: 'manual' } },
+          { type: 'text', content: '4.5', id: 'cell3', source: { type: 'manual' } }
         ],
         [
-          { type: 'text', content: 'Bob', id: 'cell4', source: { type: 'manual' } },
-          { type: 'text', content: '30', id: 'cell5', source: { type: 'manual' } },
-          { type: 'text', content: 'Designer', id: 'cell6', source: { type: 'manual' } }
+          { type: 'text', content: 'Camera B', id: 'cell4', source: { type: 'manual' } },
+          { type: 'text', content: '$1,250.00', id: 'cell5', source: { type: 'manual' } },
+          { type: 'text', content: '4.8', id: 'cell6', source: { type: 'manual' } }
         ],
         [
-          { type: 'text', content: 'Carol', id: 'cell7', source: { type: 'manual' } },
-          { type: 'text', content: '28', id: 'cell8', source: { type: 'manual' } },
-          { type: 'text', content: 'Manager', id: 'cell9', source: { type: 'manual' } }
+          { type: 'text', content: 'Camera C', id: 'cell7', source: { type: 'manual' } },
+          { type: 'text', content: '$799.99', id: 'cell8', source: { type: 'manual' } },
+          { type: 'text', content: '4.2', id: 'cell9', source: { type: 'manual' } }
         ]
       ],
       x: 0,
@@ -221,6 +300,24 @@ export async function testToolExecution() {
       });
     } catch (error) {
       console.error(`Error executing ${toolCall.function}:`, error);
+    }
+  }
+
+  // Test composite suggestions
+  console.log('\n=== Composite Suggestion Tests ===');
+  
+  for (let i = 0; i < exampleCompositeSuggestions.length; i++) {
+    const compositeSuggestion = exampleCompositeSuggestions[i];
+    try {
+      console.log(`\nTesting Composite Suggestion ${i + 1}: "${compositeSuggestion.toolSequence?.goal}"`);
+      const result = await executeCompositeSuggestion(compositeSuggestion, mockInstances, mockUpdateInstances);
+      console.log(`Composite Suggestion ${i + 1} Result:`, {
+        success: result.success,
+        message: result.message,
+        result: result.result
+      });
+    } catch (error) {
+      console.error(`Error executing composite suggestion ${i + 1}:`, error);
     }
   }
 }

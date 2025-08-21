@@ -344,6 +344,55 @@ export const MACRO_TOOLS: MacroTool[] = [
       "For 'union'/'append' strategy: tables should have compatible column structures",
       "At least 2 source instances required for merging"
     ]
+  },
+  {
+    name: "convertColumnType",
+    description: "Converts a table column from one data type to another. Essential for enabling operations like sorting or filtering on incorrectly typed data (e.g., converting '$99.99' strings to numbers).",
+    parameters: [
+      {
+        name: "instanceId",
+        type: "string",
+        description: "The ID of the table instance containing the column to convert",
+        required: true
+      },
+      {
+        name: "columnName",
+        type: "string",
+        description: "The name of the column to convert (must be exact column name like 'A', 'B', 'C')",
+        required: true
+      },
+      {
+        name: "targetType",
+        type: "string",
+        description: "The target data type to convert to",
+        required: true,
+        options: ["numerical", "categorical"]
+      },
+      {
+        name: "cleaningPattern",
+        type: "string",
+        description: "Optional regex pattern to clean values before conversion (e.g., '[\\$,]' to remove $ and commas from currency)",
+        required: false
+      },
+      {
+        name: "replaceWith",
+        type: "string",
+        description: "What to replace the cleaning pattern with (default: empty string)",
+        required: false,
+        defaultValue: ""
+      }
+    ],
+    examples: [
+      'convertColumnType("Table1", "B", "numerical", "[\\$,]", "")',  // Convert "$99.99" to 99.99
+      'convertColumnType("Table1", "A", "categorical")',             // Convert numbers to text categories
+      'convertColumnType("Table1", "C", "numerical", "[^0-9.]", "")' // Extract numbers from mixed text
+    ],
+    constraints: [
+      "Instance must exist and be a table type",
+      "Column name must exist in the specified table",
+      "Conversion should be logically valid (e.g., don't convert text to numerical if no numbers present)",
+      "Cleaning pattern must be a valid regex if specified"
+    ]
   }
 ];
 

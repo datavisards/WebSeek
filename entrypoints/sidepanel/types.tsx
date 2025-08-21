@@ -201,9 +201,19 @@ export interface ProactiveSuggestion {
   category: string; // Category like 'data-extraction', 'data-cleaning', etc.
   timestamp: number; // When the suggestion was created
   undoable: boolean; // Whether this suggestion can be undone
-  toolCall?: { // Optional tool call for macro suggestions
+  toolCall?: { // Optional single tool call for simple macro suggestions
     function: string; // Tool function name
     parameters: any; // Tool parameters
+  };
+  toolSequence?: { // Optional tool sequence for composite macro suggestions
+    goal: string; // High-level goal description (e.g., "Sort table by price")
+    steps: Array<{
+      description: string; // Human-readable step description (e.g., "Convert 'Price' column to numbers")
+      toolCall: {
+        function: string; // Tool function name
+        parameters: any; // Tool parameters
+      };
+    }>;
   };
 }
 
