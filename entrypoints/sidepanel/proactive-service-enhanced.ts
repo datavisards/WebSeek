@@ -1217,7 +1217,8 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
           confidence: aiSuggestion.confidence || 0.7,
           category: aiSuggestion.category || 'general',
           timestamp: Date.now(),
-          undoable: scope === 'micro' // Only micro suggestions are undoable since they modify instances
+          undoable: scope === 'micro', // Only micro suggestions are undoable since they modify instances
+          toolCall: aiSuggestion.toolCall // Include tool call for macro suggestions
         };
         
         // Use the validated ruleIds

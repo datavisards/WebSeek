@@ -1,4 +1,5 @@
 import { ChatType } from "./types";
+import { generateToolDocumentation } from "./macro-tools";
 
 export const promptInfer = (htmlContextString: string, instanceContextString: string) => `You are an AI assistant in WebSeek, a web extension for web data preparation and analysis.
 WebSeek's interface includes an InstanceView (canvas for data instances: text, image, sketch, table, visualization, etc.) and a ChatView (for users to call the AI assistant for data tasks). 
@@ -457,7 +458,9 @@ ${scope === 'macro' ?
   `- Focus on high-level workflow improvements, multi-instance operations, and interface-wide suggestions
 - MACRO SUGGESTIONS: Do NOT include instance operations in the "instances" array - leave it empty []
 - Macro suggestions provide guidance, external resources, and workflow advice
-- They are displayed in the peripheral AI suggestions panel, NOT as ghost previews` : 
+- They are displayed in the peripheral AI suggestions panel, NOT as ghost previews
+
+${generateToolDocumentation()}` : 
   `- Focus on immediate, contextual improvements within the current editing context (table editor, cell operations)
 - MICRO SUGGESTIONS: Include specific instance operations in the "instances" array
 - Micro suggestions provide direct data manipulation and show ghost previews
@@ -534,7 +537,11 @@ Return strictly JSON with this structure:
     "priority": "high|medium|low",
     "confidence": number,
     "category": string, // MUST be one of: ${triggeredRules.map(r => r.id).join(', ')}
-    "ruleIds": string[] // MUST contain at least one of: ${triggeredRules.map(r => r.id).join(', ')}
+    "ruleIds": string[], // MUST contain at least one of: ${triggeredRules.map(r => r.id).join(', ')}
+    ${scope === 'macro' ? `"toolCall"?: { // Optional for macro suggestions - specifies how to apply the suggestion
+      "function": string, // Tool function name (e.g., "openPage", "tableSort", "tableFilter")
+      "parameters": object // Tool-specific parameters
+    }` : ''}
   }]
 }
 
@@ -543,11 +550,32 @@ ${scope === 'macro' ?
 - The "instances" array MUST always be empty [] 
 - Macro suggestions provide guidance, recommendations, and external resources
 - They do NOT modify workspace instances directly
-- Focus on workflow advice, external websites, and high-level suggestions` :
+- Focus on workflow advice, external websites, and high-level suggestions
+- When applicable, include a "toolCall" to specify how the suggestion should be applied
+
+**EXAMPLE MACRO SUGGESTION WITH TOOL:**
+{
+  "message": "Sort your product table by price to identify pricing trends",
+  "scope": "macro",
+  "modality": "peripheral",
+  "priority": "high",
+  "confidence": 0.9,
+  "category": "table-sorting-filtering",
+  "ruleIds": ["table-sorting-filtering"],
+  "toolCall": {
+    "function": "tableSort",
+    "parameters": {
+      "instanceId": "products_123",
+      "columnName": "price",
+      "order": "desc"
+    }
+  }
+}` :
   `**IMPORTANT FOR MICRO SUGGESTIONS:**
 - The "instances" array contains specific operations to modify workspace data
 - These create ghost previews that users can accept or reject
-- Focus on immediate data manipulation and completion tasks`}
+- Focus on immediate data manipulation and completion tasks
+- Do NOT include "toolCall" field for micro suggestions`}
 
 **EXAMPLE FOR RULE "suggest-useful-websites":**
 If suggesting websites, your response must include:

@@ -201,6 +201,10 @@ export interface ProactiveSuggestion {
   category: string; // Category like 'data-extraction', 'data-cleaning', etc.
   timestamp: number; // When the suggestion was created
   undoable: boolean; // Whether this suggestion can be undone
+  toolCall?: { // Optional tool call for macro suggestions
+    function: string; // Tool function name
+    parameters: any; // Tool parameters
+  };
 }
 
 // User action types that can trigger suggestions

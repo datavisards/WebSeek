@@ -11,6 +11,7 @@ import { actionMonitor } from './action-monitor';
 import SuggestionIndicator from './components/SuggestionIndicator.tsx';
 import ProactiveSettings from './components/ProactiveSettings.tsx';
 import MacroSuggestionPanel from './components/MacroSuggestionPanel.tsx';
+import { executeMacroTool } from './macro-tool-executor';
 import WorkspaceNameModal from './components/WorkspaceNameModal.tsx';
 import { updateInstances } from './utils';
 
@@ -36,7 +37,7 @@ const SidePanel = () => {
   // Tool view collapse state
   const [isToolViewCollapsed, setIsToolViewCollapsed] = useState(false);
 
-  const addLog = (message: string, trigger: boolean = true, actionDetails?: {
+  const addLog = (message: string, actionDetails?: {
     type: string;
     context?: any;
     instanceId?: string;
@@ -58,12 +59,9 @@ const SidePanel = () => {
       recordUserActionFromLog(message);
     }
     
-    if (trigger) {
-      console.log("Triggering proactive suggestions due to logs update", updatedLogs);
-      proactiveService.triggerLogsUpdate(updatedLogs);
-    } else {
-      proactiveService.stopSuggestions(true);
-    }
+    // Always trigger proactive suggestions on log updates
+    console.log("Triggering proactive suggestions due to logs update", updatedLogs);
+    proactiveService.triggerLogsUpdate(updatedLogs);
   };
 
   /**
@@ -123,7 +121,7 @@ const SidePanel = () => {
       { workspaceName: name }
     );
     
-    addLog(`Named workspace "${name}"`, true, {
+    addLog(`Named workspace "${name}"`, {
       type: 'workspace-titled',
       context: { name },
       metadata: { workspaceName: name }
@@ -139,7 +137,7 @@ const SidePanel = () => {
     setHasShownWorkspaceModal(true);
     
     // Log the skip action
-    addLog('Skipped workspace naming, using default name', true, {
+    addLog('Skipped workspace naming, using default name', {
       type: 'workspace-skipped',
       context: { defaultName },
       metadata: { workspaceName: defaultName }
@@ -166,7 +164,7 @@ const SidePanel = () => {
       { workspaceName: trimmedName }
     );
     
-    addLog(`Renamed workspace to "${trimmedName}"`, true, {
+    addLog(`Renamed workspace to "${trimmedName}"`, {
       type: 'workspace-renamed',
       context: { oldName: workspaceName, newName: trimmedName },
       metadata: { workspaceName: trimmedName }
@@ -308,6 +306,39 @@ const SidePanel = () => {
     proactiveService.dismissSuggestion(suggestionId);
   }, []);
 
+  // Tool execution handler for macro suggestions
+  const handleExecuteTool = useCallback(async (toolCall: { function: string; parameters: any }) => {
+    console.log('[SidePanel] Executing tool:', toolCall);
+    
+    try {
+      const result = await executeMacroTool(toolCall, instances, setInstances);
+      console.log('[SidePanel] Tool execution result:', result);
+      
+      if (result.success) {
+        // Show success message or handle the result as needed
+        addLog(`Tool executed successfully: ${result.message}`, {
+          type: 'tool-executed',
+          context: { toolCall, result },
+          metadata: { toolFunction: toolCall.function }
+        });
+      } else {
+        // Show error message
+        addLog(`Tool execution failed: ${result.message}`, {
+          type: 'tool-execution-error',
+          context: { toolCall, result },
+          metadata: { toolFunction: toolCall.function }
+        });
+      }
+    } catch (error) {
+      console.error('[SidePanel] Tool execution error:', error);
+      addLog(`Tool execution error: ${error instanceof Error ? error.message : String(error)}`, {
+        type: 'tool-execution-error',
+        context: { toolCall, error: String(error) },
+        metadata: { toolFunction: toolCall.function }
+      });
+    }
+  }, [addLog, instances]);
+
   const handleDismissAllSuggestions = useCallback(() => {
     proactiveService.clearSuggestions();
   }, []);
@@ -395,6 +426,7 @@ const SidePanel = () => {
         suggestions={suggestions}
         onAccept={handleAcceptSuggestion}
         onDismiss={handleDismissSuggestion}
+        onExecuteTool={handleExecuteTool}
       />
       
       <SuggestionIndicator

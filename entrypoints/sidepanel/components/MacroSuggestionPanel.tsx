@@ -1,17 +1,19 @@
 /**
  * MacroSuggestionPanel - A dedicated panel for displaying macro (peripheral) suggestions
- * Integrates with the existing sidepanel layout
+ * Integrates with the existing sidepanel layout and supports tool-based suggestion execution
  */
 
 import React, { useState, useEffect } from 'react';
 import { ProactiveSuggestion } from '../types';
 import { detectMarkdown, renderMarkdown } from '../utils';
+import { MACRO_TOOLS } from '../macro-tools';
 import './MacroSuggestionPanel.css';
 
 interface MacroSuggestionPanelProps {
   suggestions: ProactiveSuggestion[];
   onAccept: (suggestionId: string) => void;
   onDismiss: (suggestionId: string) => void;
+  onExecuteTool: (toolCall: { function: string; parameters: any }) => void;
   className?: string;
 }
 
@@ -19,12 +21,45 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
   suggestions,
   onAccept,
   onDismiss,
+  onExecuteTool,
   className = ''
 }) => {
   const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null);
   
   // Filter for macro suggestions only
   const macroSuggestions = suggestions.filter(s => s.scope === 'macro');
+
+  const getToolIcon = (toolName: string) => {
+    switch (toolName) {
+      case 'openPage': return '🌐';
+      case 'tableSort': return '🔄';
+      case 'tableFilter': return '🔍';
+      case 'createVisualization': return '📊';
+      case 'exportData': return '💾';
+      case 'duplicateInstance': return '📋';
+      case 'searchAndReplace': return '🔄';
+      case 'mergeInstances': return '🔗';
+      default: return '⚙️';
+    }
+  };
+
+  const getToolDisplayName = (toolName: string) => {
+    const tool = MACRO_TOOLS.find(t => t.name === toolName);
+    return tool ? tool.name : toolName;
+  };
+
+  const getToolDescription = (toolName: string) => {
+    const tool = MACRO_TOOLS.find(t => t.name === toolName);
+    return tool ? tool.description : 'Execute tool action';
+  };
+
+  const handleApplyTool = (suggestion: ProactiveSuggestion) => {
+    if (suggestion.toolCall) {
+      onExecuteTool(suggestion.toolCall);
+    } else {
+      onAccept(suggestion.id);
+    }
+  };
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -113,6 +148,14 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
                 </div>
               )}
 
+              {suggestion.toolCall && (
+                <div className="tool-indicator">
+                  <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
+                  <span className="tool-name">{getToolDisplayName(suggestion.toolCall.function)}</span>
+                  <span className="tool-action">Action available</span>
+                </div>
+              )}
+
               {expandedSuggestion === suggestion.id && (
                 <div className="expanded-details">
                   {suggestion.detailedDescription && (
@@ -126,6 +169,23 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
                         {suggestion.detailedDescription}
                       </p>
                     )
+                  )}
+
+                  {suggestion.toolCall && (
+                    <div className="tool-details">
+                      <strong>Tool Action:</strong>
+                      <div className="tool-info">
+                        <div className="tool-header">
+                          <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
+                          <span className="tool-title">{getToolDisplayName(suggestion.toolCall.function)}</span>
+                        </div>
+                        <p className="tool-description">{getToolDescription(suggestion.toolCall.function)}</p>
+                        <div className="tool-parameters">
+                          <strong>Parameters:</strong>
+                          <pre>{JSON.stringify(suggestion.toolCall.parameters, null, 2)}</pre>
+                        </div>
+                      </div>
+                    </div>
                   )}
                   
                   {suggestion.contextualData && (
@@ -154,11 +214,18 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
 
             <div className="suggestion-actions">
               <button
-                className="accept-btn"
-                onClick={() => onAccept(suggestion.id)}
-                title="Accept this suggestion"
+                className={`accept-btn ${suggestion.toolCall ? 'tool-action' : ''}`}
+                onClick={() => handleApplyTool(suggestion)}
+                title={suggestion.toolCall ? `Execute ${getToolDisplayName(suggestion.toolCall.function)}` : "Accept this suggestion"}
               >
-                Apply
+                {suggestion.toolCall ? (
+                  <>
+                    <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
+                    Apply
+                  </>
+                ) : (
+                  'Apply'
+                )}
               </button>
               <button
                 className="dismiss-btn"

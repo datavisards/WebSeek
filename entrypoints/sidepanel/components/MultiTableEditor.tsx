@@ -62,7 +62,12 @@ interface MultiTableEditorProps {
   onUpdateColumnName?: (tableId: string, colIndex: number, columnName: string) => void;
   onLiftRowToHeader?: (tableId: string, rowIndex: number) => void;
   currentSuggestion?: ProactiveSuggestion;
-  onOperation?: (message: string, trigger?: boolean) => void;
+  onOperation?: (message: string, actionDetails?: {
+    type: string;
+    context?: any;
+    instanceId?: string;
+    metadata?: any;
+  }) => void;
 }
 
 const MultiTableEditor: React.FC<MultiTableEditorProps> = ({

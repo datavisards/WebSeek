@@ -31,7 +31,7 @@ interface InstanceViewProps {
   messages: Message[];
   workspaceName: string;
   onWorkspaceNameChange: (newName: string) => void;
-  onOperation: (message: string, trigger?: boolean, actionDetails?: {
+  onOperation: (message: string, actionDetails?: {
     type: string;
     context?: any;
     instanceId?: string;
@@ -608,7 +608,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setInstances(prev => [...prev, newSketch]);
     setAvailableInstances(instances.filter(inst => inst.type !== 'sketch'));
     setEditingSketchId(newSketch.id);
-    onOperation(`Open sketch editor to create a new sketch "${newId}"`, false);
+    onOperation(`Open sketch editor to create a new sketch "${newId}"`);
   };
 
   // Add an instance to the sketch
@@ -710,7 +710,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         }
       })
       .join(', ');
-    onOperation(`Created [${sketch.id}](#instance-${sketch.id})` + (originalInstanceId ? ` from [${originalInstanceId}](#instance-${originalInstanceId})` : '') + (withstr ? ` with ${withstr}` : ''), false);
+    onOperation(`Created [${sketch.id}](#instance-${sketch.id})` + (originalInstanceId ? ` from [${originalInstanceId}](#instance-${originalInstanceId})` : '') + (withstr ? ` with ${withstr}` : ''));
     setCurrentStroke(null);
     setEditingSketchId(null);
     setAvailableInstances([]);
@@ -719,7 +719,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   // Cancel sketch creation
   const handleCancelSketch = () => {
     if (!editingSketchId) return;
-    onOperation(`Cancel sketch creation for "${editingSketchId}"`, false);
+    onOperation(`Cancel sketch creation for "${editingSketchId}"`);
     setInstances(prev => prev.filter(inst => inst.id !== editingSketchId));
     setEditingSketchId(null);
     setAvailableInstances([]);
@@ -959,7 +959,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         }));
 
         const logMessage = `Appended text to cell (${row + 1}, ${String.fromCharCode(65 + col)}) from [${message.pageId}](${message.pageURL})`;
-        onOperation(logMessage, true, {
+        onOperation(logMessage, {
           type: 'cell-edited',
           context: { 
             value: 'web-content',
@@ -1004,7 +1004,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         }));
 
         const logMessage = `Added image to cell (${row + 1}, ${String.fromCharCode(65 + col)}) from [${message.pageId}](${message.pageURL})`;
-        onOperation(logMessage, true, {
+        onOperation(logMessage, {
           type: 'cell-edited',
           context: { 
             value: 'web-content',
@@ -1147,7 +1147,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     if (instance.type === 'text') {
       setEditingTextId(instance.id);
       setEditingTextContent(instance.content);
-      onOperation(`Edit text "${instance.id}" by editing the embedded text content`, false);
+      onOperation(`Edit text "${instance.id}" by editing the embedded text content`);
     } else if (instance.type === 'image' || instance.type === 'sketch') {
       // Generate a temporary ID with suffix for editing existing instances
       const existingIds = new Set(instances.map(inst => inst.id));
@@ -1193,7 +1193,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       setInstances(prev => [...prev, newSketch]);
       setEditingSketchId(newSketch.id);
       setAvailableInstances(prev => prev.filter(inst => inst.id !== instance.id && inst.type !== 'sketch'));
-      onOperation(`Edit ${instance.type} "${instance.id}" by editing the embedded ${instance.type} in sketch "${newSketch.id}"`, false);
+      onOperation(`Edit ${instance.type} "${instance.id}" by editing the embedded ${instance.type} in sketch "${newSketch.id}"`);
     } else if (instance.type === 'table') {
       let newTable = structuredClone(instance) as TableInstance;
       // Generate a versioned ID for editing existing table
@@ -1209,11 +1209,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       setInstances(prev => [...prev, newTable]);
       setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
       setEditingTableId(newTable.id);
-      onOperation(`Edit table "${instance.id}" by editing the embedded table "${newTable.id}"`, false);
+      onOperation(`Edit table "${instance.id}" by editing the embedded table "${newTable.id}"`);
     } else if (instance.type === 'visualization') {
       setEditingVisualizationSpec(instance.spec);
       setAvailableInstances(instances.filter(inst => inst.type !== 'visualization'));
-      onOperation(`Edit visualization "${instance.id}" by editing the embedded visualization spec`, false);
+      onOperation(`Edit visualization "${instance.id}" by editing the embedded visualization spec`);
     }
   }
 
@@ -1239,7 +1239,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     ]);
     const newDisplay = editingTextContent;
 
-    onOperation(`Save text editing of "${original.id}" changing value from "${originalDisplay}" to "${newDisplay}" creating new text "${newTextId}"`, false);
+    onOperation(`Save text editing of "${original.id}" changing value from "${originalDisplay}" to "${newDisplay}" creating new text "${newTextId}"`);
 
     setEditingTextId(null);
   };
@@ -1389,7 +1389,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
     
     const logMessage = `Opened table editor to created a new table with ID "${newId}"`;
-    onOperation(logMessage, false, {
+    onOperation(logMessage, {
       type: 'table-selected',
       context: { message: logMessage, editorOpened: true },
       instanceId: newId
@@ -1403,7 +1403,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     const message = `Add ${instance.type} "${instance.id}" to table cell (${row + 1}, ${String.fromCharCode(65 + col)}) in table "${editingTableId}"`;
     
     // Record action directly instead of parsing from log message
-    onOperation(message, true, {
+    onOperation(message, {
       type: 'cell-edited',
       context: { 
         value: instance.id, 
@@ -1507,9 +1507,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       }
 
       if (originalInstanceId) {
-        onOperation(`Saved and closed the table editor. Created [${table.id}](#instance-${table.id}) from [${originalInstanceId}](#instance-${originalInstanceId})` + (withstr ? ` with ${withstr}` : ''), false);
+        onOperation(`Saved and closed the table editor. Created [${table.id}](#instance-${table.id}) from [${originalInstanceId}](#instance-${originalInstanceId})` + (withstr ? ` with ${withstr}` : ''));
       } else {
-        onOperation(`Saved and closed the table editor. Created [${table.id}](#instance-${table.id})` + (withstr ? ` with ${withstr}` : ''), false);
+        onOperation(`Saved and closed the table editor. Created [${table.id}](#instance-${table.id})` + (withstr ? ` with ${withstr}` : ''));
       }
       
       // Close the editor
@@ -1528,9 +1528,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setInstances(prev => prev.filter(inst => inst.id !== editingTableId));
     
     if (originalInstanceId) {
-      onOperation(`Cancelled table editing for "${originalInstanceId}" and closed the table editor`, false);
+      onOperation(`Cancelled table editing for "${originalInstanceId}" and closed the table editor`);
     } else {
-      onOperation(`Cancelled table creation for "${editingTableId}" and closed the table editor`, false);
+      onOperation(`Cancelled table creation for "${editingTableId}" and closed the table editor`);
     }
     
     setEditingTableId(null);
@@ -2265,7 +2265,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     };
     setEditingVisualizationSpec(defaultSpec);
     setAvailableInstances(instances.filter(inst => inst.type === 'table' || inst.type === 'text' || inst.type === 'image'));
-    onOperation(`Open visualization editor to create a new visualization with default bar chart template`, false);
+    onOperation(`Open visualization editor to create a new visualization with default bar chart template`);
   };
 
   // Add save/cancel handlers for VisualizationEditor
@@ -2281,7 +2281,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
               : inst
           )
         );
-        onOperation(`Updated [${originalInstanceId}](#instance-${originalInstanceId}) visualization spec`, false);
+        onOperation(`Updated [${originalInstanceId}](#instance-${originalInstanceId}) visualization spec`);
       }
     } else {
       // Create new visualization instance
@@ -2301,7 +2301,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         ...prev,
         newVisualizationInstance
       ]);
-      onOperation(`Created [${newId}](#instance-${newId}) as visualization`, false);
+      onOperation(`Created [${newId}](#instance-${newId}) as visualization`);
     }
     
     setEditingVisualizationSpec(null);
@@ -2309,7 +2309,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setOriginalInstanceId(null);
   };
   const handleCancelVisualization = () => {
-    onOperation(`Cancel visualization ${originalInstanceId ? 'editing' : 'creation'}`, false);
+    onOperation(`Cancel visualization ${originalInstanceId ? 'editing' : 'creation'}`);
     setEditingVisualizationSpec(null);
     setAvailableInstances([]);
     setOriginalInstanceId(null);

@@ -300,3 +300,108 @@
     min-width: 80px;
   }
 }
+
+/* Tool-related styles */
+.tool-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 8px;
+  background: #f0f9ff;
+  border: 1px solid #0ea5e9;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.tool-indicator .tool-icon {
+  font-size: 14px;
+}
+
+.tool-indicator .tool-name {
+  font-weight: 500;
+  color: #0369a1;
+}
+
+.tool-indicator .tool-action {
+  color: #0284c7;
+  font-style: italic;
+}
+
+.tool-details {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.tool-info .tool-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tool-info .tool-title {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.tool-info .tool-description {
+  margin: 0 0 12px 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.tool-parameters {
+  margin-top: 8px;
+}
+
+.tool-parameters pre {
+  background: #f1f5f9;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  overflow-x: auto;
+  margin: 4px 0 0 0;
+}
+
+.suggestion-actions .accept-btn.tool-action {
+  background: linear-gradient(135deg, #0ea5e9, #0284c7);
+  border: none;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.suggestion-actions .accept-btn.tool-action:hover {
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+}
+
+.suggestion-actions .accept-btn.tool-action .tool-icon {
+  font-size: 12px;
+}
+
+.tool-action-preview {
+  margin-top: 8px;
+  padding: 8px;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.tool-action-preview .preview-title {
+  font-weight: 500;
+  color: #92400e;
+  margin-bottom: 4px;
+}
+
+.tool-action-preview .preview-description {
+  color: #b45309;
+}
