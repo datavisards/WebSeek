@@ -470,8 +470,9 @@ class EnhancedProactiveService {
         console.log('[EnhancedProactiveService] Proceeding with context-independent suggestions despite no HTML context');
       }
 
-      // Generate instance and conversation context
-      const { imageContext, textContext } = await generateInstanceContext(currentInstances);
+      // Generate instance and conversation context (excluding images for API efficiency)
+      const { textContext } = await generateInstanceContext(currentInstances);
+      const imageContext: any[] = []; // No images for suggestions to improve API efficiency
 
       // Check if generation was cancelled after context generation
       if (this.currentGenerationController.signal.aborted) {
@@ -1302,8 +1303,9 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
         console.log('[EnhancedProactiveService] Proceeding with context-independent manual suggestions despite no HTML context');
       }
 
-      // Generate instance and conversation context
-      const { imageContext, textContext } = await generateInstanceContext(currentInstances);
+      // Generate instance and conversation context (excluding images for API efficiency)
+      const { textContext } = await generateInstanceContext(currentInstances);
+      const imageContext: any[] = []; // No images for suggestions to improve API efficiency
 
       console.log('[EnhancedProactiveService] Generating legacy LLM suggestions...');
 
@@ -1906,8 +1908,9 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
       
       let result;
       if (import.meta.env.WXT_USE_LLM == "true") {
-        // Generate instance and conversation context
-        const { imageContext, textContext } = await generateInstanceContext(context.instances);
+        // Generate instance and conversation context (excluding images for API efficiency)
+        const { textContext } = await generateInstanceContext(context.instances);
+        const imageContext: any[] = []; // No images for suggestions to improve API efficiency
         
         result = await this.chatWithAgentAbortable(
           'suggest',
