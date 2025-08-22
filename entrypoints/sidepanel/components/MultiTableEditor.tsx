@@ -69,6 +69,7 @@ interface MultiTableEditorProps {
     instanceId?: string;
     metadata?: any;
   }) => void;
+  setIsInEditor?: React.Dispatch<React.SetStateAction<boolean>>; // For tracking editor state
 }
 
 const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
@@ -95,7 +96,9 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
   onLiftRowToHeader,
   currentSuggestion,
   onOperation,
+  setIsInEditor,
 }) => {
+  console.log('[MultiTableEditor] Component loaded with setIsInEditor:', !!setIsInEditor);
   // State for managing multiple open tables
   const [openTables, setOpenTables] = useState<OpenTable[]>(() => {
     if (!initialTableId) return [];
@@ -1628,6 +1631,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
             onUpdateColumnName={onUpdateColumnName ? handleUpdateColumnNameWrapped : undefined}
             onLiftRowToHeader={onLiftRowToHeader ? handleLiftRowToHeaderWrapped : undefined}
             currentSuggestion={currentSuggestion}
+            setIsInEditor={setIsInEditor}
             onAcceptSuggestion={() => {
               if (currentSuggestion) {
                 console.log('Accepting suggestion:', currentSuggestion);
@@ -1691,6 +1695,22 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
                         </div>
                       ))}
                     </div>
+                  </div>
+                ) : instance.type === 'visualization' ? (
+                  <div className="visualization-thumbnail">
+                    {instance.thumbnail ? (
+                      <img
+                        src={instance.thumbnail}
+                        alt="visualization"
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
+                    ) : (
+                      <div className="visualization-thumb-placeholder" style={{ background: '#f0f8ff', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" fill="#007acc">
+                          <path d="M3 3v18h18v-2H5V3H3zm4 14h2v-6H7v6zm4 0h2v-8h-2v8zm4 0h2V7h-2v10z"/>
+                        </svg>
+                      </div>
+                    )}
                   </div>
                 ) : null}
               </div>

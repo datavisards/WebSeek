@@ -5,7 +5,7 @@
 
 import { validateToolCall } from './macro-tools';
 import { TableInstance, VisualizationInstance, Instance } from './types';
-import { extractNumericalValue } from './utils';
+import { extractNumericalValue, getVisualizationThumbnail } from './utils';
 
 export class MacroToolExecutor {
   
@@ -282,7 +282,7 @@ export class MacroToolExecutor {
       console.log(`🔄 Marking sorted cells with position-changed metadata`);
       const sortedCellsWithSourcePreserved = sortedCells.map(row => 
         row.map(cell => {
-          if (cell && cell.source.type === 'web') {
+          if (cell && cell.source && cell.source.type === 'web') {
             // Preserve web source but add metadata indicating position changed due to sorting
             return {
               ...cell,
@@ -660,21 +660,41 @@ export class MacroToolExecutor {
           };
       }
 
+      // Generate thumbnail for the visualization
+      let thumbnail = '';
+      try {
+        thumbnail = await getVisualizationThumbnail(vegaSpec);
+      } catch (error) {
+        console.warn('[MacroToolExecutor] Failed to generate thumbnail for visualization:', error);
+        // Continue without thumbnail - the visualization will still be created
+      }
+
       // Create new visualization instance
       const vizId = `${params.sourceInstanceId}_viz_${Date.now()}`;
+      const xPos = (tableInstance.x || 0) + (tableInstance.width || 400) + 20;
+      const yPos = tableInstance.y || 0;
+      
+      console.log('[MacroToolExecutor] Creating visualization at position:', { x: xPos, y: yPos });
+      console.log('[MacroToolExecutor] Source table position:', { x: tableInstance.x, y: tableInstance.y, width: tableInstance.width, height: tableInstance.height });
+      
       const visualization: VisualizationInstance = {
         id: vizId,
         type: 'visualization',
         source: { type: 'manual' },
         spec: vegaSpec,
-        x: (tableInstance.x || 0) + (tableInstance.width || 400) + 20,
-        y: tableInstance.y || 0,
+        thumbnail: thumbnail, // Add the generated thumbnail (or empty string if failed)
+        x: xPos,
+        y: yPos,
         width: 400,
         height: 300
       };
 
       // Add to context
-      updateInstances([...currentInstances, visualization]);
+      console.log('[MacroToolExecutor] Adding visualization to instances:', visualization.id);
+      console.log('[MacroToolExecutor] Current instances count:', currentInstances.length);
+      const newInstances = [...currentInstances, visualization];
+      console.log('[MacroToolExecutor] New instances count:', newInstances.length);
+      updateInstances(newInstances);
 
       return {
         success: true,

@@ -31,6 +31,8 @@ interface TableGridProps {
   // Selection operations
   selectedRange?: { startRow: number; endRow: number; startCol: number; endCol: number } | null;
   onRangeSelectionChange?: (range: { startRow: number; endRow: number; startCol: number; endCol: number } | null) => void;
+  // Editor state tracking
+  setIsInEditor?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const TableGrid: React.FC<TableGridProps> = ({
@@ -57,12 +59,17 @@ const TableGrid: React.FC<TableGridProps> = ({
   onPasteToRow,
   onPasteToColumn,
   selectedRange,
-  onRangeSelectionChange
+  onRangeSelectionChange,
+  setIsInEditor
 }) => {
-  // These will be computed later based on effective table dimensions
+  console.log('[TableGrid] Component loaded');
   const [hoveredCell, setHoveredCell] = useState<{ row: number, col: number } | null>(null);
   const [editingCell, setEditingCell] = useState<{ row: number, col: number } | null>(null);
   const [editingColumnName, setEditingColumnName] = useState<number | null>(null);
+  
+  // Note: isInEditor state is now managed at the InstanceView level when entering/exiting table editor
+  // Individual cell editing within the table does not change the overall editor state
+  
   const [flashfillSuggestions, setFlashfillSuggestions] = useState<Map<string, string[]>>(new Map());
   const [dragPreview, setDragPreview] = useState<{ row: number, col: number }[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -972,6 +979,7 @@ const TableGrid: React.FC<TableGridProps> = ({
     if (e.key === 'F2' || e.key === 'Enter') {
       e.preventDefault();
       if (canEditCell(cell)) {
+        console.log('[TableGrid] Starting cell editing via keyboard:', selectedCell);
         setEditingCell(selectedCell);
       } else if (cell && cell.type === 'image') {
         alert('Image cells cannot be edited directly. Please remove the image first.');
@@ -1356,10 +1364,6 @@ const TableGrid: React.FC<TableGridProps> = ({
                   onDoubleClick={() => handleColumnNameEdit(colIndex)}
                   style={{ 
                     cursor: isReadOnly ? 'default' : 'pointer',
-                    maxWidth: '80px',  // Reduced back to 80px for stricter truncation
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
                     display: 'inline-block',
                     fontSize: (() => {
                       const columnName = getColumnName(colIndex);
@@ -1578,6 +1582,7 @@ const TableGrid: React.FC<TableGridProps> = ({
               onMouseEnter={() => handleCellMouseEnter(originalRowIndex, colIndex)}
               onDoubleClick={isReadOnly || isEditing ? undefined : () => {
                 if (canEditCell(cell)) {
+                  console.log('[TableGrid] Starting cell editing via double-click:', { row: displayRowIndex, col: colIndex });
                   setEditingCell({ row: displayRowIndex, col: colIndex });
                 } else if (cell && cell.type === 'image') {
                   alert('Image cells cannot be edited directly. Please remove the image first.');

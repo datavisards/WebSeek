@@ -187,10 +187,14 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
     try {
       const spec = typeof initialSpec === 'string' ? JSON.parse(initialSpec) : initialSpec;
 
-      // Extract chart type from mark
+      // Extract chart type from mark and encoding
       if (spec.mark) {
         const markType = typeof spec.mark === 'string' ? spec.mark : spec.mark.type;
-        if (['bar', 'line', 'point', 'histogram'].includes(markType)) {
+        
+        // Special case: detect histograms by checking for binning in x-axis and count in y-axis
+        if (markType === 'bar' && spec.encoding?.x?.bin && spec.encoding?.y?.aggregate === 'count') {
+          setChartType('histogram');
+        } else if (['bar', 'line', 'point', 'histogram'].includes(markType)) {
           setChartType(markType);
         }
       }

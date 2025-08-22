@@ -32,8 +32,10 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
 }) => {
   const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null);
   
-  // Filter for macro suggestions only
-  const macroSuggestions = suggestions.filter(s => s.scope === 'macro');
+  // Filter for macro suggestions only and sort by confidence (descending)
+  const macroSuggestions = suggestions
+    .filter(s => s.scope === 'macro')
+    .sort((a, b) => b.confidence - a.confidence);
 
   const getToolIcon = (toolName: string) => {
     switch (toolName) {

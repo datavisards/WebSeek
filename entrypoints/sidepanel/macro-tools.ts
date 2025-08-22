@@ -73,7 +73,7 @@ export const MACRO_TOOLS: MacroTool[] = [
       {
         name: "columnName",
         type: "string",
-        description: "The name of the column to sort by",
+        description: "The EXACT column name from table's columnNames array, or column letter (A, B, C, etc.). MUST exist in the target table.",
         required: true
       },
       {
@@ -96,7 +96,9 @@ export const MACRO_TOOLS: MacroTool[] = [
     ],
     constraints: [
       "Table instance must exist in the workspace",
-      "Column name must exist in the target table",
+      "Column name must match EXACTLY with table's columnNames array or use column letter (A, B, C, etc.)",
+      "NEVER reference non-existent columns - validate column exists before suggesting",
+      "Table must NOT already be sorted by the suggested column in the suggested order (avoid redundant sorting)",
       "Sort operation should provide meaningful data organization"
     ]
   },
@@ -131,7 +133,8 @@ export const MACRO_TOOLS: MacroTool[] = [
     ],
     constraints: [
       "Table instance must exist in the workspace",
-      "All referenced columns must exist in the target table",
+      "All referenced columns must match EXACTLY with table's columnNames array or use column letters (A, B, C, etc.)",
+      "NEVER reference non-existent columns - validate all column names before suggesting",
       "Filter conditions should result in meaningful subset of data"
     ]
   },

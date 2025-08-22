@@ -524,6 +524,15 @@ ${triggeredRules.map(r => `- "${r.id}"`).join('\n')}
 **CRITICAL RULE ID REQUIREMENT:**
 The "ruleIds" array MUST contain the rule ID(s) that your suggestion addresses. It cannot be empty and must reference only the triggered rules listed above.
 
+**CRITICAL TABLE OPERATIONS REQUIREMENT:**
+When suggesting table operations (sorting, filtering, etc.), you MUST:
+1. **ANALYZE TABLE STRUCTURE FIRST**: Examine the table's columnNames and columnTypes arrays in the instance context
+2. **USE EXACT COLUMN REFERENCES**: Only reference columns that actually exist in the table
+3. **VALIDATE COLUMN NAMES**: For tableSort/tableFilter functions, use the exact columnName from the table or the column letter (A, B, C, etc.)
+4. **NEVER INVENT COLUMNS**: Do not suggest operations on columns like "rating", "reviews", "description" unless they exist in the table
+5. **CHECK COLUMN CONTENT**: Ensure the suggested column contains sortable/filterable data
+6. **AVOID REDUNDANT OPERATIONS**: For sorting, verify the table is NOT already sorted by the suggested column in the suggested order (asc/desc)
+
 **RESPONSE FORMAT:**
 Return strictly JSON with this structure:
 {
@@ -649,7 +658,7 @@ export const createRuleConstraints = (triggeredRules: any[]): string => {
     const constraints = triggeredRules.map(rule => {
       switch (rule.id) {
         case 'table-cell-completion':
-          return `• ${rule.name}: You MUST verify that captured webpage elements have POSITIONAL, STRUCTURAL, or SEMANTIC relationships before suggesting completion. 
+          return `- ${rule.name}: You MUST verify that captured webpage elements have POSITIONAL, STRUCTURAL, or SEMANTIC relationships before suggesting completion. 
 
 **CRITICAL REQUIREMENT: NEVER SUGGEST AN IDENTICAL TABLE**
 - The suggested table MUST be meaningfully different from the current table
@@ -719,63 +728,90 @@ If you cannot identify meaningful, substantial improvements to the table (more r
 DO NOT suggest trivial additions or formatting changes. DO NOT suggest completion if you cannot make meaningful improvements to the table.`;
         
         case 'column-pattern-analysis':
-          return `• ${rule.name}: You MUST verify that data in table columns shows clear patterns (data types, formats, relationships) before suggesting analysis. Analyze:
+          return `- ${rule.name}: You MUST verify that data in table columns shows clear patterns (data types, formats, relationships) before suggesting analysis. Analyze:
     - Consistent data types within columns
     - Format patterns (dates, numbers, text structures)
     - Value relationships between columns
     - Missing data patterns`;
         
         case 'visualization-suggestion':
-          return `• ${rule.name}: You MUST verify that table data is suitable for visualization before suggesting charts. Check:
+          return `- ${rule.name}: You MUST verify that table data is suitable for visualization before suggesting charts. Check:
     - Presence of quantitative or categorical data
     - Sufficient data points for meaningful visualization
     - Clear variable relationships
     - Data completeness and quality`;
         
         case 'cross-instance-duplication':
-          return `• ${rule.name}: You MUST verify that elements across instances are genuinely related or part of a collection before suggesting consolidation. Check:
+          return `- ${rule.name}: You MUST verify that elements across instances are genuinely related or part of a collection before suggesting consolidation. Check:
     - Similar data structures or schemas
     - Common source domains or contexts
     - Logical relationships between datasets
     - Potential for meaningful merging`;
         
         case 'workflow-automation':
-          return `• ${rule.name}: You MUST verify that user actions form a repeatable pattern before suggesting automation. Analyze:
+          return `- ${rule.name}: You MUST verify that user actions form a repeatable pattern before suggesting automation. Analyze:
     - Consistent action sequences
     - Similar operation contexts
     - Potential for parameterization
     - Clear automation benefits`;
         
         case 'data-quality-improvement':
-          return `• ${rule.name}: You MUST identify specific data quality issues before suggesting improvements. Check for:
+          return `- ${rule.name}: You MUST identify specific data quality issues before suggesting improvements. Check for:
     - Missing values or incomplete records
     - Inconsistent formatting
     - Duplicate entries
     - Invalid or outlier values`;
 
         case 'table-sorting-filtering':
-          return `• ${rule.name}: You MUST verify that table data is suitable for sorting or filtering operations. Check:
+          return `- ${rule.name}: You MUST verify that table data is suitable for sorting or filtering operations AND use EXACT column information from the table schema. Check:
     - Tables with sufficient data rows (>3 rows)
     - Columns with varied content that can be meaningfully sorted
     - Data types that support comparison operations
-    - Clear benefit from organizing the data differently`;
+    - Clear benefit from organizing the data differently
+
+**CRITICAL: COLUMN NAME ACCURACY REQUIREMENT**
+When suggesting table operations, you MUST:
+1. **Use EXACT column names from the table's columnNames array** - DO NOT guess or make up column names
+2. **Reference columns by their actual position/name** - Check the table structure in the instance context
+3. **Verify column existence** - Only suggest sorting/filtering on columns that actually exist in the table
+4. **Use correct column references** - For tableSort/tableFilter, use the actual columnName or column letter (A, B, C, etc.)
+
+**EXAMPLE CORRECT USAGE:**
+- If table has columnNames: ["Product Name", "Price", "Brand"], suggest sorting by "Price" or "Product Name"
+- If table has columns A, B, C with no names, suggest sorting by "A", "B", or "C"
+- NEVER suggest sorting by columns like "rating", "reviews", "description" unless they actually exist in the table
+
+**CRITICAL: AVOID REDUNDANT SORTING SUGGESTIONS**
+Before suggesting any sort operation, you MUST:
+1. **Check if table is already sorted** - Analyze the data to see if it's already organized by the suggested column
+2. **Verify different sort order** - If suggesting the same column, ensure it's a different order (asc vs desc)
+3. **Ensure meaningful change** - The suggested sort must provide actual value, not duplicate existing organization
+
+**VALIDATION CHECKLIST:**
+✅ Column name exists in table.columnNames array OR is a valid column letter (A, B, C...)
+✅ Column contains data that can be meaningfully sorted
+✅ Table is NOT already sorted by the suggested column in the suggested order
+✅ Suggestion provides clear value to the user (reorganizes data meaningfully)
+❌ Column name is made up or doesn't exist in the table
+❌ Suggesting sort operations on non-existent data fields
+❌ Table is already sorted by the suggested column in the suggested order (redundant)`;
 
         case 'fill-missing-values':
-          return `• ${rule.name}: You MUST identify patterns that can guide missing value imputation. Check for:
+          return `- ${rule.name}: You MUST identify patterns that can guide missing value imputation. Check for:
     - Empty cells within structured data patterns
     - Surrounding values that suggest interpolation opportunities
     - Column data types that support reasonable imputation methods
     - Missing data percentage that makes filling worthwhile (10%-80% missing)`;
 
         case 'interactive-filtering-highlighting':
-          return `• ${rule.name}: You MUST verify that linked data exists for meaningful interactive filtering. Check:
+          return `- ${rule.name}: You MUST verify that linked data exists for meaningful interactive filtering. Check:
     - Presence of both tabular data and visualizations
     - Common data fields that can be linked between instances
     - User benefit from cross-filtering capabilities
     - Technical feasibility of implementing the interaction`;
 
         case 'suggest-useful-websites':
-          return `• ${rule.name}: You MUST suggest websites that are genuinely relevant to the workspace context. Check:
+          return `- ${rule.name}: You MUST suggest websites that are genuinely relevant to the workspace context. Check:
     - Workspace name provides clear topic/domain indication
     - Suggested websites should directly relate to the workspace theme
     - Consider the type of data already present (e.g., financial data → financial websites)
@@ -799,7 +835,7 @@ DO NOT suggest data extraction or table completion - this rule is ONLY for sugge
 DO NOT include any instance operations in the instances array.`;
         
         default:
-          return `• ${rule.name}: Verify that the rule conditions are genuinely met based on user context and actions.`;
+          return `- ${rule.name}: Verify that the rule conditions are genuinely met based on user context and actions.`;
       }
     }).join('\n');
 

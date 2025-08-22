@@ -544,6 +544,16 @@ export default defineContentScript({
         const success = highlightTargetElement(message.selector, message.elementId);
         sendResponse({ success });
         return true;
+      } else if (message.type === 'CREATE_SNAPSHOT_AND_GET_ID') {
+        // Create snapshot and return the pageId
+        const pageId = generatePageId();
+        createSnapshot(pageId).then(success => {
+          sendResponse({ pageId, success });
+        }).catch(error => {
+          console.error('Error creating snapshot:', error);
+          sendResponse({ pageId, success: false, error: error.message });
+        });
+        return true; // Indicates we will send a response asynchronously
       }
     });
 

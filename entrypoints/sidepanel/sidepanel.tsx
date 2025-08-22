@@ -12,6 +12,7 @@ import SuggestionIndicator from './components/SuggestionIndicator.tsx';
 import ProactiveSettings from './components/ProactiveSettings.tsx';
 import MacroSuggestionPanel from './components/MacroSuggestionPanel.tsx';
 import { executeMacroTool } from './macro-tool-executor';
+import { chatWithAgent } from './apis';
 import WorkspaceNameModal from './components/WorkspaceNameModal.tsx';
 import { updateInstances } from './utils';
 
@@ -37,8 +38,25 @@ const SidePanel = () => {
   // Tool view collapse state
   const [isToolViewCollapsed, setIsToolViewCollapsed] = useState(false);
   
+  // Debug: Track instances changes
+  useEffect(() => {
+    console.log('[SidePanel] Instances state changed:', instances.length, instances.map(i => ({ id: i.id, type: i.type })));
+  }, [instances]);
+  
   // AI suggestion panel collapse state
   const [isSuggestionPanelCollapsed, setIsSuggestionPanelCollapsed] = useState(false);
+  
+  // Editor context state - tracks if user is currently in any editor
+  const [isInEditor, setIsInEditor] = useState(false);
+  
+  // Currently editing table ID - for constraining suggestions to only the editing table
+  const [editingTableId, setEditingTableId] = useState<string | null>(null);
+  
+  // Capture mode state - tracks if user is currently in element capture mode
+  const [isInCaptureMode, setIsInCaptureMode] = useState(false);
+
+  // Current page info for HTML context fetching
+  const [currentPageInfo, setCurrentPageInfo] = useState<{pageId: string, url: string} | null>(null);
 
   const addLog = (message: string, actionDetails?: {
     type: string;
@@ -186,6 +204,100 @@ const SidePanel = () => {
     }
   }, []);
 
+  // Function to get current page information and trigger HTML content fetching
+  const initializeCurrentPageContext = useCallback(async () => {
+    try {
+      // Get the current active tab
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.url || !tab.id) {
+        console.warn('[SidePanel] No active tab found');
+        return;
+      }
+
+      console.log('[SidePanel] Requesting page snapshot from content script for:', tab.url);
+      
+      // Send message to content script to create snapshot and get pageId
+      try {
+        const response = await chrome.tabs.sendMessage(tab.id, {
+          type: 'CREATE_SNAPSHOT_AND_GET_ID'
+        });
+        
+        if (response?.pageId) {
+          console.log('[SidePanel] Got pageId from content script:', response.pageId);
+          setCurrentPageInfo({ pageId: response.pageId, url: tab.url });
+          
+          // Now fetch the HTML content using the pageId
+          const fetchHtmlContent = async (retryCount = 0) => {
+            try {
+              const fetchResponse = await fetch(`http://localhost:8000/api/snapshots/${response.pageId}`);
+              if (fetchResponse.ok) {
+                const snapshotData = await fetchResponse.json();
+                console.log('[SidePanel] Successfully fetched HTML content for current page');
+                
+                const newHtmlContext = {
+                  [response.pageId]: {
+                    pageURL: tab.url,
+                    htmlContent: snapshotData.htmlContent
+                  }
+                };
+                
+                setHtmlContexts(prev => {
+                  const updated = { ...prev, ...newHtmlContext };
+                  
+                  // Update proactive service immediately with the new HTML context
+                  proactiveService.updateContext({
+                    htmlContexts: updated
+                  });
+                  
+                  return updated;
+                });
+                
+                // Small delay to ensure state is updated, then trigger suggestions
+                setTimeout(() => {
+                  console.log('[SidePanel] Triggering proactive suggestions after HTML context loaded');
+                  proactiveService.triggerLogsUpdate(logsRef.current);
+                }, 100);
+              } else if (fetchResponse.status === 404 && retryCount < 3) {
+                // Snapshot not ready yet, retry after delay
+                console.log(`[SidePanel] Snapshot not ready, retrying in ${(retryCount + 1) * 1000}ms...`);
+                setTimeout(() => fetchHtmlContent(retryCount + 1), (retryCount + 1) * 1000);
+              } else {
+                console.warn('[SidePanel] Failed to fetch snapshot:', fetchResponse.status);
+              }
+            } catch (error) {
+              if (retryCount < 3) {
+                console.log(`[SidePanel] Error fetching HTML, retrying in ${(retryCount + 1) * 1000}ms:`, error);
+                setTimeout(() => fetchHtmlContent(retryCount + 1), (retryCount + 1) * 1000);
+              } else {
+                console.warn('[SidePanel] Error fetching HTML content after retries:', error);
+              }
+            }
+          };
+          
+          setTimeout(fetchHtmlContent, 2000); // Wait 2 seconds for the snapshot to be created
+        } else {
+          console.warn('[SidePanel] Content script did not return pageId');
+        }
+      } catch (error) {
+        console.warn('[SidePanel] Failed to communicate with content script:', error);
+      }
+      
+    } catch (error) {
+      console.error('[SidePanel] Error getting current page info:', error);
+    }
+  }, []);
+
+  // Initialize current page context
+  useEffect(() => {
+    initializeCurrentPageContext();
+  }, [initializeCurrentPageContext]);
+
+  // Update proactive service when editor context changes
+  useEffect(() => {
+    console.log('[SidePanel] Editor state changed:', isInEditor);
+    proactiveService.updateContext({ isInEditor });
+  }, [isInEditor]);
+
   // Initialize proactive service
   useEffect(() => {
     // Set up proactive service listeners
@@ -258,9 +370,10 @@ const SidePanel = () => {
     proactiveService.updateContext({
       instances,
       messages,
-      htmlContexts: htmlContext
+      htmlContexts: htmlContext,
+      editingTableId
     });
-  }, [instances, messages, htmlContext]);
+  }, [instances, messages, htmlContext, editingTableId]);
 
   useEffect(() => {
     logsRef.current = logs;
@@ -309,20 +422,160 @@ const SidePanel = () => {
     proactiveService.dismissSuggestion(suggestionId);
   }, []);
 
+  // Function to request LLM refinement for failed tool suggestions
+  const requestSuggestionRefinement = useCallback(async (
+    originalSuggestionId: string, 
+    failedToolCall: { function: string; parameters: any }, 
+    errorMessage: string
+  ) => {
+    try {
+      console.log('[SidePanel] Requesting suggestion refinement for failed tool:', failedToolCall, 'Error:', errorMessage);
+      
+      // Find the original suggestion
+      const originalSuggestion = suggestions.find(s => s.id === originalSuggestionId);
+      if (!originalSuggestion) {
+        console.warn('[SidePanel] Original suggestion not found for refinement:', originalSuggestionId, 'Available suggestions:', suggestions.map(s => s.id));
+        return;
+      }
+
+      console.log('[SidePanel] Found original suggestion for refinement:', originalSuggestion.message);
+
+      // Create a refined prompt for the LLM
+      const refinementPrompt = `The following tool suggestion failed to execute:
+
+Original Suggestion: ${originalSuggestion.message}
+Tool Call: ${JSON.stringify(failedToolCall, null, 2)}
+Error Message: ${errorMessage}
+
+Please analyze the error and provide a refined suggestion with corrected tool parameters. Consider:
+1. What went wrong with the original tool call
+2. How to fix the parameters or approach
+3. Alternative tools that might work better
+
+Provide a new suggestion that addresses the same goal but avoids the error.`;
+
+      // Send refinement request to LLM via API
+      console.log('[SidePanel] Sending refinement request to LLM via API...');
+      setAgentLoading(true);
+      
+      // Create a specialized refinement prompt
+      const refinementUserMessage = `Please refine the following failed suggestion:
+
+ORIGINAL SUGGESTION: "${originalSuggestion.message}"
+
+FAILED TOOL CALL:
+${JSON.stringify(failedToolCall, null, 2)}
+
+ERROR MESSAGE: "${errorMessage}"
+
+ANALYSIS REQUESTED:
+1. Identify what went wrong with the tool parameters
+2. Suggest corrected parameters or alternative approaches  
+3. Provide a refined suggestion that addresses the same goal but avoids the error
+
+Please provide a refined suggestion with corrected tool calls that will succeed.`;
+
+      try {
+        console.log("refinementUserMessage: ", refinementUserMessage);
+        console.log("messages: ", messages);
+        console.log("instances: ", instances);
+        console.log("htmlContext: ", htmlContext);
+        console.log("logs: ", logs);
+
+        // Call the LLM API for suggestion refinement
+        const result = await chatWithAgent(
+          'suggest', // Use suggest ChatType for proactive suggestions
+          refinementUserMessage,
+          messages, // Include conversation history
+          JSON.stringify(instances), // Current instance context
+          [], // No image context needed for refinement
+          htmlContext, // Include HTML context
+          logs // Include recent logs
+        );
+
+        console.log("Refined result: ", result);
+
+        if (result.suggestions && result.suggestions.length > 0) {
+          console.log('[SidePanel] Received refined suggestions from LLM:', result.suggestions);
+          
+          // Convert to ProactiveSuggestion format and add to proactive service
+          const refinedSuggestions = result.suggestions.map((suggestion: any, index: number) => ({
+            id: `refined-suggestion-${originalSuggestionId}-${Date.now()}-${index}`,
+            message: suggestion.message || 'Refined suggestion',
+            instances: suggestion.instances || [],
+            scope: suggestion.scope || 'macro',
+            modality: suggestion.modality || 'peripheral',
+            priority: suggestion.priority || 'medium',
+            confidence: suggestion.confidence || 0.8, // Higher confidence for refined suggestions
+            category: suggestion.category || originalSuggestion.category || 'general',
+            timestamp: Date.now(),
+            undoable: suggestion.scope === 'micro',
+            toolCall: suggestion.toolCall,
+            toolSequence: suggestion.toolSequence,
+            isRefinement: true,
+            originalSuggestionId: originalSuggestionId
+          }));
+          
+          // Add the refined suggestions to the proactive service
+          (proactiveService as any).addSuggestions(refinedSuggestions);
+          
+          // Now dismiss the original failed suggestion
+          proactiveService.dismissSuggestion(originalSuggestionId);
+          
+          console.log('[SidePanel] Successfully processed refinement - added', refinedSuggestions.length, 'new suggestions and removed original');
+        } else {
+          console.warn('[SidePanel] LLM did not provide refined suggestions');
+        }
+      } catch (error) {
+        console.error('[SidePanel] Error in LLM refinement request:', error);
+      } finally {
+        setAgentLoading(false);
+      }
+      
+    } catch (error) {
+      console.error('[SidePanel] Error requesting suggestion refinement:', error);
+      setAgentLoading(false);
+    }
+  }, [suggestions, addMessage, setAgentLoading]);
+
   // Tool execution handler for macro suggestions
   const handleExecuteTool = useCallback(async (toolCall: { function: string; parameters: any }, suggestionId: string) => {
     console.log('[SidePanel] Executing tool:', toolCall, 'for suggestion:', suggestionId);
     
+    // Special handling for createVisualization when in table editor mode
+    if (toolCall.function === 'createVisualization' && editingTableId) {
+      console.log('[SidePanel] createVisualization requested while in table editor, checking for confirmation');
+      
+      // For now, we'll execute directly but in the future this could trigger a confirmation modal
+      // The modal implementation would go here
+      const shouldContinue = window.confirm(
+        `You are currently editing a table. Creating a visualization will save your current work and close the table editor. Continue?`
+      );
+      
+      if (!shouldContinue) {
+        console.log('[SidePanel] User cancelled visualization creation');
+        return;
+      }
+      
+      console.log('[SidePanel] User confirmed visualization creation, proceeding');
+    }
+    
     try {
+      console.log('[SidePanel] Current instances before tool execution:', instances.length);
       const result = await executeMacroTool(toolCall, instances, setInstances);
       console.log('[SidePanel] Tool execution result:', result);
+      console.log('[SidePanel] Current instances after tool execution:', instances.length);
       
       if (result.success) {
         // Remove the applied suggestion first
         proactiveService.dismissSuggestion(suggestionId);
         
+        // Force immediate UI update by syncing with service state
+        const currentServiceSuggestions = proactiveService.getCurrentSuggestions();
+        setSuggestions(currentServiceSuggestions);
+        
         // Small delay to ensure suggestion dismissal is processed before log triggers new generation
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise(resolve => setTimeout(resolve, 100));
         
         // Add log for the successful execution
         addLog(`Tool executed successfully: ${result.message}`, {
@@ -333,22 +586,25 @@ const SidePanel = () => {
         
         console.log('[SidePanel] Successfully executed tool and removed suggestion:', suggestionId);
       } else {
-        // Show error message but don't remove suggestion
-        addLog(`Tool execution failed: ${result.message}`, {
-          type: 'tool-execution-error',
-          context: { toolCall, result },
-          metadata: { toolFunction: toolCall.function }
-        });
+        // Tool execution failed - request LLM refinement
+        console.log('[SidePanel] Tool execution failed, requesting LLM refinement:', result.message);
+        
+        // Don't dismiss the suggestion yet - keep it visible until refinement arrives
+        // Request refined suggestion from LLM (don't add to logs to avoid noise)
+        await requestSuggestionRefinement(suggestionId, toolCall, result.message);
       }
     } catch (error) {
       console.error('[SidePanel] Tool execution error:', error);
-      addLog(`Tool execution error: ${error instanceof Error ? error.message : String(error)}`, {
-        type: 'tool-execution-error',
-        context: { toolCall, error: String(error) },
-        metadata: { toolFunction: toolCall.function }
-      });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Don't dismiss the suggestion yet - keep it visible until refinement arrives
+      // Request refined suggestion from LLM for execution errors too (don't add to logs)
+      await requestSuggestionRefinement(suggestionId, toolCall, errorMessage);
     }
-  }, [addLog, instances]);
+  }, [addLog, instances, requestSuggestionRefinement, editingTableId]);
+
+  // Remove the complex forwarding system
+  const handleToolExecutionWithConfirmation = handleExecuteTool;
 
   const handleExecuteToolSequence = useCallback(async (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => {
     console.log('[SidePanel] Executing tool sequence:', toolSequence, 'for suggestion:', suggestionId);
@@ -362,8 +618,12 @@ const SidePanel = () => {
         // Remove the applied suggestion first
         proactiveService.dismissSuggestion(suggestionId);
         
+        // Force immediate UI update by syncing with service state
+        const currentServiceSuggestions = proactiveService.getCurrentSuggestions();
+        setSuggestions(currentServiceSuggestions);
+        
         // Small delay to ensure suggestion dismissal is processed before log triggers new generation
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise(resolve => setTimeout(resolve, 100));
         
         // Add log for the successful execution
         addLog(`Tool sequence executed successfully: ${result.message}`, {
@@ -374,22 +634,34 @@ const SidePanel = () => {
         
         console.log('[SidePanel] Successfully executed tool sequence and removed suggestion:', suggestionId);
       } else {
-        // Show error message but don't remove suggestion
-        addLog(`Tool sequence execution failed: ${result.message}`, {
-          type: 'tool-sequence-execution-error',
-          context: { toolSequence, result },
-          metadata: { goal: toolSequence.goal }
-        });
+        // Tool sequence execution failed - request LLM refinement
+        console.log('[SidePanel] Tool sequence execution failed, requesting LLM refinement:', result.message);
+        
+        // Create a simplified tool call representation for refinement
+        const simplifiedToolCall = {
+          function: 'executeToolSequence',
+          parameters: { toolSequence }
+        };
+        
+        // Don't dismiss the suggestion yet - keep it visible until refinement arrives
+        // Request refined suggestion from LLM (don't add to logs to avoid noise)
+        await requestSuggestionRefinement(suggestionId, simplifiedToolCall, result.message);
       }
     } catch (error) {
       console.error('[SidePanel] Tool sequence execution error:', error);
-      addLog(`Tool sequence execution error: ${error instanceof Error ? error.message : String(error)}`, {
-        type: 'tool-sequence-execution-error',
-        context: { toolSequence, error: String(error) },
-        metadata: { goal: toolSequence.goal }
-      });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Create a simplified tool call representation for refinement
+      const simplifiedToolCall = {
+        function: 'executeToolSequence',
+        parameters: { toolSequence }
+      };
+      
+      // Don't dismiss the suggestion yet - keep it visible until refinement arrives
+      // Request refined suggestion from LLM for execution errors too (don't add to logs)
+      await requestSuggestionRefinement(suggestionId, simplifiedToolCall, errorMessage);
     }
-  }, [addLog, instances]);
+  }, [addLog, instances, requestSuggestionRefinement]);
 
   const handleDismissAllSuggestions = useCallback(() => {
     proactiveService.clearSuggestions();
@@ -414,17 +686,27 @@ const SidePanel = () => {
     if (suggestions.length > 0) {
       if (e.key === 'Tab') {
         // Only accept micro suggestions with Tab key, not macro suggestions
-        const microSuggestions = suggestions.filter(s => s.scope === 'micro');
+        const microSuggestions = suggestions
+          .filter(s => s.scope === 'micro')
+          .sort((a, b) => b.confidence - a.confidence);
         if (microSuggestions.length > 0) {
-          console.log('[SidePanel] Tab key pressed - accepting micro suggestion:', microSuggestions[0].id, microSuggestions[0].message);
+          console.log('[SidePanel] Tab key pressed - accepting highest confidence micro suggestion:', microSuggestions[0].id, microSuggestions[0].message, `(${Math.round(microSuggestions[0].confidence * 100)}%)`);
           e.preventDefault();
           e.stopPropagation();
-          // Accept the first micro suggestion
+          // Accept the highest confidence micro suggestion
           handleAcceptSuggestion(microSuggestions[0].id);
         } else {
           console.log('[SidePanel] Tab key pressed but no micro suggestions available (only macro suggestions)');
         }
       } else if (e.key === 'Escape') {
+        // Prioritize exiting capture mode over dismissing suggestions
+        if (isInCaptureMode) {
+          // Let the capture handlers in instanceview/multitableeditor handle the escape
+          console.log('[SidePanel] Escape in capture mode - letting component handlers handle it');
+          return;
+        }
+        
+        // If not in capture mode, dismiss micro suggestions
         e.preventDefault();
         e.stopPropagation();
         // Only dismiss micro suggestions (ghost previews), keep macro suggestions in peripheral view
@@ -432,7 +714,7 @@ const SidePanel = () => {
         handleDismissMicroSuggestions();
       }
     }
-  }, [suggestions, handleAcceptSuggestion, handleDismissMicroSuggestions]);
+  }, [suggestions, handleAcceptSuggestion, handleDismissMicroSuggestions, isInCaptureMode]);
 
   // Add global keyboard event listener
   useEffect(() => {
@@ -458,10 +740,16 @@ const SidePanel = () => {
         updateHTMLContext={setHtmlContexts} 
         addMessage={addMessage} 
         setAgentLoading={setAgentLoading}
+        setIsInEditor={setIsInEditor}
+        setIsInCaptureMode={setIsInCaptureMode}
+        onEditingTableIdChange={setEditingTableId}
         currentSuggestion={
           // Prioritize suggestions with instance updates (usually micro suggestions) for ghost rendering
-          suggestions.find(s => s.instances && s.instances.length > 0) || 
-          (suggestions.length > 0 ? suggestions[0] : undefined)
+          // Sort by confidence to ensure highest confidence suggestion is shown
+          suggestions
+            .sort((a, b) => b.confidence - a.confidence)
+            .find(s => s.instances && s.instances.length > 0) || 
+          (suggestions.length > 0 ? suggestions.sort((a, b) => b.confidence - a.confidence)[0] : undefined)
         }
       />
       <ToolView 
@@ -483,7 +771,7 @@ const SidePanel = () => {
         suggestions={suggestions}
         onAccept={handleAcceptSuggestion}
         onDismiss={handleDismissSuggestion}
-        onExecuteTool={handleExecuteTool}
+        onExecuteTool={handleToolExecutionWithConfirmation}
         onExecuteToolSequence={handleExecuteToolSequence}
         isCollapsed={isSuggestionPanelCollapsed}
         onToggleCollapse={handleToggleSuggestionPanelCollapse}

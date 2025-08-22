@@ -35,6 +35,8 @@ class EnhancedProactiveService {
     messages: [] as Message[],
     htmlContexts: {} as Record<string, any>,
     logs: [] as string[],
+    isInEditor: false, // Track if user is currently in an editor
+    editingTableId: null as string | null, // Track which table is currently being edited
   };
   private isSuggestionsStopped = false;
   private shouldAutoResume = false;
@@ -162,8 +164,8 @@ class EnhancedProactiveService {
     this.onGenerationStateChanged = callback;
   }
 
-  // Update context with new instances, messages, and HTML contexts
-  updateContext({instances, messages, htmlContexts}: {instances?: Instance[], messages?: Message[], htmlContexts?: Record<string, any>}) {
+  // Update context with new instances, messages, HTML contexts, editor state, and editing table ID
+  updateContext({instances, messages, htmlContexts, isInEditor, editingTableId}: {instances?: Instance[], messages?: Message[], htmlContexts?: Record<string, any>, isInEditor?: boolean, editingTableId?: string | null}) {
     if (instances) {
       this.currentContext.instances = instances;
     }
@@ -172,6 +174,21 @@ class EnhancedProactiveService {
     }
     if (htmlContexts) {
       this.currentContext.htmlContexts = htmlContexts;
+      console.log('[EnhancedProactiveService] HTML contexts updated:', Object.keys(htmlContexts));
+    }
+    if (isInEditor !== undefined) {
+      console.log('[EnhancedProactiveService] isInEditor state updating:', {
+        from: this.currentContext.isInEditor,
+        to: isInEditor
+      });
+      this.currentContext.isInEditor = isInEditor;
+    }
+    if (editingTableId !== undefined) {
+      console.log('[EnhancedProactiveService] editingTableId updating:', {
+        from: this.currentContext.editingTableId,
+        to: editingTableId
+      });
+      this.currentContext.editingTableId = editingTableId;
     }
   }
 
@@ -523,16 +540,23 @@ class EnhancedProactiveService {
       const isInTableEditor = this.isCurrentlyInEditorContext();
       const isInMainSidepanel = this.isCurrentlyInMainSidepanel();
       
-      // Generate micro suggestions ONLY when we can positively confirm user is in editor context
-      // This prevents micro suggestions from showing when user is out of an editor
+      // Check if user has recent table activity (for table-related micro suggestions)
+      // Exclude activities that are ONLY about opening the table editor
+      const hasRecentTableActivity = this.hasRecentTableActivityExcludingEditorOpening(recentActions, logs);
+      
+      // Generate micro suggestions ONLY when:
+      // User is actively in editor context (typing in cell)
+      // Micro suggestions are contextual and should only appear during active editing
       const shouldGenerateMicroSuggestions = microRules.length > 0 && isInTableEditor;
       
       // Generate macro suggestions if:
       // 1. We have macro rules AND user is in main sidepanel (instance view), OR
-      // 2. We have macro rules AND user is in table editor (for dual display)
-      // This ensures macro suggestions appear in both main view and editor view
+      // 2. We have macro rules AND user is in table editor AND there's recent table activity
+      // Note: This ensures macro suggestions appear in main view always, but in editor only with actual editing activity
+      // (opening table editor alone is not sufficient - user must perform actual table operations)
+      // This prevents unwanted macro suggestions when user only opens the table editor without doing any actual editing
       const shouldGenerateMacroSuggestions = macroRules.length > 0 && (
-        isInMainSidepanel || isInTableEditor
+        isInMainSidepanel || (isInTableEditor && hasRecentTableActivity)
       );
       
       console.log('[EnhancedProactiveService] Suggestion generation decision:', {
@@ -541,12 +565,14 @@ class EnhancedProactiveService {
         hasMacroRules: macroRules.length > 0,
         macroRuleIds: macroRules.map(r => r.id),
         isInTableEditor: isInTableEditor,
+        hasRecentTableActivity: hasRecentTableActivity,
         isInMainSidepanel: isInMainSidepanel,
+        microSuggestionsDecision: shouldGenerateMicroSuggestions,
+        macroSuggestionsDecision: shouldGenerateMacroSuggestions,
         isInteractionRelevant: this.isLatestInteractionRelevantForMicroSuggestions(recentActions, logs),
         shouldGenerateMicroSuggestions: shouldGenerateMicroSuggestions,
         shouldGenerateMacroSuggestions: shouldGenerateMacroSuggestions,
-        activeElement: document.activeElement?.tagName,
-        activeElementClasses: document.activeElement?.className,
+        tableEditorMacroReason: isInTableEditor ? (hasRecentTableActivity ? 'Has table activity - macro allowed' : 'Only editor opening - macro suppressed') : 'Not in table editor',
         latestLog: logs[logs.length - 1]?.slice(0, 100)
       });
       
@@ -558,11 +584,12 @@ class EnhancedProactiveService {
         console.log('[EnhancedProactiveService] === STARTING MICRO SUGGESTION PROCESS ===');
         await this.generateAndDisplayMicroSuggestions(microRules, recentActions, logs, context, currentMessages, textContext, imageContext, currentHtmlContexts);
       } else if (microRules.length > 0) {
-        console.log('[EnhancedProactiveService] Micro rules available but conditions not met:', {
+        console.log('[EnhancedProactiveService] Micro rules available but not in table editor:', {
           microRuleIds: microRules.map(r => r.id),
+          isInTableEditor,
+          hasRecentTableActivity,
           latestLog: logs[logs.length - 1]?.slice(0, 100),
-          latestActionType: recentActions[recentActions.length - 1]?.type,
-          reason: !isInTableEditor ? 'not in table editor' : 'interaction not relevant'
+          reason: 'Micro suggestions only generate during active table editing'
         });
       }
       
@@ -575,7 +602,13 @@ class EnhancedProactiveService {
           macroRuleIds: macroRules.map(r => r.id),
           isInTableEditor: isInTableEditor,
           isInMainSidepanel: isInMainSidepanel,
-          reason: (!isInMainSidepanel && !isInTableEditor) ? 'not in main sidepanel or table editor' : 'other conditions not met'
+          hasRecentTableActivity: hasRecentTableActivity,
+          reason: isInTableEditor 
+            ? (hasRecentTableActivity 
+              ? 'Unknown reason - should have generated suggestions' 
+              : 'In table editor but no recent table activity (likely just opened editor)')
+            : 'Not in main sidepanel and not in table editor with activity',
+          latestLog: logs[logs.length - 1]?.slice(0, 100)
         });
       }
 
@@ -881,92 +914,48 @@ class EnhancedProactiveService {
   /**
    * Determine if user is currently in interface view (for macro suggestions) or editor view (for micro suggestions)
    */
-  private isCurrentlyInInterfaceView(): boolean {
-    // Check if the user is currently in the main interface view vs an editor
-    // This is a heuristic based on active elements and UI state
-    const activeElement = document.activeElement;
-    
-    // Check for table editor specifically
-    const isInTableEditor = activeElement && (
-      activeElement.closest('.table-editor') ||
-      activeElement.closest('[class*="table"]') ||
-      activeElement.closest('[class*="editor"]') ||
-      activeElement.closest('.cell') ||
-      activeElement.closest('[class*="cell"]')
-    );
-    
-    // Check for general editors
-    const isInEditor = activeElement && (
-      activeElement.classList.contains('editor') ||
-      activeElement.closest('.editor') ||
-      activeElement.tagName === 'TEXTAREA' ||
-      activeElement.tagName === 'INPUT' ||
-      (activeElement as HTMLElement).contentEditable === 'true' ||
-      activeElement.closest('[contenteditable="true"]')
-    );
-    
-    // If user is in table editor or any other editor, they should get micro suggestions
-    // Otherwise, they're in interface view and should get macro suggestions
-    const isInAnyEditor = isInTableEditor || isInEditor;
-    
-    console.log('[EnhancedProactiveService] Context detection:', {
-      activeElement: activeElement?.tagName,
-      activeElementClass: activeElement?.className,
-      isInTableEditor,
-      isInEditor,
-      isInAnyEditor,
-      willUseMacroSuggestions: !isInAnyEditor
+  /**
+   * Check if a suggestion violates the table editing constraint
+   * When user is editing a table, suggestions should only modify that specific table
+   */
+  private checkTableEditingConstraint(suggestion: ProactiveSuggestion): { violated: boolean; reason?: string } {
+    if (!this.currentContext.editingTableId || !suggestion.instances || suggestion.instances.length === 0) {
+      return { violated: false }; // No constraint to check
+    }
+
+    const violatingInstance = suggestion.instances.find(instance => {
+      // Check if this instance operation targets a different table than the one being edited
+      if (instance.action === 'update' && instance.targetId && instance.targetId !== this.currentContext.editingTableId) {
+        return true; // Violates constraint - targets different table
+      }
+      // Check if this instance operation creates a new table (not allowed when editing)
+      if (instance.action === 'add' && instance.instance?.type === 'table') {
+        return true; // Violates constraint - creates new table while editing existing one
+      }
+      return false; // No constraint violation
     });
-    
-    return !isInAnyEditor;
+
+    if (violatingInstance) {
+      return {
+        violated: true,
+        reason: `Cannot modify other instances while editing table ${this.currentContext.editingTableId}`
+      };
+    }
+
+    return { violated: false };
   }
 
   /**
    * Determine if user is currently in an editor context (for micro suggestion relevance)
+   * Uses the clear state-based approach from sidepanel
    */
   private isCurrentlyInEditorContext(): boolean {
-    const activeElement = document.activeElement;
+    // Use the state provided by the sidepanel - this is the definitive source
+    const result = this.currentContext.isInEditor;
     
-    // Check for table editor specifically
-    const isInTableEditor = activeElement && (
-      activeElement.closest('.table-container') ||
-      activeElement.closest('.table-grid') ||
-      activeElement.closest('.table-editor') ||
-      activeElement.closest('[class*="table"]') ||
-      activeElement.closest('[class*="editor"]') ||
-      activeElement.closest('.cell') ||
-      activeElement.closest('[class*="cell"]') ||
-      activeElement.closest('.editing')
-    );
-    
-    // Check for general editors
-    const isInEditor = activeElement && (
-      activeElement.classList.contains('editor') ||
-      activeElement.closest('.editor') ||
-      activeElement.tagName === 'TEXTAREA' ||
-      activeElement.tagName === 'INPUT' ||
-      (activeElement as HTMLElement).contentEditable === 'true' ||
-      activeElement.closest('[contenteditable="true"]')
-    );
-    
-    const result = !!(isInTableEditor || isInEditor);
-    
-    // Debug logging for context detection
-    if (result) {
-      console.log('[EnhancedProactiveService] Editor context detected:', {
-        activeElement: activeElement?.tagName,
-        activeElementClass: activeElement?.className,
-        isInTableEditor: !!isInTableEditor,
-        isInEditor: !!isInEditor
-      });
-    } else {
-      // Also log when NOT in editor context to help debug
-      console.log('[EnhancedProactiveService] NOT in editor context:', {
-        activeElement: activeElement?.tagName,
-        activeElementClass: activeElement?.className,
-        noActiveElement: !activeElement
-      });
-    }
+    console.log('[EnhancedProactiveService] Editor context from state:', {
+      isInEditor: result
+    });
     
     return result;
   }
@@ -975,25 +964,180 @@ class EnhancedProactiveService {
    * Determine if user is currently in the main sidepanel (instance view, not in editor)
    */
   private isCurrentlyInMainSidepanel(): boolean {
-    // Check if we're NOT in an editor context and we're in the sidepanel
+    // Simple logic: we're in main sidepanel when NOT in editor
     const isInEditor = this.isCurrentlyInEditorContext();
-    
-    // Check if we're in the main sidepanel interface
-    const sidepanelElements = [
-      '.instance-view',
-      '.sidepanel',
-      '.instance-container',
-      '[class*="instance"]',
-      '.main-view'
+    return !isInEditor;
+  }
+
+  /**
+   * Check if user has recent table activity, excluding activities that are ONLY about opening the table editor
+   * This prevents macro suggestions from being generated when user just opens table editor without actual editing
+   */
+  private hasRecentTableActivityExcludingEditorOpening(recentActions: any[], logs: string[]): boolean {
+    // Check for table activity in recent actions (these are real table interactions)
+    const hasTableActivityFromActions = recentActions.some(action => 
+      action.type === 'cell-edited' || 
+      action.type === 'cell-content-added' ||
+      action.type === 'text-appended' ||
+      action.type === 'table-operation' ||
+      (action.context && (action.context.tableId || action.context.cellId)) ||
+      (action.metadata && (action.metadata.column !== undefined || action.metadata.row !== undefined))
+    );
+
+    // If we have action-based table activity, that's sufficient
+    if (hasTableActivityFromActions) {
+      return true;
+    }
+
+    // Enhanced check: Look at recent logs to determine if there's real table activity
+    // vs just opening the table editor
+    const recentLogs = logs.slice(-5); // Focus on most recent 5 logs
+
+    // Define patterns that indicate table editor opening
+    const tableEditorOpeningPatterns = [
+      /Opened table editor to created a new table/,
+      /Edit table .* by editing the embedded table/,
+      /Open.*table.*editor/i,
+      /Table editor opened for table/i,
+      /Opening table editor/i,
+      /Switched to table editor/i
     ];
-    
-    const isInSidepanel = sidepanelElements.some(selector => {
-      const element = document.querySelector(selector);
-      return element && element.contains(document.activeElement || document.body);
+
+    // Define patterns that indicate actual table editing activity
+    const actualTableActivityPatterns = [
+      /Updated cells/,
+      /Applied suggestion/,
+      /Add row/,
+      /Remove row/,
+      /Add column/,
+      /Remove column/,
+      /Remove content from table cell/,
+      /Saved and closed the table editor/,
+      /Cell.*edited/i,
+      /Table.*modified/i,
+      /Data.*added.*table/i,
+      /Pasted.*into.*table/i,
+      /Dragged.*into.*table/i,
+      /Column.*renamed/i,
+      /Row.*added/i,
+      /Row.*removed/i,
+      /Column.*added/i,
+      /Column.*removed/i,
+      /Cell.*updated/i,
+      /Table.*updated/i,
+      /Instance.*added.*to.*table/i,
+      /Table.*structure.*changed/i,
+      /Table.*content.*changed/i,
+      /R\d+C\d+/, // Match cell references like R0C0, R1C1, etc.
+    ];
+
+    // Check if there are any actual table activity logs
+    const hasActualTableActivity = recentLogs.some(log => 
+      actualTableActivityPatterns.some(pattern => pattern.test(log))
+    );
+
+    // Check if there are only table editor opening logs without actual activity
+    const hasOnlyEditorOpening = recentLogs.some(log => 
+      tableEditorOpeningPatterns.some(pattern => pattern.test(log))
+    ) && !hasActualTableActivity;
+
+    // Check for general table activity that isn't editor opening
+    const hasGeneralTableActivity = recentLogs.some(log => {
+      // Skip if this log is about opening table editor
+      const isEditorOpening = tableEditorOpeningPatterns.some(pattern => pattern.test(log));
+      if (isEditorOpening) {
+        return false;
+      }
+
+      // Check for other table-related activities
+      return log.includes('table') && (
+        log.includes('Updated') ||
+        log.includes('Applied') ||
+        log.includes('Added') ||
+        log.includes('Removed') ||
+        log.includes('Modified') ||
+        log.includes('Changed') ||
+        log.includes('Edited') ||
+        log.includes('Saved')
+      );
     });
-    
-    // We're in main sidepanel if we're in sidepanel but not in editor
-    return !isInEditor && isInSidepanel;
+
+    const hasValidTableActivity = hasActualTableActivity || hasGeneralTableActivity;
+
+    console.log('[EnhancedProactiveService] Enhanced table activity analysis:', {
+      hasTableActivityFromActions,
+      hasActualTableActivity,
+      hasOnlyEditorOpening,
+      hasGeneralTableActivity,
+      hasValidTableActivity,
+      recentLogs: recentLogs.slice(-3),
+      result: hasValidTableActivity && !hasOnlyEditorOpening
+    });
+
+    // Return true only if there's valid table activity and it's not just editor opening
+    return hasValidTableActivity && !hasOnlyEditorOpening;
+  }
+
+  /**
+   * Check if the latest interaction is ONLY about opening the table editor without subsequent activity
+   * This is a more direct check for the specific scenario we want to prevent
+   */
+  private isLatestInteractionOnlyTableEditorOpening(logs: string[]): boolean {
+    if (logs.length === 0) return false;
+
+    const recentLogs = logs.slice(-3); // Check last 3 logs
+    const latestLog = logs[logs.length - 1];
+
+    // Define patterns that indicate table editor opening
+    const tableEditorOpeningPatterns = [
+      /Opened table editor to created a new table/,
+      /Edit table .* by editing the embedded table/,
+      /Open.*table.*editor/i,
+      /Table editor opened for table/i,
+      /Opening table editor/i,
+      /Switched to table editor/i
+    ];
+
+    // Check if the latest log is about opening table editor
+    const latestIsEditorOpening = tableEditorOpeningPatterns.some(pattern => 
+      pattern.test(latestLog)
+    );
+
+    if (!latestIsEditorOpening) {
+      return false;
+    }
+
+    // Define patterns that indicate actual table editing activity
+    const actualTableActivityPatterns = [
+      /Updated cells/,
+      /Applied suggestion/,
+      /Add row/,
+      /Remove row/,
+      /Add column/,
+      /Remove column/,
+      /Remove content from table cell/,
+      /Cell.*edited/i,
+      /Table.*modified/i,
+      /Data.*added.*table/i,
+      /R\d+C\d+/, // Match cell references like R0C0, R1C1, etc.
+    ];
+
+    // Check if there's any actual editing activity in recent logs
+    const hasSubsequentActivity = recentLogs.some(log => 
+      actualTableActivityPatterns.some(pattern => pattern.test(log))
+    );
+
+    const result = latestIsEditorOpening && !hasSubsequentActivity;
+
+    console.log('[EnhancedProactiveService] Latest interaction check:', {
+      latestLog: latestLog?.slice(0, 100),
+      latestIsEditorOpening,
+      hasSubsequentActivity,
+      result,
+      recentLogs: recentLogs.map(log => log.slice(0, 50))
+    });
+
+    return result;
   }
 
   /**
@@ -1236,6 +1380,22 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
           toolSequence: aiSuggestion.toolSequence // Include tool sequence for composite macro suggestions
         };
         
+        // CONSTRAINT: If user is in table editor, only allow suggestions that target the editing table
+        const constraintCheck = this.checkTableEditingConstraint(suggestion);
+        if (constraintCheck.violated) {
+          console.warn('[EnhancedProactiveService] REJECTING AI suggestion due to table editing constraint:', {
+            message: suggestion.message?.slice(0, 100),
+            editingTableId: this.currentContext.editingTableId,
+            suggestionTargets: suggestion.instances.map(inst => ({
+              action: inst.action,
+              targetId: inst.targetId,
+              instanceType: inst.instance?.type
+            })),
+            reason: constraintCheck.reason
+          });
+          return; // Skip this suggestion
+        }
+        
         // Use the validated ruleIds
         (suggestion as any).ruleIds = suggestedRuleIds;
         
@@ -1267,8 +1427,23 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
           undoable: true
         };
         
-        (suggestion as any).ruleIds = triggeredRules.map(r => r.id);
-        suggestions.push(suggestion);
+        // CONSTRAINT: If user is in table editor, only allow suggestions that target the editing table
+        const constraintCheck = this.checkTableEditingConstraint(suggestion);
+        if (constraintCheck.violated) {
+          console.warn('[EnhancedProactiveService] REJECTING fallback suggestion due to table editing constraint:', {
+            message: suggestion.message?.slice(0, 100),
+            editingTableId: this.currentContext.editingTableId,
+            suggestionTargets: suggestion.instances.map(inst => ({
+              action: inst.action,
+              targetId: inst.targetId,
+              instanceType: inst.instance?.type
+            })),
+            reason: constraintCheck.reason
+          });
+        } else {
+          (suggestion as any).ruleIds = triggeredRules.map(r => r.id);
+          suggestions.push(suggestion);
+        }
       }
     }
     
@@ -1359,17 +1534,33 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
           undoable: true
         };
         
-        this.currentSuggestions = [suggestion];
-        this.suggestionCount++;
-        
-        console.log('[EnhancedProactiveService] Generated legacy suggestion:', suggestion.message);
-        
-        // Display using UI controller for consistency
-        this.displaySuggestions([suggestion]);
-        
-        // Notify listeners
-        if (this.onSuggestionsUpdated) {
-          this.onSuggestionsUpdated(this.currentSuggestions);
+        // CONSTRAINT: If user is in table editor, only allow suggestions that target the editing table
+        const constraintCheck = this.checkTableEditingConstraint(suggestion);
+        if (constraintCheck.violated) {
+          console.warn('[EnhancedProactiveService] REJECTING legacy suggestion due to table editing constraint:', {
+            message: suggestion.message?.slice(0, 100),
+            editingTableId: this.currentContext.editingTableId,
+            suggestionTargets: suggestion.instances.map(inst => ({
+              action: inst.action,
+              targetId: inst.targetId,
+              instanceType: inst.instance?.type
+            })),
+            reason: constraintCheck.reason
+          });
+          console.log('[EnhancedProactiveService] Legacy suggestion rejected due to table editing constraint');
+        } else {
+          this.currentSuggestions = [suggestion];
+          this.suggestionCount++;
+          
+          console.log('[EnhancedProactiveService] Generated legacy suggestion:', suggestion.message);
+          
+          // Display using UI controller for consistency
+          this.displaySuggestions([suggestion]);
+          
+          // Notify listeners
+          if (this.onSuggestionsUpdated) {
+            this.onSuggestionsUpdated(this.currentSuggestions);
+          }
         }
       } else {
         console.log('[EnhancedProactiveService] No instance updates suggested by LLM');

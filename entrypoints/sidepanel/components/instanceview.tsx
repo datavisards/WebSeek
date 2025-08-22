@@ -41,9 +41,13 @@ interface InstanceViewProps {
   addMessage: (message: Message) => void;
   setAgentLoading: (loading: boolean) => void;
   currentSuggestion?: ProactiveSuggestion; // For ghost preview rendering
+  setIsInEditor: React.Dispatch<React.SetStateAction<boolean>>; // For tracking editor state
+  setIsInCaptureMode?: React.Dispatch<React.SetStateAction<boolean>>; // For tracking capture mode state
+  onEditingTableIdChange?: (editingTableId: string | null) => void; // For tracking currently editing table
 }
 
-const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages, workspaceName, onWorkspaceNameChange, onOperation, updateHTMLContext, addMessage, setAgentLoading, currentSuggestion }: InstanceViewProps) => {
+const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages, workspaceName, onWorkspaceNameChange, onOperation, updateHTMLContext, addMessage, setAgentLoading, currentSuggestion, setIsInEditor, setIsInCaptureMode, onEditingTableIdChange }: InstanceViewProps) => {
+  console.log('[InstanceView] Component loaded with setIsInEditor:', !!setIsInEditor);
   // Custom hooks
   const { fetchHTMLContent, htmlLoadingStates } = useHTMLContent(updateHTMLContext);
   const instancesRef = useRef<Instance[]>([]);
@@ -129,6 +133,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     multi: false
   });
   const [renamingInstance, setRenamingInstance] = useState<Instance | null>(null);
+  
   // General editor state
   const [originalInstanceId, setOriginalInstanceId] = useState<string | null>(null);
   // Sketch editor state
@@ -193,6 +198,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setTextCount,
     textCountRef,
   });
+
+  // Notify parent component when editingTableId changes
+  useEffect(() => {
+    if (onEditingTableIdChange) {
+      console.log('[InstanceView] Notifying editingTableId change:', editingTableId);
+      onEditingTableIdChange(editingTableId);
+    }
+  }, [editingTableId, onEditingTableIdChange]);
 
   // Update the latest state values
   useEffect(() => {
@@ -591,6 +604,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
 
   // Create a new sketch
   const handleCreateSketch = () => {
+    console.log('[InstanceView] Entering editor mode - creating sketch');
+    setIsInEditor?.(true);
+    
     setOriginalInstanceId(null);
     const newId = `Sketch${sketchCount + 1}`;
     setSketchCount(prev => prev + 1);
@@ -714,6 +730,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setCurrentStroke(null);
     setEditingSketchId(null);
     setAvailableInstances([]);
+    
+    console.log('[InstanceView] Exiting editor mode - sketch saved');
+    setIsInEditor?.(false);
   };
 
   // Cancel sketch creation
@@ -723,6 +742,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setInstances(prev => prev.filter(inst => inst.id !== editingSketchId));
     setEditingSketchId(null);
     setAvailableInstances([]);
+    
+    console.log('[InstanceView] Exiting editor mode - sketch cancelled');
+    setIsInEditor?.(false);
   };
 
   // Render sketch to canvas
@@ -1104,6 +1126,13 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     }
   }
 
+  // Notify parent component about capture mode changes
+  useEffect(() => {
+    if (setIsInCaptureMode) {
+      setIsInCaptureMode(!isCaptureEnabled);
+    }
+  }, [isCaptureEnabled, setIsInCaptureMode]);
+
   // Add keyboard escape handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1143,6 +1172,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   }, [isCaptureEnabled]);
 
   const handleInstanceDoubleClick = (instance: Instance) => {
+    console.log('[InstanceView] Entering editor mode - double-clicked instance:', instance.type, instance.id);
+    setIsInEditor?.(true);
+    
     setOriginalInstanceId(instance.id);
     if (instance.type === 'text') {
       setEditingTextId(instance.id);
@@ -1242,6 +1274,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     onOperation(`Save text editing of "${original.id}" changing value from "${originalDisplay}" to "${newDisplay}" creating new text "${newTextId}"`);
 
     setEditingTextId(null);
+    
+    console.log('[InstanceView] Exiting editor mode - text saved');
+    setIsInEditor?.(false);
   };
 
   // Handle mouse down for resizing embedded instances
@@ -1362,6 +1397,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
 
   // Update table creation to include a placeholder for drag-and-drop
   const handleCreateTable = () => {
+    console.log('[InstanceView] Entering editor mode - creating table');
+    setIsInEditor?.(true);
+    
     setOriginalInstanceId(null);
     const rows = 3;
     const cols = 3;
@@ -1536,6 +1574,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setEditingTableId(null);
     setAvailableInstances([]);
     setOriginalInstanceId(null);
+    
+    console.log('[InstanceView] Exiting editor mode - table editing cancelled (Discard All Changes)');
+    setIsInEditor?.(false);
   };
 
   // Close table editor without cancel logic (for successful saves)
@@ -1543,6 +1584,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setEditingTableId(null);
     setAvailableInstances([]);
     setOriginalInstanceId(null);
+    
+    console.log('[InstanceView] Exiting editor mode - table editing completed (Save All & Close)');
+    setIsInEditor?.(false);
   };
 
 
@@ -2245,6 +2289,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
 
   // Add handler to create a new visualization instance
   const handleCreateVisualization = () => {
+    console.log('[InstanceView] Entering editor mode - creating visualization');
+    setIsInEditor?.(true);
+    
     setOriginalInstanceId(null);
     // Start with a simple Vega-Lite spec as a template
     const defaultSpec = {
@@ -2307,12 +2354,18 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setEditingVisualizationSpec(null);
     setAvailableInstances([]);
     setOriginalInstanceId(null);
+    
+    console.log('[InstanceView] Exiting editor mode - visualization saved');
+    setIsInEditor?.(false);
   };
   const handleCancelVisualization = () => {
     onOperation(`Cancel visualization ${originalInstanceId ? 'editing' : 'creation'}`);
     setEditingVisualizationSpec(null);
     setAvailableInstances([]);
     setOriginalInstanceId(null);
+    
+    console.log('[InstanceView] Exiting editor mode - visualization cancelled');
+    setIsInEditor?.(false);
   };
 
   return (
@@ -2401,6 +2454,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
             onUpdateColumnName={(_tableId: string, colIndex: number, columnName: string) => handleUpdateColumnName(colIndex, columnName)}
             onLiftRowToHeader={(_tableId: string, rowIndex: number) => handleLiftRowToHeader(rowIndex)}
             currentSuggestion={currentSuggestion}
+            setIsInEditor={setIsInEditor}
           />
         ) : editingVisualizationSpec ? (
           // Visualization Editor View
@@ -2707,17 +2761,32 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                         })}
                       </div>
                     ) : instance.type === 'visualization' ? (
-                      <img
-                        key={instance.id}
-                        src={instance.thumbnail}
-                        alt="thumbnail"
-                        style={{
-                          maxWidth: '100%',
-                          maxHeight: '100%',
-                          objectFit: 'contain',
-                          pointerEvents: 'none',
-                        }}
-                      />
+                      instance.thumbnail ? (
+                        <img
+                          key={instance.id}
+                          src={instance.thumbnail}
+                          alt="thumbnail"
+                          style={{
+                            maxWidth: '100%',
+                            maxHeight: '100%',
+                            objectFit: 'contain',
+                            pointerEvents: 'none',
+                          }}
+                        />
+                      ) : (
+                        <div style={{
+                          width: '100%',
+                          height: '100%',
+                          background: '#f0f0f0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '12px',
+                          color: '#666'
+                        }}>
+                          📊 Visualization
+                        </div>
+                      )
                     ) : null}
                     {selectedInstanceId === instance.id && (
                       <>
@@ -2767,6 +2836,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           onCancel={() => setRenamingInstance(null)}
         />
       )}
+      
       <SnapshotStatusIndicator
         isVisible={showSnapshotStatus}
         isWaiting={isWaitingForSnapshots}
