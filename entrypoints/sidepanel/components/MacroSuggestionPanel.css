@@ -443,3 +443,50 @@
 .tool-action-preview .preview-description {
   color: #b45309;
 }
+
+/* Loading state styles */
+.suggestion-card.loading {
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.suggestion-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+
+.loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #e5e7eb;
+  border-top: 2px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-weight: 500;
+  color: #374151;
+  font-size: 14px;
+}
+
+.loading-subtext {
+  font-size: 12px;
+  color: #6b7280;
+  font-style: italic;
+}

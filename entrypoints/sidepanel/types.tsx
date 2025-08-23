@@ -201,6 +201,8 @@ export interface ProactiveSuggestion {
   category: string; // Category like 'data-extraction', 'data-cleaning', etc.
   timestamp: number; // When the suggestion was created
   undoable: boolean; // Whether this suggestion can be undone
+  isLoading?: boolean; // Whether this suggestion is currently being processed/refined
+  loadingMessage?: string; // Optional custom loading message
   toolCall?: { // Optional single tool call for simple macro suggestions
     function: string; // Tool function name
     parameters: any; // Tool parameters

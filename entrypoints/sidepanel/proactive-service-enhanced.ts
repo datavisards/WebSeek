@@ -329,8 +329,8 @@ class EnhancedProactiveService {
   }
 
   /**
-   * Add suggestions intelligently, avoiding duplicates and managing stale suggestions
-   * Replace old suggestions of the same type instead of accumulating them
+   * Add suggestions intelligently, accumulating instead of replacing for macro suggestions
+   * and managing them with proper sorting by batch order and confidence
    */
   private addSuggestions(newSuggestions: ProactiveSuggestion[]) {
     const now = Date.now();
@@ -341,25 +341,69 @@ class EnhancedProactiveService {
       (now - s.timestamp) <= staleThreshold
     );
     
-    // For each new suggestion, remove any existing suggestions of the same type
+    // For each new suggestion, apply different logic based on scope
     newSuggestions.forEach(newSuggestion => {
-      // Determine suggestion type from ruleIds or category
-      const newSuggestionType = this.getSuggestionType(newSuggestion);
+      // Add batch order for sorting (based on when interaction happened)
+      (newSuggestion as any).batchOrder = now;
       
-      // Remove existing suggestions of the same type
-      this.currentSuggestions = this.currentSuggestions.filter(existingSuggestion => {
-        const existingType = this.getSuggestionType(existingSuggestion);
-        const shouldRemove = existingType === newSuggestionType;
+      if (newSuggestion.scope === 'macro') {
+        // For macro suggestions: accumulate at the top instead of replacing
+        // Check if we already have the exact same suggestion (by type and category)
+        const newSuggestionType = this.getSuggestionType(newSuggestion);
+        const duplicateIndex = this.currentSuggestions.findIndex(existingSuggestion => {
+          const existingType = this.getSuggestionType(existingSuggestion);
+          return existingType === newSuggestionType && 
+                 existingSuggestion.category === newSuggestion.category &&
+                 existingSuggestion.scope === 'macro';
+        });
         
-        if (shouldRemove) {
-          console.log('[EnhancedProactiveService] Replacing existing suggestion of type:', existingType);
+        if (duplicateIndex >= 0) {
+          // Update existing macro suggestion with new confidence/data
+          this.currentSuggestions[duplicateIndex] = {
+            ...this.currentSuggestions[duplicateIndex],
+            ...newSuggestion,
+            timestamp: now,
+            batchOrder: now
+          } as any;
+          console.log('[EnhancedProactiveService] Updated existing macro suggestion of type:', newSuggestionType);
+        } else {
+          // Add new macro suggestion (don't remove existing ones)
+          this.currentSuggestions.push(newSuggestion);
+          console.log('[EnhancedProactiveService] Added new macro suggestion of type:', newSuggestionType);
         }
+      } else {
+        // For micro suggestions: replace existing suggestions of the same type (original behavior)
+        const newSuggestionType = this.getSuggestionType(newSuggestion);
         
-        return !shouldRemove;
-      });
+        // Remove existing suggestions of the same type
+        this.currentSuggestions = this.currentSuggestions.filter(existingSuggestion => {
+          const existingType = this.getSuggestionType(existingSuggestion);
+          const shouldRemove = existingType === newSuggestionType && existingSuggestion.scope !== 'macro';
+          
+          if (shouldRemove) {
+            console.log('[EnhancedProactiveService] Replacing existing micro suggestion of type:', existingType);
+          }
+          
+          return !shouldRemove;
+        });
+        
+        // Add the new micro suggestion
+        this.currentSuggestions.push(newSuggestion);
+      }
+    });
+    
+    // Sort suggestions: first by batch order (newest first), then by confidence (highest first)
+    this.currentSuggestions.sort((a, b) => {
+      const aBatchOrder = (a as any).batchOrder || a.timestamp;
+      const bBatchOrder = (b as any).batchOrder || b.timestamp;
       
-      // Add the new suggestion
-      this.currentSuggestions.push(newSuggestion);
+      // First sort by batch order (newest first)
+      if (aBatchOrder !== bBatchOrder) {
+        return bBatchOrder - aBatchOrder;
+      }
+      
+      // Then sort by confidence (highest first)
+      return b.confidence - a.confidence;
     });
     
     console.log('[EnhancedProactiveService] Added', newSuggestions.length, 'suggestions. Total:', this.currentSuggestions.length);
@@ -743,6 +787,63 @@ class EnhancedProactiveService {
   ) {
     console.log('[EnhancedProactiveService] Generating macro suggestions for rules:', macroRules.map(r => r.id));
     
+    // Check if any of the triggered rules are visualization-related
+    const hasVisualizationRules = macroRules.some(rule => 
+      rule.suggestionType === 'suggest-visualization' || 
+      rule.suggestionType === 'suggest-better-chart' ||
+      rule.id.includes('visualization')
+    );
+    
+    // If we have visualization rules, check if user has been idle for at least 15 seconds
+    if (hasVisualizationRules) {
+      const lastUserAction = Math.max(...recentActions.map(action => action.timestamp || 0));
+      const timeSinceLastAction = Date.now() - lastUserAction;
+      const requiredIdleTime = 15000; // 15 seconds
+      
+      if (timeSinceLastAction < requiredIdleTime) {
+        console.log('[EnhancedProactiveService] Delaying visualization suggestions - user not idle long enough:', {
+          timeSinceLastAction,
+          requiredIdleTime,
+          willDelayBy: requiredIdleTime - timeSinceLastAction
+        });
+        
+        // Schedule the suggestions to be generated after the required idle time
+        setTimeout(() => {
+          // Re-check if user is still idle and the context is still relevant
+          const currentLastAction = Math.max(...actionMonitor.getLastNActions(10).map(action => action.timestamp || 0));
+          const currentIdleTime = Date.now() - currentLastAction;
+          
+          if (currentIdleTime >= requiredIdleTime) {
+            console.log('[EnhancedProactiveService] User remained idle, generating delayed visualization suggestions');
+            this.generateAndDisplayMacroSuggestionsInternal(macroRules, recentActions, logs, context, currentMessages, textContext, imageContext, currentHtmlContexts);
+          } else {
+            console.log('[EnhancedProactiveService] User became active again, skipping delayed visualization suggestions');
+          }
+        }, requiredIdleTime - timeSinceLastAction);
+        
+        return; // Exit early for visualization suggestions
+      }
+    }
+    
+    // For non-visualization suggestions or when user has been idle long enough, proceed immediately
+    await this.generateAndDisplayMacroSuggestionsInternal(macroRules, recentActions, logs, context, currentMessages, textContext, imageContext, currentHtmlContexts);
+  }
+
+  /**
+   * Internal method to actually generate and display macro suggestions
+   */
+  private async generateAndDisplayMacroSuggestionsInternal(
+    macroRules: any[], 
+    recentActions: any[], 
+    logs: string[], 
+    context: any, 
+    currentMessages: any[], 
+    textContext: string, 
+    imageContext: any[], 
+    currentHtmlContexts: Record<string, any>
+  ) {
+    console.log('[EnhancedProactiveService] Generating macro suggestions for rules:', macroRules.map(r => r.id));
+    
     try {
       const suggestionScope = 'macro';
       const enhancedPrompt = createRuleBasedSuggestionPrompt(suggestionScope, macroRules, recentActions, logs, this.suggestionHistory, context.workspaceName);
@@ -911,9 +1012,6 @@ class EnhancedProactiveService {
     return !isLatestLogIrrelevant && !isLatestActionIrrelevant && !isTransitionalAction && !isActionTooRecent && !isRapidSequence;
   }
 
-  /**
-   * Determine if user is currently in interface view (for macro suggestions) or editor view (for micro suggestions)
-   */
   /**
    * Check if a suggestion violates the table editing constraint
    * When user is editing a table, suggestions should only modify that specific table

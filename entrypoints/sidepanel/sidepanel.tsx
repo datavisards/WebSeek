@@ -13,6 +13,7 @@ import ProactiveSettings from './components/ProactiveSettings.tsx';
 import MacroSuggestionPanel from './components/MacroSuggestionPanel.tsx';
 import { executeMacroTool } from './macro-tool-executor';
 import { chatWithAgent } from './apis';
+import { requestSuggestionRefinement as refinementAPI } from './refinement-api';
 import WorkspaceNameModal from './components/WorkspaceNameModal.tsx';
 import { updateInstances } from './utils';
 
@@ -440,94 +441,88 @@ const SidePanel = () => {
 
       console.log('[SidePanel] Found original suggestion for refinement:', originalSuggestion.message);
 
-      // Create a refined prompt for the LLM
-      const refinementPrompt = `The following tool suggestion failed to execute:
+      // Set loading state for the refinement
+      setSuggestions(prev => prev.map(s => 
+        s.id === originalSuggestionId 
+          ? { ...s, isLoading: true, loadingMessage: 'Refining suggestion...' }
+          : s
+      ));
 
-Original Suggestion: ${originalSuggestion.message}
-Tool Call: ${JSON.stringify(failedToolCall, null, 2)}
-Error Message: ${errorMessage}
-
-Please analyze the error and provide a refined suggestion with corrected tool parameters. Consider:
-1. What went wrong with the original tool call
-2. How to fix the parameters or approach
-3. Alternative tools that might work better
-
-Provide a new suggestion that addresses the same goal but avoids the error.`;
-
-      // Send refinement request to LLM via API
-      console.log('[SidePanel] Sending refinement request to LLM via API...');
+      // Send refinement request to specialized refinement API
+      console.log('[SidePanel] Sending refinement request to specialized refinement API...');
       setAgentLoading(true);
-      
-      // Create a specialized refinement prompt
-      const refinementUserMessage = `Please refine the following failed suggestion:
-
-ORIGINAL SUGGESTION: "${originalSuggestion.message}"
-
-FAILED TOOL CALL:
-${JSON.stringify(failedToolCall, null, 2)}
-
-ERROR MESSAGE: "${errorMessage}"
-
-ANALYSIS REQUESTED:
-1. Identify what went wrong with the tool parameters
-2. Suggest corrected parameters or alternative approaches  
-3. Provide a refined suggestion that addresses the same goal but avoids the error
-
-Please provide a refined suggestion with corrected tool calls that will succeed.`;
 
       try {
-        console.log("refinementUserMessage: ", refinementUserMessage);
-        console.log("messages: ", messages);
-        console.log("instances: ", instances);
-        console.log("htmlContext: ", htmlContext);
-        console.log("logs: ", logs);
-
-        // Call the LLM API for suggestion refinement
-        const result = await chatWithAgent(
-          'suggest', // Use suggest ChatType for proactive suggestions
-          refinementUserMessage,
-          messages, // Include conversation history
-          JSON.stringify(instances), // Current instance context
-          [], // No image context needed for refinement
-          htmlContext, // Include HTML context
-          logs // Include recent logs
+        const refinementResult = await refinementAPI(
+          {
+            id: originalSuggestion.id,
+            message: originalSuggestion.message,
+            category: originalSuggestion.category
+          },
+          failedToolCall,
+          errorMessage,
+          {
+            messages,
+            instances,
+            htmlContext,
+            logs
+          }
         );
 
-        console.log("Refined result: ", result);
+        console.log('[SidePanel] Refinement API result:', refinementResult);
 
-        if (result.suggestions && result.suggestions.length > 0) {
-          console.log('[SidePanel] Received refined suggestions from LLM:', result.suggestions);
+        if (refinementResult.success && refinementResult.refinedSuggestion) {
+          console.log('[SidePanel] Received refined suggestion from API:', refinementResult.refinedSuggestion);
           
-          // Convert to ProactiveSuggestion format and add to proactive service
-          const refinedSuggestions = result.suggestions.map((suggestion: any, index: number) => ({
-            id: `refined-suggestion-${originalSuggestionId}-${Date.now()}-${index}`,
-            message: suggestion.message || 'Refined suggestion',
-            instances: suggestion.instances || [],
-            scope: suggestion.scope || 'macro',
-            modality: suggestion.modality || 'peripheral',
-            priority: suggestion.priority || 'medium',
-            confidence: suggestion.confidence || 0.8, // Higher confidence for refined suggestions
-            category: suggestion.category || originalSuggestion.category || 'general',
+          // Create the refined ProactiveSuggestion using the SAME ID as the original
+          const refinedSuggestion = {
+            id: originalSuggestionId, // Keep the same ID to maintain consistency
+            message: refinementResult.refinedSuggestion.message,
+            instances: originalSuggestion.instances || [],
+            scope: refinementResult.refinedSuggestion.scope as any,
+            modality: refinementResult.refinedSuggestion.modality as any,
+            priority: refinementResult.refinedSuggestion.priority as any,
+            confidence: refinementResult.refinedSuggestion.confidence,
+            category: refinementResult.refinedSuggestion.category,
             timestamp: Date.now(),
-            undoable: suggestion.scope === 'micro',
-            toolCall: suggestion.toolCall,
-            toolSequence: suggestion.toolSequence,
+            undoable: refinementResult.refinedSuggestion.scope === 'micro',
+            toolCall: refinementResult.refinedSuggestion.toolCall,
+            toolSequence: refinementResult.refinedSuggestion.toolSequence,
             isRefinement: true,
-            originalSuggestionId: originalSuggestionId
-          }));
+            originalSuggestionId: originalSuggestionId,
+            isLoading: false
+          };
           
-          // Add the refined suggestions to the proactive service
-          (proactiveService as any).addSuggestions(refinedSuggestions);
+          console.log('[SidePanel] Created refined suggestion with same ID:', {
+            originalId: originalSuggestionId,
+            refinedId: refinedSuggestion.id,
+            originalToolSequence: originalSuggestion.toolSequence,
+            refinedToolSequence: refinedSuggestion.toolSequence
+          });
           
-          // Now dismiss the original failed suggestion
-          proactiveService.dismissSuggestion(originalSuggestionId);
+          // Replace the original suggestion with the refined one (same ID)
+          setSuggestions(prev => prev.map(s => 
+            s.id === originalSuggestionId ? refinedSuggestion : s
+          ));
           
-          console.log('[SidePanel] Successfully processed refinement - added', refinedSuggestions.length, 'new suggestions and removed original');
+          console.log('[SidePanel] Successfully processed refinement - replaced suggestion with refined version (same ID)');
         } else {
-          console.warn('[SidePanel] LLM did not provide refined suggestions');
+          console.warn('[SidePanel] Refinement API failed:', refinementResult.error || refinementResult.message);
+          // Remove loading state and restore original suggestion
+          setSuggestions(prev => prev.map(s => 
+            s.id === originalSuggestionId 
+              ? { ...s, isLoading: false, loadingMessage: undefined }
+              : s
+          ));
         }
       } catch (error) {
-        console.error('[SidePanel] Error in LLM refinement request:', error);
+        console.error('[SidePanel] Error in refinement API request:', error);
+        // Remove loading state on error
+        setSuggestions(prev => prev.map(s => 
+          s.id === originalSuggestionId 
+            ? { ...s, isLoading: false, loadingMessage: undefined }
+            : s
+        ));
       } finally {
         setAgentLoading(false);
       }
@@ -535,8 +530,14 @@ Please provide a refined suggestion with corrected tool calls that will succeed.
     } catch (error) {
       console.error('[SidePanel] Error requesting suggestion refinement:', error);
       setAgentLoading(false);
+      // Remove loading state on outer error
+      setSuggestions(prev => prev.map(s => 
+        s.id === originalSuggestionId 
+          ? { ...s, isLoading: false, loadingMessage: undefined }
+          : s
+      ));
     }
-  }, [suggestions, addMessage, setAgentLoading]);
+  }, [suggestions, setSuggestions, setAgentLoading, messages, instances, htmlContext, logs]);
 
   // Tool execution handler for macro suggestions
   const handleExecuteTool = useCallback(async (toolCall: { function: string; parameters: any }, suggestionId: string) => {
@@ -586,8 +587,19 @@ Please provide a refined suggestion with corrected tool calls that will succeed.
         
         console.log('[SidePanel] Successfully executed tool and removed suggestion:', suggestionId);
       } else {
-        // Tool execution failed - request LLM refinement
-        console.log('[SidePanel] Tool execution failed, requesting LLM refinement:', result.message);
+        // Tool execution failed - show loading state and request LLM refinement
+        console.log('[SidePanel] Tool execution failed, showing loading state and requesting LLM refinement:', result.message);
+        
+        // Update the suggestion to show loading state
+        setSuggestions(prev => prev.map(s => 
+          s.id === suggestionId 
+            ? { 
+                ...s, 
+                isLoading: true, 
+                loadingMessage: 'Processing...',
+              }
+            : s
+        ));
         
         // Don't dismiss the suggestion yet - keep it visible until refinement arrives
         // Request refined suggestion from LLM (don't add to logs to avoid noise)
@@ -596,6 +608,17 @@ Please provide a refined suggestion with corrected tool calls that will succeed.
     } catch (error) {
       console.error('[SidePanel] Tool execution error:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Update the suggestion to show loading state
+      setSuggestions(prev => prev.map(s => 
+        s.id === suggestionId 
+          ? { 
+              ...s, 
+              isLoading: true, 
+              loadingMessage: 'Processing...',
+            }
+          : s
+      ));
       
       // Don't dismiss the suggestion yet - keep it visible until refinement arrives
       // Request refined suggestion from LLM for execution errors too (don't add to logs)

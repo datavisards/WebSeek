@@ -32,10 +32,21 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
 }) => {
   const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null);
   
-  // Filter for macro suggestions only and sort by confidence (descending)
+  // Filter for macro suggestions only and sort by batch order (newest first), then confidence (highest first)
   const macroSuggestions = suggestions
     .filter(s => s.scope === 'macro')
-    .sort((a, b) => b.confidence - a.confidence);
+    .sort((a, b) => {
+      // First sort by batch order (newest first)
+      const aBatchOrder = (a as any).batchOrder || a.timestamp;
+      const bBatchOrder = (b as any).batchOrder || b.timestamp;
+      
+      if (aBatchOrder !== bBatchOrder) {
+        return bBatchOrder - aBatchOrder;
+      }
+      
+      // Then sort by confidence (highest first)
+      return b.confidence - a.confidence;
+    });
 
   const getToolIcon = (toolName: string) => {
     switch (toolName) {
@@ -72,6 +83,7 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
     
     if (suggestion.toolSequence && onExecuteToolSequence) {
       console.log('[MacroSuggestionPanel] Executing tool sequence:', suggestion.toolSequence);
+      console.log('[MacroSuggestionPanel] First step parameters:', suggestion.toolSequence.steps?.[0]?.toolCall?.parameters);
       onExecuteToolSequence(suggestion.toolSequence, suggestion.id);
     } else if (suggestion.toolCall) {
       console.log('[MacroSuggestionPanel] Executing single tool call:', suggestion.toolCall);
@@ -142,150 +154,167 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
           </div>
         ) : (
           macroSuggestions.map((suggestion) => (
-          <div key={suggestion.id} className={`suggestion-card priority-${suggestion.priority}`}>
-            <div className="suggestion-header">
-              <div className="suggestion-meta">
-                <span className="category-icon">
-                  {getCategoryIcon(suggestion.category)}
-                </span>
-                <span className="category-text">{suggestion.category}</span>
-                <span className="priority-indicator">
-                  {getPriorityIcon(suggestion.priority)}
-                </span>
-                <span className="confidence-score">
-                  {Math.round(suggestion.confidence * 100)}%
-                </span>
+          <div key={suggestion.id} className={`suggestion-card priority-${suggestion.priority} ${suggestion.isLoading ? 'loading' : ''}`}>
+            {suggestion.isLoading ? (
+              // Loading placeholder
+              <div className="suggestion-loading">
+                <div className="loading-spinner">
+                  <div className="spinner"></div>
+                </div>
+                <div className="loading-text">
+                  {suggestion.loadingMessage || 'Loading...'}
+                </div>
+                <div className="loading-subtext">
+                  Refining suggestion based on current context
+                </div>
               </div>
-              <button
-                className="expand-btn"
-                onClick={() => setExpandedSuggestion(
-                  expandedSuggestion === suggestion.id ? null : suggestion.id
-                )}
-              >
-                {expandedSuggestion === suggestion.id ? '▼' : '▶'}
-              </button>
-            </div>
-
-            <div className="suggestion-content">
-              {detectMarkdown(suggestion.message) ? (
-                <h4 
-                  className="suggestion-message markdown-content"
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(suggestion.message) }}
-                />
-              ) : (
-                <h4 className="suggestion-message">{suggestion.message}</h4>
-              )}
-              
-              {suggestion.estimatedImpact && (
-                <div className="impact-indicator">
-                  <span className="impact-label">Impact:</span>
-                  <span className="impact-text">{suggestion.estimatedImpact}</span>
+            ) : (
+              <>
+                <div className="suggestion-header">
+                  <div className="suggestion-meta">
+                    <span className="category-icon">
+                      {getCategoryIcon(suggestion.category)}
+                    </span>
+                    <span className="category-text">{suggestion.category}</span>
+                    <span className="priority-indicator">
+                      {getPriorityIcon(suggestion.priority)}
+                    </span>
+                    <span className="confidence-score">
+                      {Math.round(suggestion.confidence * 100)}%
+                    </span>
+                  </div>
+                  <button
+                    className="expand-btn"
+                    onClick={() => setExpandedSuggestion(
+                      expandedSuggestion === suggestion.id ? null : suggestion.id
+                    )}
+                  >
+                    {expandedSuggestion === suggestion.id ? '▼' : '▶'}
+                  </button>
                 </div>
-              )}
 
-              {suggestion.toolCall && (
-                <div className="tool-indicator">
-                  <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
-                  <span className="tool-name">{getToolDisplayName(suggestion.toolCall.function)}</span>
-                  <span className="tool-action">Action available</span>
-                </div>
-              )}
-
-              {expandedSuggestion === suggestion.id && (
-                <div className="expanded-details">
-                  {suggestion.detailedDescription && (
-                    detectMarkdown(suggestion.detailedDescription) ? (
-                      <div 
-                        className="detailed-description markdown-content"
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(suggestion.detailedDescription) }}
-                      />
-                    ) : (
-                      <p className="detailed-description">
-                        {suggestion.detailedDescription}
-                      </p>
-                    )
+                <div className="suggestion-content">
+                  {detectMarkdown(suggestion.message) ? (
+                    <h4 
+                      className="suggestion-message markdown-content"
+                      dangerouslySetInnerHTML={{ __html: renderMarkdown(suggestion.message) }}
+                    />
+                  ) : (
+                    <h4 className="suggestion-message">{suggestion.message}</h4>
+                  )}
+                  
+                  {suggestion.estimatedImpact && (
+                    <div className="impact-indicator">
+                      <span className="impact-label">Impact:</span>
+                      <span className="impact-text">{suggestion.estimatedImpact}</span>
+                    </div>
                   )}
 
                   {suggestion.toolCall && (
-                    <div className="tool-details">
-                      <strong>Tool Action:</strong>
-                      <div className="tool-info">
-                        <div className="tool-header">
-                          <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
-                          <span className="tool-title">{getToolDisplayName(suggestion.toolCall.function)}</span>
-                        </div>
-                        <p className="tool-description">{getToolDescription(suggestion.toolCall.function)}</p>
-                        <div className="tool-parameters">
-                          <strong>Parameters:</strong>
-                          <pre>{JSON.stringify(suggestion.toolCall.parameters, null, 2)}</pre>
-                        </div>
-                      </div>
+                    <div className="tool-indicator">
+                      <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
+                      <span className="tool-name">{getToolDisplayName(suggestion.toolCall.function)}</span>
+                      <span className="tool-action">Action available</span>
                     </div>
                   )}
-                  
-                  {suggestion.contextualData && (
-                    <div className="contextual-data">
-                      <strong>Context:</strong>
-                      <pre>{JSON.stringify(suggestion.contextualData, null, 2)}</pre>
-                    </div>
-                  )}
-                  
-                  {suggestion.instances && suggestion.instances.length > 0 && (
-                    <div className="instance-preview">
-                      <strong>Will affect {suggestion.instances.length} item(s)</strong>
-                      <ul>
-                        {suggestion.instances.map((instance, idx) => (
-                          <li key={idx}>
-                            {instance.action} {instance.instance?.type || 'item'}
-                            {instance.targetId && ` (${instance.targetId})`}
-                          </li>
-                        ))}
-                      </ul>
+
+                  {expandedSuggestion === suggestion.id && (
+                    <div className="expanded-details">
+                      {suggestion.detailedDescription && (
+                        detectMarkdown(suggestion.detailedDescription) ? (
+                          <div 
+                            className="detailed-description markdown-content"
+                            dangerouslySetInnerHTML={{ __html: renderMarkdown(suggestion.detailedDescription) }}
+                          />
+                        ) : (
+                          <p className="detailed-description">
+                            {suggestion.detailedDescription}
+                          </p>
+                        )
+                      )}
+
+                      {suggestion.toolCall && (
+                        <div className="tool-details">
+                          <strong>Tool Action:</strong>
+                          <div className="tool-info">
+                            <div className="tool-header">
+                              <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
+                              <span className="tool-title">{getToolDisplayName(suggestion.toolCall.function)}</span>
+                            </div>
+                            <p className="tool-description">{getToolDescription(suggestion.toolCall.function)}</p>
+                            <div className="tool-parameters">
+                              <strong>Parameters:</strong>
+                              <pre>{JSON.stringify(suggestion.toolCall.parameters, null, 2)}</pre>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {suggestion.contextualData && (
+                        <div className="contextual-data">
+                          <strong>Context:</strong>
+                          <pre>{JSON.stringify(suggestion.contextualData, null, 2)}</pre>
+                        </div>
+                      )}
+                      
+                      {suggestion.instances && suggestion.instances.length > 0 && (
+                        <div className="instance-preview">
+                          <strong>Will affect {suggestion.instances.length} item(s)</strong>
+                          <ul>
+                            {suggestion.instances.map((instance, idx) => (
+                              <li key={idx}>
+                                {instance.action} {instance.instance?.type || 'item'}
+                                {instance.targetId && ` (${instance.targetId})`}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
 
-            <div className="suggestion-actions">
-              <button
-                className={`accept-btn ${(suggestion.toolCall || suggestion.toolSequence) ? 'tool-action' : ''}`}
-                onClick={() => handleApplyTool(suggestion)}
-                title={
-                  suggestion.toolSequence 
-                    ? `Execute ${suggestion.toolSequence.steps.length} step sequence: ${suggestion.toolSequence.goal}`
-                    : suggestion.toolCall 
-                      ? `Execute ${getToolDisplayName(suggestion.toolCall.function)}` 
-                      : "Accept this suggestion"
-                }
-              >
-                {suggestion.toolSequence ? (
-                  <>
-                    <span className="tool-icon">🔄</span>
-                    Apply Sequence ({suggestion.toolSequence.steps.length} steps)
-                  </>
-                ) : suggestion.toolCall ? (
-                  <>
-                    <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
-                    Apply
-                  </>
-                ) : (
-                  'Apply'
-                )}
-              </button>
-              <button
-                className="dismiss-btn"
-                onClick={() => onDismiss(suggestion.id)}
-                title="Dismiss this suggestion"
-              >
-                Dismiss
-              </button>
-              {suggestion.undoable && (
-                <span className="undoable-indicator" title="This action can be undone">
-                  ↶ Undoable
-                </span>
-              )}
-            </div>
+                <div className="suggestion-actions">
+                  <button
+                    className={`accept-btn ${(suggestion.toolCall || suggestion.toolSequence) ? 'tool-action' : ''}`}
+                    onClick={() => handleApplyTool(suggestion)}
+                    title={
+                      suggestion.toolSequence 
+                        ? `Execute ${suggestion.toolSequence.steps.length} step sequence: ${suggestion.toolSequence.goal}`
+                        : suggestion.toolCall 
+                          ? `Execute ${getToolDisplayName(suggestion.toolCall.function)}` 
+                          : "Accept this suggestion"
+                    }
+                  >
+                    {suggestion.toolSequence ? (
+                      <>
+                        <span className="tool-icon">🔄</span>
+                        Apply Sequence ({suggestion.toolSequence.steps.length} steps)
+                      </>
+                    ) : suggestion.toolCall ? (
+                      <>
+                        <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
+                        Apply
+                      </>
+                    ) : (
+                      'Apply'
+                    )}
+                  </button>
+                  <button
+                    className="dismiss-btn"
+                    onClick={() => onDismiss(suggestion.id)}
+                    title="Dismiss this suggestion"
+                  >
+                    Dismiss
+                  </button>
+                  {suggestion.undoable && (
+                    <span className="undoable-indicator" title="This action can be undone">
+                      ↶ Undoable
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
           </div>
           ))
         )}

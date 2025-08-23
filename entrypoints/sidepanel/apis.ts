@@ -122,7 +122,10 @@ export async function chatWithAgent(
 
         // Return structured result
         return {
-            message: jsonContent.message || 'Sorry, I encountered an error while processing your request. Please try again.',
+            message: jsonContent.message || 
+                    (jsonContent.suggestions && jsonContent.suggestions.length > 0 
+                     ? `Generated ${jsonContent.suggestions.length} suggestion${jsonContent.suggestions.length > 1 ? 's' : ''}` 
+                     : 'Response processed successfully'),
             instances: jsonContent.instances || [],
             suggestions: jsonContent.suggestions || []
         };
