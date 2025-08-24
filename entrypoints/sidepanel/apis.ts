@@ -9,7 +9,7 @@ import {
     Message,
     ChatType
 } from './types';
-import { extractJSONFromResponse } from './utils';
+import { extractJSONFromResponse, cleanHTML } from './utils';
 import { getPrompt, promptChat, promptInfer } from './prompts';
 
 const openai = new OpenAI({
@@ -43,7 +43,7 @@ export async function chatWithAgent(
         // Extract all unique URLs from logs and conversation history
 
         const htmlContextString = Object.entries(htmlContext).map(([pageId, contextData]) =>
-            `Page ID: ${pageId}\nPage URL: ${contextData.pageURL}\nHTML:\n\`\`\`html\n${contextData.htmlContent}\n\`\`\``).join('\n\n')
+            `Page ID: ${pageId}\nPage URL: ${contextData.pageURL}\nHTML:\n\`\`\`html\n${cleanHTML(contextData.htmlContent)}\n\`\`\``).join('\n\n')
 
         // Format conversation history including operations
         let conversationText = conversationHistory

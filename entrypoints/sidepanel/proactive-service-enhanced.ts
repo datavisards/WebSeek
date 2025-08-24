@@ -34,6 +34,7 @@ class EnhancedProactiveService {
     instances: [] as Instance[],
     messages: [] as Message[],
     htmlContexts: {} as Record<string, any>,
+    htmlLoadingStates: {} as Record<string, boolean>,
     logs: [] as string[],
     isInEditor: false, // Track if user is currently in an editor
     editingTableId: null as string | null, // Track which table is currently being edited
@@ -165,7 +166,7 @@ class EnhancedProactiveService {
   }
 
   // Update context with new instances, messages, HTML contexts, editor state, and editing table ID
-  updateContext({instances, messages, htmlContexts, isInEditor, editingTableId}: {instances?: Instance[], messages?: Message[], htmlContexts?: Record<string, any>, isInEditor?: boolean, editingTableId?: string | null}) {
+  updateContext({instances, messages, htmlContexts, htmlLoadingStates, isInEditor, editingTableId}: {instances?: Instance[], messages?: Message[], htmlContexts?: Record<string, any>, htmlLoadingStates?: Record<string, boolean>, isInEditor?: boolean, editingTableId?: string | null}) {
     if (instances) {
       this.currentContext.instances = instances;
     }
@@ -175,6 +176,14 @@ class EnhancedProactiveService {
     if (htmlContexts) {
       this.currentContext.htmlContexts = htmlContexts;
       console.log('[EnhancedProactiveService] HTML contexts updated:', Object.keys(htmlContexts));
+    }
+    if (htmlLoadingStates !== undefined) {
+      this.currentContext.htmlLoadingStates = htmlLoadingStates;
+      const loadingPages = Object.entries(htmlLoadingStates).filter(([_, isLoading]) => isLoading).map(([pageId, _]) => pageId);
+      console.log('[EnhancedProactiveService] HTML loading states updated:', {
+        totalPages: Object.keys(htmlLoadingStates).length,
+        loadingPages: loadingPages.length > 0 ? loadingPages : 'none'
+      });
     }
     if (isInEditor !== undefined) {
       console.log('[EnhancedProactiveService] isInEditor state updating:', {
@@ -241,14 +250,18 @@ class EnhancedProactiveService {
 
     // Debounce the processing
     this.debounceTimer = setTimeout(() => {
-      this.processLogsAndGenerateSuggestions(logs);
+      this.processLogsAndGenerateSuggestions();
     }, this.settings.debounceMs);
   }
 
   /**
    * Process logs and generate enhanced suggestions with intelligent debouncing
    */
-  private async processLogsAndGenerateSuggestions(logs: string[]) {
+  private async processLogsAndGenerateSuggestions() {
+    // Always use the most current logs from context to avoid stale data
+    const logs = this.currentContext.logs;
+    console.log('[EnhancedProactiveService] Using current context logs for suggestions:', logs.length);
+    
     if (this.suggestionCount >= this.settings.maxSuggestionsPerSession) {
       console.log('[EnhancedProactiveService] Max suggestions reached for session');
       return;
@@ -441,19 +454,23 @@ class EnhancedProactiveService {
       return;
     }
 
-    // Only clear existing suggestions if they are stale (older than 30 seconds)
+    // Only clear stale suggestions, not all suggestions
     // This prevents clearing suggestions that the user might be trying to accept
     const now = Date.now();
-    const staleSuggestionThreshold = 30000; // 30 seconds
-    const hasStalesuggestions = this.currentSuggestions.some(s => 
-      (now - s.timestamp) > staleSuggestionThreshold
+    const staleSuggestionThreshold = 60000; // Increased to 60 seconds
+    const initialCount = this.currentSuggestions.length;
+    
+    this.currentSuggestions = this.currentSuggestions.filter(s => 
+      (now - s.timestamp) <= staleSuggestionThreshold
     );
     
-    if (hasStalesuggestions || this.currentSuggestions.length === 0) {
-      console.log('[EnhancedProactiveService] Clearing stale or no existing suggestions');
-      this.clearSuggestions();
-    } else {
-      console.log('[EnhancedProactiveService] Keeping recent suggestions to avoid race condition');
+    const removedCount = initialCount - this.currentSuggestions.length;
+    if (removedCount > 0) {
+      console.log(`[EnhancedProactiveService] Removed ${removedCount} stale suggestions, keeping ${this.currentSuggestions.length} recent ones`);
+      // Notify UI of the filtered suggestions
+      if (this.onSuggestionsUpdated) {
+        this.onSuggestionsUpdated(this.currentSuggestions);
+      }
     }
 
     // Create new abort controller for this generation
@@ -625,8 +642,27 @@ class EnhancedProactiveService {
       
       // === MICRO SUGGESTION PROCESS (independent) ===
       if (shouldGenerateMicroSuggestions) {
-        console.log('[EnhancedProactiveService] === STARTING MICRO SUGGESTION PROCESS ===');
-        await this.generateAndDisplayMicroSuggestions(microRules, recentActions, logs, context, currentMessages, textContext, imageContext, currentHtmlContexts);
+        // Check if HTML contexts are still loading before generating micro suggestions
+        const htmlLoadingStates = this.currentContext.htmlLoadingStates || {};
+        const isAnyHtmlLoading = Object.values(htmlLoadingStates).some(isLoading => isLoading);
+        
+        if (isAnyHtmlLoading) {
+          console.log('[EnhancedProactiveService] Delaying micro suggestions - HTML contexts still loading:', {
+            loadingPages: Object.entries(htmlLoadingStates).filter(([_, isLoading]) => isLoading).map(([pageId, _]) => pageId)
+          });
+          
+          // Delay micro suggestion generation until HTML contexts are ready
+          setTimeout(() => {
+            console.log('[EnhancedProactiveService] Retrying micro suggestions after HTML loading delay');
+            // Use current context to avoid stale data
+            const currentLogs = this.currentContext.logs;
+            const currentHtmlContexts = this.currentContext.htmlContexts || {};
+            this.generateAndDisplayMicroSuggestions(microRules, recentActions, currentLogs, context, currentMessages, textContext, imageContext, currentHtmlContexts);
+          }, 2000); // Wait 2 seconds for HTML contexts to load
+        } else {
+          console.log('[EnhancedProactiveService] === STARTING MICRO SUGGESTION PROCESS ===');
+          await this.generateAndDisplayMicroSuggestions(microRules, recentActions, logs, context, currentMessages, textContext, imageContext, currentHtmlContexts);
+        }
       } else if (microRules.length > 0) {
         console.log('[EnhancedProactiveService] Micro rules available but not in table editor:', {
           microRuleIds: microRules.map(r => r.id),
@@ -711,6 +747,14 @@ class EnhancedProactiveService {
     currentHtmlContexts: Record<string, any>
   ) {
     console.log('[EnhancedProactiveService] Generating micro suggestions for rules:', microRules.map(r => r.id));
+    console.log('[EnhancedProactiveService] HTML contexts available for micro suggestions:', {
+      contextKeys: Object.keys(currentHtmlContexts),
+      contextDetails: Object.entries(currentHtmlContexts).map(([key, value]) => ({
+        key,
+        pageURL: value?.pageURL || 'unknown',
+        hasContent: !!value?.htmlContent
+      }))
+    });
     
     try {
       const suggestionScope = 'micro';
@@ -843,6 +887,14 @@ class EnhancedProactiveService {
     currentHtmlContexts: Record<string, any>
   ) {
     console.log('[EnhancedProactiveService] Generating macro suggestions for rules:', macroRules.map(r => r.id));
+    console.log('[EnhancedProactiveService] HTML contexts available for macro suggestions:', {
+      contextKeys: Object.keys(currentHtmlContexts),
+      contextDetails: Object.entries(currentHtmlContexts).map(([key, value]) => ({
+        key,
+        pageURL: value?.pageURL || 'unknown',
+        hasContent: !!value?.htmlContent
+      }))
+    });
     
     try {
       const suggestionScope = 'macro';

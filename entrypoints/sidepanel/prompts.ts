@@ -741,6 +741,107 @@ DO NOT suggest trivial additions or formatting changes. DO NOT suggest completio
     - Clear variable relationships
     - Data completeness and quality`;
         
+        case 'table-joining':
+          return `- ${rule.name}: You MUST provide SPECIFIC, ACTIONABLE table join operations with exact steps and tool sequences. NEVER ask vague questions like "What would you like to do?" 
+
+**CRITICAL: PREVENT REDUNDANT JOINS**
+Before suggesting any join operation, you MUST verify that the tables are NOT already joined or merged:
+
+**PRE-JOIN VALIDATION (MANDATORY):**
+1. **Check for Existing Joins**: Analyze if tables already contain merged data from multiple sources
+2. **Detect Combined Columns**: Look for columns that indicate data has been consolidated (e.g., "Amazon Price" + "B&H Price" in same table)
+3. **Identify Merged Records**: Check if tables already contain comprehensive data that would result from a join
+4. **Source Analysis**: Verify tables contain distinct, complementary data rather than already-combined datasets
+
+**WHEN TO RETURN success: false (DO NOT SUGGEST JOIN):**
+- Tables already contain merged data from multiple sources
+- One table is clearly a result of previous join operations (has combined column names like "Source A Price", "Source B Price")
+- Tables have overlapping data that suggests they're already consolidated
+- Column names indicate previous merging (prefixed with source names, e.g., "Amazon_", "BH_")
+- Tables contain identical or near-identical data (would result in redundant join)
+- Tables already have comprehensive data that spans multiple sources
+
+**CRITICAL: GENERATE CONCRETE JOIN OPERATIONS**
+You MUST provide specific join operations using exact tools and parameters. Analyze the tables to determine:
+
+**1. JOIN TYPE ANALYSIS (REQUIRED):**
+- **INNER JOIN**: When you need only matching records from both tables (most common)
+- **LEFT JOIN**: When you want all records from table 1 plus matching records from table 2
+- **RIGHT JOIN**: When you want all records from table 2 plus matching records from table 1
+- **OUTER JOIN**: When you want all records from both tables, filling missing values with null
+
+**2. COLUMN MATCHING ANALYSIS (MANDATORY):**
+- **Identify JOIN KEYS**: Determine which columns contain matching values (e.g., "Product Name", "Model Number", "SKU")
+- **Validate data consistency**: Check if values are formatted similarly across tables
+- **Handle partial matches**: Account for slight differences in naming or formatting
+
+**3. ACTIONABLE INSTANCE OPERATIONS (REQUIRED):**
+You MUST provide specific tool sequences like:
+
+**EXAMPLE ACTIONABLE SUGGESTIONS:**
+✅ **GOOD - Specific Operations:**
+{
+  "category": "suggest-table-join",
+  "message": "Merge camera data from both sources using Product Name as the join key. This will create a comprehensive comparison table with specifications from Amazon and B&H Photo.",
+  "instances": [
+    {
+      "instanceId": "target-table-id",
+      "tools": [
+        {
+          "name": "tableJoin",
+          "params": {
+            "sourceTableId": "source-table-id",
+            "joinColumn": "Product Name",
+            "joinType": "inner",
+            "columnMapping": {
+              "Price": "Amazon Price",
+              "Rating": "Amazon Rating",
+              "Availability": "Amazon Stock"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+
+**4. COLUMN RENAMING STRATEGY (WHEN NEEDED):**
+When tables have columns with same names but different sources:
+- Prefix with source: "Amazon Price" vs "B&H Price"
+- Add context: "Price (Amazon)" vs "Price (B&H)"
+- Use descriptive names: "Current Price" vs "MSRP"
+
+**5. VALUE PROPOSITION (REQUIRED):**
+Explain WHY the join is valuable:
+- "Compare prices across retailers"
+- "Combine technical specs with user reviews"
+- "Merge availability data with product details"
+- "Create comprehensive product comparison"
+
+**FORBIDDEN RESPONSES:**
+❌ "What would you like to do with these tables?"
+❌ "I notice you have similar data..."
+❌ "These tables could potentially be combined..."
+❌ Generic questions without specific operations
+
+**REQUIRED OUTPUT ELEMENTS:**
+1. **Specific join type** (inner/left/right/outer)
+2. **Exact join columns** with actual column names from the tables
+3. **Tool sequence** with tableJoin operation and parameters
+4. **Column mapping** for duplicate column names
+5. **Clear value proposition** explaining the benefit
+6. **Target instance ID** for where the joined table will be created
+
+**VALIDATION CHECKLIST:**
+✅ Provided specific join operation with exact tool name and parameters
+✅ Identified actual column names that exist in both tables
+✅ Explained clear business value of the join operation
+✅ Included column mapping for handling duplicate names
+✅ Specified where the result will be placed (target instance)
+❌ Asked vague questions about user intentions
+❌ Used generic column names that don't exist in the tables
+❌ Provided suggestions without specific tool operations`;
+
         case 'cross-instance-duplication':
           return `- ${rule.name}: You MUST verify that elements across instances are genuinely related or part of a collection before suggesting consolidation. Check:
     - Similar data structures or schemas

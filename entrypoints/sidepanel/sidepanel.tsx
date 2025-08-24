@@ -22,6 +22,7 @@ const SidePanel = () => {
   const logsRef = useRef<string[]>([]);
   const [htmlContext, setHtmlContexts] = useState<Record<string, {pageURL: string, htmlContent: string}>>({});
   const htmlContextRef = useRef<Record<string, {pageURL: string, htmlContent: string}>>({});
+  const [htmlLoadingStates, setHtmlLoadingStates] = useState<Record<string, boolean>>({});
   const [messages, setMessages] = useState<Message[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -58,6 +59,11 @@ const SidePanel = () => {
 
   // Current page info for HTML context fetching
   const [currentPageInfo, setCurrentPageInfo] = useState<{pageId: string, url: string} | null>(null);
+
+  // Handle HTML loading state changes from InstanceView
+  const handleHTMLLoadingStatesChange = useCallback((loadingStates: Record<string, boolean>) => {
+    setHtmlLoadingStates(loadingStates);
+  }, []);
 
   const addLog = (message: string, actionDetails?: {
     type: string;
@@ -334,26 +340,30 @@ const SidePanel = () => {
         return updatedInstances;
       });
       
-      // Log the operation with updated cell details
-      const updatedCells = suggestion.instances
-        .filter(event => event.action === 'update' && event.instance?.type === 'table')
-        .map(event => {
-          const table = event.instance as any;
-          const cellUpdates: string[] = [];
-          if (table?.cells) {
-            table.cells.forEach((row: any[], rowIndex: number) => {
-              row.forEach((cell: any, colIndex: number) => {
-                if (cell) {
-                  cellUpdates.push(`R${rowIndex}C${colIndex}`);
-                }
+      // Only log for suggestions that don't have tool sequences (to avoid duplicate logs)
+      // Tool sequence suggestions will be logged when the sequence executes successfully
+      if (!suggestion.toolSequence) {
+        // Log the operation with updated cell details
+        const updatedCells = suggestion.instances
+          .filter(event => event.action === 'update' && event.instance?.type === 'table')
+          .map(event => {
+            const table = event.instance as any;
+            const cellUpdates: string[] = [];
+            if (table?.cells) {
+              table.cells.forEach((row: any[], rowIndex: number) => {
+                row.forEach((cell: any, colIndex: number) => {
+                  if (cell) {
+                    cellUpdates.push(`R${rowIndex}C${colIndex}`);
+                  }
+                });
               });
-            });
-          }
-          return cellUpdates;
-        })
-        .flat();
-      
-      addLog(`Applied suggestion${updatedCells.length > 0 ? ` - Updated cells: ${updatedCells.join(', ')}` : ''}`);
+            }
+            return cellUpdates;
+          })
+          .flat();
+        
+        addLog(`Applied suggestion${updatedCells.length > 0 ? ` - Updated cells: ${updatedCells.join(', ')}` : ''}`);
+      }
     });
 
     proactiveService.onGenerationStateChange((isGenerating) => {
@@ -372,9 +382,10 @@ const SidePanel = () => {
       instances,
       messages,
       htmlContexts: htmlContext,
+      htmlLoadingStates,
       editingTableId
     });
-  }, [instances, messages, htmlContext, editingTableId]);
+  }, [instances, messages, htmlContext, htmlLoadingStates, editingTableId]);
 
   useEffect(() => {
     logsRef.current = logs;
@@ -579,7 +590,7 @@ const SidePanel = () => {
         await new Promise(resolve => setTimeout(resolve, 100));
         
         // Add log for the successful execution
-        addLog(`Tool executed successfully: ${result.message}`, {
+        addLog(`Applied suggestion - ${result.message}`, {
           type: 'tool-executed',
           context: { toolCall, result },
           metadata: { toolFunction: toolCall.function }
@@ -648,11 +659,11 @@ const SidePanel = () => {
         // Small delay to ensure suggestion dismissal is processed before log triggers new generation
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        // Add log for the successful execution
-        addLog(`Tool sequence executed successfully: ${result.message}`, {
+        // Add log for the successful execution with comprehensive details
+        addLog(`Applied suggestion - ${result.message}`, {
           type: 'tool-sequence-executed',
           context: { toolSequence, result },
-          metadata: { goal: toolSequence.goal }
+          metadata: { goal: toolSequence.goal, steps: toolSequence.steps.length }
         });
         
         console.log('[SidePanel] Successfully executed tool sequence and removed suggestion:', suggestionId);
@@ -766,6 +777,7 @@ const SidePanel = () => {
         setIsInEditor={setIsInEditor}
         setIsInCaptureMode={setIsInCaptureMode}
         onEditingTableIdChange={setEditingTableId}
+        onHTMLLoadingStatesChange={handleHTMLLoadingStatesChange}
         currentSuggestion={
           // Prioritize suggestions with instance updates (usually micro suggestions) for ghost rendering
           // Sort by confidence to ensure highest confidence suggestion is shown

@@ -44,9 +44,10 @@ interface InstanceViewProps {
   setIsInEditor: React.Dispatch<React.SetStateAction<boolean>>; // For tracking editor state
   setIsInCaptureMode?: React.Dispatch<React.SetStateAction<boolean>>; // For tracking capture mode state
   onEditingTableIdChange?: (editingTableId: string | null) => void; // For tracking currently editing table
+  onHTMLLoadingStatesChange?: (loadingStates: Record<string, boolean>) => void; // For tracking HTML loading states
 }
 
-const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages, workspaceName, onWorkspaceNameChange, onOperation, updateHTMLContext, addMessage, setAgentLoading, currentSuggestion, setIsInEditor, setIsInCaptureMode, onEditingTableIdChange }: InstanceViewProps) => {
+const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages, workspaceName, onWorkspaceNameChange, onOperation, updateHTMLContext, addMessage, setAgentLoading, currentSuggestion, setIsInEditor, setIsInCaptureMode, onEditingTableIdChange, onHTMLLoadingStatesChange }: InstanceViewProps) => {
   console.log('[InstanceView] Component loaded with setIsInEditor:', !!setIsInEditor);
   // Custom hooks
   const { fetchHTMLContent, htmlLoadingStates } = useHTMLContent(updateHTMLContext);
@@ -77,6 +78,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       setIsWaitingForSnapshots(false);
     }
   }, [htmlLoadingStates, showSnapshotStatus, inferenceInstanceIds, instances, htmlContextRef]);
+
+  // Notify parent component about HTML loading state changes
+  useEffect(() => {
+    if (onHTMLLoadingStatesChange) {
+      onHTMLLoadingStatesChange(htmlLoadingStates);
+    }
+  }, [htmlLoadingStates, onHTMLLoadingStatesChange]);
+
   // Counters for different instance types
   const [textCount, setTextCount] = useState(0);
   const textCountRef = useRef(0);
