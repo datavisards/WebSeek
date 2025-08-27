@@ -80,7 +80,7 @@ async function createSnapshot(pageId: string): Promise<boolean> {
     const rawHtml = document.documentElement.outerHTML;
     const finalHtml = convertRelativeToAbsoluteUrls(rawHtml);
     
-    const response = await fetch('http://localhost:8000/api/snapshots', {
+    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/snapshots`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

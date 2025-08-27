@@ -4,7 +4,7 @@ import { Instance, Message } from './types';
 class RestApiService {
   private baseUrl: string;
 
-  constructor(baseUrl: string = 'http://localhost:8000') {
+  constructor(baseUrl: string = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000') {
     this.baseUrl = baseUrl;
   }
 

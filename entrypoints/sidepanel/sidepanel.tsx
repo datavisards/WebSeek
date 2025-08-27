@@ -236,7 +236,7 @@ const SidePanel = () => {
           // Now fetch the HTML content using the pageId
           const fetchHtmlContent = async (retryCount = 0) => {
             try {
-              const fetchResponse = await fetch(`http://localhost:8000/api/snapshots/${response.pageId}`);
+              const fetchResponse = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/snapshots/${response.pageId}`);
               if (fetchResponse.ok) {
                 const snapshotData = await fetchResponse.json();
                 console.log('[SidePanel] Successfully fetched HTML content for current page');

@@ -93,7 +93,7 @@ const VisualizationRenderer: React.FC<VisualizationRendererProps> = ({
 
     (async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/render-interactive-svg/', {
+        const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/render-interactive-svg/`, {
           method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(spec),

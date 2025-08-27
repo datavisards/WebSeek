@@ -44,6 +44,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval' 'inline-speculation-rules' https://cdn.jsdelivr.net http://localhost:* http://127.0.0.1:*; object-src 'self' worker-src 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval' 'inline-speculation-rules' https://cdn.jsdelivr.net http://localhost:* http://127.0.0.1:* http://8.216.35.234 ws://8.216.35.234; object-src 'self' worker-src 'self'"
   }
 }

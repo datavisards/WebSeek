@@ -23,7 +23,7 @@ export const useHTMLContent = (updateHTMLContext: React.Dispatch<React.SetStateA
     const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff, max 5s
     
     try {
-      const response = await fetch(`http://localhost:8000/api/snapshots/${pageId}`);
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/snapshots/${pageId}`);
       if (response.ok) {
         const snapshotData = await response.json();
         const cleanedHTML = cleanHTML(snapshotData.htmlContent);
