@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { createStableIdLocator, injectStableIdsIntoLivePage, setupStableIdObserver, findElementByLocator } from './sidepanel/utils';
+import { createStableIdLocator, injectStableIdsIntoLivePage, setupStableIdObserver, findElementByLocator, cleanHTMLScript } from './sidepanel/utils';
 import type { Locator } from './sidepanel/types';
 
 let highlightElement: HTMLElement | null = null;
@@ -78,26 +78,52 @@ async function createSnapshot(pageId: string): Promise<boolean> {
 
   try {
     const rawHtml = document.documentElement.outerHTML;
+    // const extendedHtml = convertRelativeToAbsoluteUrls(rawHtml);
+    // const finalHtml = cleanHTMLScript(extendedHtml);
     const finalHtml = convertRelativeToAbsoluteUrls(rawHtml);
+
+    const requestPayload = {
+      snapshotId: pageId,
+      htmlContent: finalHtml,
+      originalUrl: document.location.href
+    };
+
+    const backendUrl = `http://${import.meta.env.VITE_BACKEND_URL}`; // Force HTTP
     
-    const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/snapshots`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        snapshotId: pageId,
-        htmlContent: finalHtml,
-        originalUrl: document.location.href
-      })
+    console.log(`[Snapshot] Sending POST via background script to: ${backendUrl}/api/snapshots`, finalHtml);
+    console.log(`[Snapshot] Payload size: ${(new Blob([JSON.stringify(requestPayload)]).size / 1024).toFixed(2)}KB`);
+    
+    // Use background script as proxy to avoid mixed content issues
+    const response = await browser.runtime.sendMessage({
+      type: 'PROXY_FETCH',
+      url: `${backendUrl}/api/snapshots`,
+      options: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestPayload)
+      }
     });
     
+    console.log(`[Snapshot] Background script response:`, response);
+    
+    if (!response) {
+      console.error(`[Snapshot] No response received from background script`);
+      snapshotCreationStatus.set(pageId, 'failed');
+      return false;
+    }
+    
     if (response.ok) {
+      console.log(`[Snapshot] Success response:`, response.data);
       console.log('Snapshot created successfully with pageId:', pageId);
       snapshotCreationStatus.set(pageId, 'created');
       return true;
     } else {
-      console.error('Failed to create snapshot:', response.statusText);
+      console.error(`[Snapshot] Failed to create snapshot:`, response.error || response.statusText || 'Unknown error');
+      if (response.status) {
+        console.error(`[Snapshot] Status: ${response.status}`);
+      }
       snapshotCreationStatus.set(pageId, 'failed');
       return false;
     }

@@ -34,8 +34,59 @@ export default defineBackground(() => {
     }
   });
 
-  browser.runtime.onMessage.addListener((message, sender) => {
+  browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('Received message:', message, 'from', sender);
+    
+    // Handle proxy fetch requests
+    if (message.type === 'PROXY_FETCH') {
+      // Handle async response properly
+      (async () => {
+        try {
+          console.log('[Background] Proxying fetch request to:', message.url);
+          const response = await fetch(message.url, message.options);
+          
+          // Convert response to a serializable format
+          const responseData = {
+            ok: response.ok,
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries(response.headers.entries()),
+            data: null as string | null,
+            error: null as string | null
+          };
+          
+          if (response.ok) {
+            try {
+              responseData.data = await response.text();
+            } catch (e) {
+              responseData.data = 'Could not read response data';
+            }
+          } else {
+            try {
+              responseData.error = await response.text();
+            } catch (e) {
+              responseData.error = `HTTP ${response.status}: ${response.statusText}`;
+            }
+          }
+          
+          console.log('[Background] Proxy response:', responseData);
+          sendResponse(responseData);
+        } catch (error) {
+          console.error('[Background] Proxy fetch error:', error);
+          sendResponse({
+            ok: false,
+            status: 0,
+            statusText: 'Network Error',
+            headers: {},
+            data: null,
+            error: error instanceof Error ? error.message : 'Network request failed'
+          });
+        }
+      })();
+      
+      return true; // Indicates we will send a response asynchronously
+    }
+    
     if (message.action === 'element_selected' || message.action === 'screenshot_finished' || message.action === 'snapshot_ready') {
       if (sidePanelPort) {
         const tabId = selectedTabId;

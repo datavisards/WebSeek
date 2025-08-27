@@ -75,7 +75,7 @@ class WebSocketService {
   private isConnecting: boolean = false;
   private pingInterval: NodeJS.Timeout | null = null;
 
-  constructor(url: string = `${import.meta.env.VITE_BACKEND_WS_URL}/ws` || 'ws://localhost:8000/ws') {
+  constructor(url: string = `ws://${import.meta.env.VITE_BACKEND_WS_URL}/ws` || 'ws://localhost:8000/ws') {
     this.url = url;
     this.clientId = this.generateClientId();
   }

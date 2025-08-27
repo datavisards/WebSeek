@@ -11,6 +11,11 @@
     "clipboardRead",
     "clipboardWrite"
   ],
+  "host_permissions": [
+    "http://8.216.35.234/*",
+    "https://*/*",
+    "http://*/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -44,6 +49,6 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval' 'inline-speculation-rules' https://cdn.jsdelivr.net http://localhost:* http://127.0.0.1:* http://8.216.35.234 ws://8.216.35.234; object-src 'self' worker-src 'self'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval' 'inline-speculation-rules' https://cdn.jsdelivr.net http://localhost:* http://127.0.0.1:* http://8.216.35.234 ws://8.216.35.234; connect-src 'self' http://8.216.35.234 ws://8.216.35.234 http://localhost:* http://127.0.0.1:* https:; object-src 'self'; worker-src 'self'"
   }
 }

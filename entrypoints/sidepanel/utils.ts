@@ -584,6 +584,28 @@ export const cleanHTML = (htmlString: string): string => {
         .replace(/\t/g, '');
 };
 
+export const cleanHTMLScript = (htmlString: string): string => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlString, 'text/html');
+
+  // Remove all <script> elements
+  doc.querySelectorAll('script').forEach(script => script.remove());
+
+  // Also remove any inline event handler attributes? (Not requested — left intact.)
+  // If you later want to remove on* attributes for safety, uncomment the block below.
+  /*
+  doc.querySelectorAll('*').forEach(el => {
+    Array.from(el.attributes).forEach(attr => {
+      if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
+    });
+  });
+  */
+
+  // Return full HTML (including head) or just body.innerHTML depending on needs.
+  // Here we return the entire document's HTML (including <!doctype> lost by parser) by serializing:
+  return doc.documentElement ? doc.documentElement.outerHTML : doc.body?.innerHTML || '';
+};
+
 export const generateInstanceContext = async (instances: Instance[]): Promise<any> => {
     let image_num = 0;
     let imageMap = new Map<string, number>();
@@ -1567,4 +1589,4 @@ export const evaluateFormulaInTable = (formula: string, table: any): string => {
   }
 };
 
-export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, normalizeTableInstance, cleanHTML, generateInstanceContext, generateId, parseInstance, mapToObject, updateInstances, areInstancesContentEqual, evaluateFormulaInTable };
+export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, normalizeTableInstance, cleanHTML, cleanHTMLScript, generateInstanceContext, generateId, parseInstance, mapToObject, updateInstances, areInstancesContentEqual, evaluateFormulaInTable };

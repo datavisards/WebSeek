@@ -236,9 +236,16 @@ const SidePanel = () => {
           // Now fetch the HTML content using the pageId
           const fetchHtmlContent = async (retryCount = 0) => {
             try {
-              const fetchResponse = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/snapshots/${response.pageId}`);
-              if (fetchResponse.ok) {
-                const snapshotData = await fetchResponse.json();
+              // Use background script proxy to avoid HTTPS/HTTP mixed content issues
+              const backendUrl = `http://${import.meta.env.VITE_BACKEND_URL}`; // Force HTTP
+              const fetchResponse = await chrome.runtime.sendMessage({
+                type: 'PROXY_FETCH',
+                url: `${backendUrl}/api/snapshots/${response.pageId}`,
+                options: { method: 'GET' }
+              });
+              
+              if (fetchResponse?.ok) {
+                const snapshotData = JSON.parse(fetchResponse.data);
                 console.log('[SidePanel] Successfully fetched HTML content for current page');
                 
                 const newHtmlContext = {
@@ -264,12 +271,13 @@ const SidePanel = () => {
                   console.log('[SidePanel] Triggering proactive suggestions after HTML context loaded');
                   proactiveService.triggerLogsUpdate(logsRef.current);
                 }, 100);
-              } else if (fetchResponse.status === 404 && retryCount < 3) {
-                // Snapshot not ready yet, retry after delay
-                console.log(`[SidePanel] Snapshot not ready, retrying in ${(retryCount + 1) * 1000}ms...`);
-                setTimeout(() => fetchHtmlContent(retryCount + 1), (retryCount + 1) * 1000);
+              } else if (fetchResponse?.status === 404 && retryCount < 3) {
+                // Snapshot not ready yet, retry after exponential backoff delay
+                const delayMs = Math.min(1000 * Math.pow(2, retryCount), 5000); // 1s, 2s, 4s max
+                console.log(`[SidePanel] Snapshot not ready, retrying in ${delayMs}ms... (attempt ${retryCount + 1}/3)`);
+                setTimeout(() => fetchHtmlContent(retryCount + 1), delayMs);
               } else {
-                console.warn('[SidePanel] Failed to fetch snapshot:', fetchResponse.status);
+                console.warn('[SidePanel] Failed to fetch snapshot:', fetchResponse?.status || 'Unknown error', 'after', retryCount, 'retries');
               }
             } catch (error) {
               if (retryCount < 3) {

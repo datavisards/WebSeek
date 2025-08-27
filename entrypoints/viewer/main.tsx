@@ -124,7 +124,7 @@
         }
         
         // Fetch snapshot data
-        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/snapshots/${snapshotId}`);
+        const response = await fetch(`http://${import.meta.env.VITE_BACKEND_URL}/api/snapshots/${snapshotId}`);
         if (!response.ok) {
             showError(`Failed to load snapshot: ${response.status} ${response.statusText}`);
             return;

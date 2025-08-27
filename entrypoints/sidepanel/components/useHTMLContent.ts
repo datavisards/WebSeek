@@ -23,9 +23,16 @@ export const useHTMLContent = (updateHTMLContext: React.Dispatch<React.SetStateA
     const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff, max 5s
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/snapshots/${pageId}`);
-      if (response.ok) {
-        const snapshotData = await response.json();
+      // Use background script proxy to avoid HTTPS/HTTP mixed content issues  
+      const backendUrl = `http://${import.meta.env.VITE_BACKEND_URL}`; // Force HTTP
+      const response = await chrome.runtime.sendMessage({
+        type: 'PROXY_FETCH',
+        url: `${backendUrl}/api/snapshots/${pageId}`,
+        options: { method: 'GET' }
+      });
+      
+      if (response?.ok) {
+        const snapshotData = JSON.parse(response.data);
         const cleanedHTML = cleanHTML(snapshotData.htmlContent);
         
         htmlCache.current[pageId] = cleanedHTML;
@@ -37,14 +44,14 @@ export const useHTMLContent = (updateHTMLContext: React.Dispatch<React.SetStateA
             htmlContent: cleanedHTML
           }
         }));
-      } else if (response.status === 404 && retryCount < maxRetries) {
+      } else if (response?.status === 404 && retryCount < maxRetries) {
         // Snapshot not ready yet, retry after delay
         setTimeout(() => {
           fetchHTMLContent(pageId, pageURL, retryCount + 1);
         }, retryDelay);
         return; // Don't set loading to false yet
       } else {
-        console.warn(`Failed to fetch snapshot for pageId: ${pageId} (status: ${response.status})`);
+        console.warn(`Failed to fetch snapshot for pageId: ${pageId} (status: ${response?.status || 'Unknown'})`);
       }
     } catch (error) {
       if (retryCount < maxRetries) {
