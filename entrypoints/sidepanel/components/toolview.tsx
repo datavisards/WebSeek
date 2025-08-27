@@ -42,12 +42,12 @@ const ToolView: React.FC<ToolViewProps> = ({
                 >
                     Chat
                 </h3>
-                <h3
+                {/* <h3
                     className={`tab-button ${activeTab === 'code' ? 'active' : ''} ${isCollapsed ? 'disabled' : ''}`}
                     onClick={() => !isCollapsed && setActiveTab('code')}
                 >
                     Code
-                </h3>
+                </h3> */}
                 <div className="collapse-toggle-container">
                     <button
                         className="collapse-toggle"
@@ -78,9 +78,10 @@ const ToolView: React.FC<ToolViewProps> = ({
                             logs={logs}
                         />
                     )}
-                    {activeTab === 'code' && (
+                    {/* Temporarily hide code tab */}
+                    {/* {activeTab === 'code' && (
                         <CodeTab instances={instances} setInstances={setInstances} />
-                    )}
+                    )} */}
                 </div>
             )}
         </div>

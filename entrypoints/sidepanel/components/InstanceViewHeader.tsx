@@ -92,9 +92,9 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
           </span>
         </div>
       ) : (
-        <h3 
-          style={{ 
-            margin: 0, 
+        <h3
+          style={{
+            margin: 0,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -106,9 +106,9 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
           {displayName}
         </h3>
       )}
-      
+
       {/* Web Tools Dropdown */}
-      <div style={{ display: 'inline-block', position: 'relative' }}>
+      {/* <div style={{ display: 'inline-block', position: 'relative' }}>
         <button
           onClick={e => {
             e.stopPropagation();
@@ -157,8 +157,19 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
             </div>
           </div>
         )}
-      </div>
-      
+      </div> */}
+
+      <button
+        onClick={() => handleCaptureStart()}
+        style={{
+          borderRadius: 4,
+          marginLeft: 12,
+        }}
+        disabled={!isCaptureEnabled}
+      >
+        Capture
+      </button>
+
       {/* Instance Tools Dropdown */}
       <div style={{ display: 'inline-block', position: 'relative' }}>
         <button
@@ -186,7 +197,7 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
             }}
             onClick={e => e.stopPropagation()}
           >
-            <div
+            {/* <div
               className="contextmenuoption"
               onClick={() => {
                 handleCreateSketch();
@@ -194,7 +205,7 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
               }}
             >
               Sketch
-            </div>
+            </div> */}
             <div
               className="contextmenuoption"
               onClick={() => {
@@ -216,17 +227,29 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
           </div>
         )}
       </div>
-      
+
       <button
         onClick={() => handleModeSwitch(mode === 'hand' ? 'select' : 'hand')}
         style={{
           background: mode === 'select' ? '#0078ff' : undefined,
           color: mode === 'select' ? 'white' : undefined,
           borderRadius: 4,
-          marginLeft: 12
+          marginLeft: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
         }}
         title={mode === 'select' ? 'Switch to Hand Tool' : 'Switch to Selection Tool'}
       >
+        <img 
+          src={mode === 'select' ? '/icon/select.svg' : '/icon/hand.svg'} 
+          alt={mode === 'select' ? 'Select' : 'Hand'} 
+          style={{ 
+            width: '12px', 
+            height: '12px',
+            filter: mode === 'select' ? 'invert(1)' : undefined
+          }} 
+        />
         {mode === 'select' ? 'Select' : 'Hand'}
       </button>
     </div>
