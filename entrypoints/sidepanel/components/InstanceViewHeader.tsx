@@ -15,6 +15,9 @@ interface InstanceViewHeaderProps {
   handleCreateTable: () => void;
   handleCreateVisualization: () => void;
   handleModeSwitch: (newMode: 'hand' | 'select') => void;
+  selectedInstanceIds: string[];
+  selectedInstanceId: string | null;
+  handleInfer: (instanceIds: string[]) => void;
 }
 
 const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
@@ -32,9 +35,26 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
   handleCreateTable,
   handleCreateVisualization,
   handleModeSwitch,
+  selectedInstanceIds,
+  selectedInstanceId,
+  handleInfer,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingName, setEditingName] = useState(workspaceName);
+
+  // Determine what instances are selected
+  const getSelectedInstanceIds = (): string[] => {
+    if (mode === 'select' && selectedInstanceIds.length > 0) {
+      // In select mode, use multiple selection
+      return selectedInstanceIds;
+    } else if (mode === 'hand' && selectedInstanceId) {
+      // In hand mode, use single selection
+      return [selectedInstanceId];
+    }
+    return [];
+  };
+
+  const currentSelection = getSelectedInstanceIds();
 
   const handleStartEdit = () => {
     setEditingName(workspaceName);
@@ -277,6 +297,32 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
         />
         {mode === 'select' ? 'Select' : 'Hand'}
       </button>
+
+      {/* Infer Button - only visible when instances are selected */}
+      {currentSelection.length > 0 && (
+        <button
+          onClick={() => handleInfer(currentSelection)}
+          style={{
+            color: 'white',
+            borderRadius: 4,
+            marginLeft: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+          }}
+          title={`Infer ${currentSelection.length} selected instance${currentSelection.length === 1 ? '' : 's'}`}
+        >
+          <img 
+            src="/icon/robot.svg" 
+            alt="Infer" 
+            style={{ 
+              width: '12px', 
+              height: '12px',
+            }} 
+          />
+          Infer
+        </button>
+      )}
     </div>
   );
 };

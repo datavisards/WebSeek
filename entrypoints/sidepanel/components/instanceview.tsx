@@ -2242,7 +2242,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setMode(newMode);
     setSelectionBox(null);
     setSelectedInstanceIds([]);
-    onOperation(`Switch to ${newMode} mode`);
   };
 
   // Handle mouse down for selection mode
@@ -2634,6 +2633,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
               handleCreateTable={handleCreateTable}
               handleCreateVisualization={handleCreateVisualization}
               handleModeSwitch={handleModeSwitch}
+              selectedInstanceIds={selectedInstanceIds}
+              selectedInstanceId={selectedInstanceId}
+              handleInfer={handleInfer}
             />
             <InstanceContextMenu
               contextMenu={contextMenu}
