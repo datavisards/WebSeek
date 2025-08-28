@@ -10,6 +10,15 @@ const SuggestionIndicator: React.FC<SuggestionIndicatorProps> = ({
   isVisible,
   isGenerating
 }) => {
+  console.log('[SuggestionIndicator] 🎨 Render with props:', {
+    isVisible,
+    isGenerating,
+    willShow: isVisible,
+    willShowGenerating: isVisible && isGenerating,
+    willShowReady: isVisible && !isGenerating,
+    timestamp: new Date().toISOString()
+  });
+
   if (!isVisible) return null;
 
   return (

@@ -26,6 +26,8 @@ class EnhancedProactiveService {
 
   private currentSuggestions: ProactiveSuggestion[] = [];
   private isGenerating = false;
+  private isGeneratingMicro = false;
+  private isGeneratingMacro = false;
   private currentGenerationController: AbortController | null = null;
   private suggestionCount = 0;
   private idleTimer: NodeJS.Timeout | null = null;
@@ -123,6 +125,38 @@ class EnhancedProactiveService {
     }
 
     return changed;
+  }
+
+  /**
+   * Update the overall generating state - only show "ready" when NO generations are running
+   */
+  private updateGeneratingState() {
+    const previousIsGenerating = this.isGenerating;
+    // Show generating if ANY generation is running
+    // Show ready (not generating) only when BOTH micro and macro are finished
+    const newIsGenerating = this.isGeneratingMicro || this.isGeneratingMacro;
+    
+    if (previousIsGenerating !== newIsGenerating) {
+      this.isGenerating = newIsGenerating;
+      console.log('[EnhancedProactiveService] ⚡ Generation state changed:', {
+        microRunning: this.isGeneratingMicro,
+        macroRunning: this.isGeneratingMacro,
+        anyRunning: newIsGenerating,
+        showReady: !newIsGenerating,
+        previousState: previousIsGenerating ? 'generating' : 'ready',
+        newState: newIsGenerating ? 'generating' : 'ready'
+      });
+      
+      if (this.onGenerationStateChanged) {
+        this.onGenerationStateChanged(this.isGenerating);
+      }
+    } else {
+      console.log('[EnhancedProactiveService] Generation state unchanged:', {
+        microRunning: this.isGeneratingMicro,
+        macroRunning: this.isGeneratingMacro,
+        currentState: this.isGenerating ? 'generating' : 'ready'
+      });
+    }
   }
 
   /**
@@ -227,6 +261,31 @@ class EnhancedProactiveService {
 
   onGenerationStateChange(callback: (isGenerating: boolean) => void) {
     this.onGenerationStateChanged = callback;
+  }
+
+  /**
+   * Get current generation state - use this with refs for real-time state checking
+   */
+  getGenerationState() {
+    return {
+      isGenerating: this.isGenerating,
+      isGeneratingMicro: this.isGeneratingMicro,
+      isGeneratingMacro: this.isGeneratingMacro,
+      anyRunning: this.isGeneratingMicro || this.isGeneratingMacro,
+      bothFinished: !this.isGeneratingMicro && !this.isGeneratingMacro
+    };
+  }
+
+  /**
+   * Debug function to log current state
+   */
+  debugLogCurrentState(context: string = '') {
+    const state = this.getGenerationState();
+    console.log(`[EnhancedProactiveService] 🔍 DEBUG STATE ${context}:`, {
+      ...state,
+      timestamp: new Date().toISOString()
+    });
+    return state;
   }
 
   // Update context with new instances, messages, HTML contexts, editor state, and editing table ID
@@ -342,12 +401,6 @@ class EnhancedProactiveService {
     }
 
     try {
-      // Set generating state
-      this.isGenerating = true;
-      if (this.onGenerationStateChanged) {
-        this.onGenerationStateChanged(true);
-      }
-
       console.log('[EnhancedProactiveService] Processing logs for AI-driven suggestions...');
 
       // Always use AI-driven suggestions with embedded rules
@@ -356,11 +409,7 @@ class EnhancedProactiveService {
     } catch (error) {
       console.error('[EnhancedProactiveService] Error generating suggestions:', error);
     } finally {
-      this.isGenerating = false;
       this.generationStartState = null; // Clear the generation state snapshot
-      if (this.onGenerationStateChanged) {
-        this.onGenerationStateChanged(false);
-      }
     }
   }
 
@@ -689,7 +738,7 @@ class EnhancedProactiveService {
         isInMainSidepanel || (isInTableEditor && hasRecentTableActivity)
       );
       
-      console.log('[EnhancedProactiveService] Suggestion generation decision:', {
+      console.log('[EnhancedProactiveService] 📊 Suggestion generation decision:', {
         hasMicroRules: microRules.length > 0,
         microRuleIds: microRules.map(r => r.id),
         hasMacroRules: macroRules.length > 0,
@@ -702,6 +751,10 @@ class EnhancedProactiveService {
         isInteractionRelevant: this.isLatestInteractionRelevantForMicroSuggestions(recentActions, logs),
         shouldGenerateMicroSuggestions: shouldGenerateMicroSuggestions,
         shouldGenerateMacroSuggestions: shouldGenerateMacroSuggestions,
+        willRunBoth: shouldGenerateMicroSuggestions && shouldGenerateMacroSuggestions,
+        willRunMicroOnly: shouldGenerateMicroSuggestions && !shouldGenerateMacroSuggestions,
+        willRunMacroOnly: !shouldGenerateMicroSuggestions && shouldGenerateMacroSuggestions,
+        willRunNeither: !shouldGenerateMicroSuggestions && !shouldGenerateMacroSuggestions,
         tableEditorMacroReason: isInTableEditor ? (hasRecentTableActivity ? 'Has table activity - macro allowed' : 'Only editor opening - macro suppressed') : 'Not in table editor',
         latestLog: logs[logs.length - 1]?.slice(0, 100)
       });
@@ -722,15 +775,21 @@ class EnhancedProactiveService {
           
           // Delay micro suggestion generation until HTML contexts are ready
           setTimeout(() => {
+            console.log('[EnhancedProactiveService] 🚀 === STARTING DELAYED MICRO SUGGESTION PROCESS ===');
             console.log('[EnhancedProactiveService] Retrying micro suggestions after HTML loading delay');
+            this.debugLogCurrentState('BEFORE DELAYED MICRO START');
             // Use current context to avoid stale data
             const currentLogs = this.currentContext.logs;
             const currentHtmlContexts = this.currentContext.htmlContexts || {};
             this.generateAndDisplayMicroSuggestions(microRules, recentActions, currentLogs, context, currentMessages, textContext, imageContext, currentHtmlContexts);
           }, 2000); // Wait 2 seconds for HTML contexts to load
         } else {
-          console.log('[EnhancedProactiveService] === STARTING MICRO SUGGESTION PROCESS ===');
+          console.log('[EnhancedProactiveService] 🚀 === STARTING MICRO SUGGESTION PROCESS ===');
+          this.debugLogCurrentState('BEFORE MICRO START');
+          console.log('[EnhancedProactiveService] 🚀 About to call generateAndDisplayMicroSuggestions');
           await this.generateAndDisplayMicroSuggestions(microRules, recentActions, logs, context, currentMessages, textContext, imageContext, currentHtmlContexts);
+          this.debugLogCurrentState('AFTER MICRO COMPLETE');
+          console.log('[EnhancedProactiveService] 🚀 === MICRO SUGGESTION PROCESS COMPLETE ===');
         }
       } else if (microRules.length > 0) {
         console.log('[EnhancedProactiveService] Micro rules available but not in table editor:', {
@@ -744,8 +803,12 @@ class EnhancedProactiveService {
       
       // === MACRO SUGGESTION PROCESS (independent) ===
       if (shouldGenerateMacroSuggestions) {
-        console.log('[EnhancedProactiveService] === STARTING MACRO SUGGESTION PROCESS ===');
+        console.log('[EnhancedProactiveService] 🚀 === STARTING MACRO SUGGESTION PROCESS ===');
+        this.debugLogCurrentState('BEFORE MACRO START');
+        console.log('[EnhancedProactiveService] 🚀 About to call generateAndDisplayMacroSuggestions');
         await this.generateAndDisplayMacroSuggestions(macroRules, recentActions, logs, context, currentMessages, textContext, imageContext, currentHtmlContexts);
+        this.debugLogCurrentState('AFTER MACRO COMPLETE');
+        console.log('[EnhancedProactiveService] 🚀 === MACRO SUGGESTION PROCESS COMPLETE ===');
       } else if (macroRules.length > 0) {
         console.log('[EnhancedProactiveService] Macro rules available but conditions not met:', {
           macroRuleIds: macroRules.map(r => r.id),
@@ -815,17 +878,23 @@ class EnhancedProactiveService {
     imageContext: any[], 
     currentHtmlContexts: Record<string, any>
   ) {
-    console.log('[EnhancedProactiveService] Generating micro suggestions for rules:', microRules.map(r => r.id));
-    console.log('[EnhancedProactiveService] HTML contexts available for micro suggestions:', {
-      contextKeys: Object.keys(currentHtmlContexts),
-      contextDetails: Object.entries(currentHtmlContexts).map(([key, value]) => ({
-        key,
-        pageURL: value?.pageURL || 'unknown',
-        hasContent: !!value?.htmlContent
-      }))
-    });
+    console.log('[EnhancedProactiveService] 🔬 Starting micro suggestions for rules:', microRules.map(r => r.id));
+    
+    // Set micro generation state
+    this.isGeneratingMicro = true;
+    console.log('[EnhancedProactiveService] 🔬 Micro generation state set to TRUE');
+    this.updateGeneratingState();
     
     try {
+      console.log('[EnhancedProactiveService] HTML contexts available for micro suggestions:', {
+        contextKeys: Object.keys(currentHtmlContexts),
+        contextDetails: Object.entries(currentHtmlContexts).map(([key, value]) => ({
+          key,
+          pageURL: value?.pageURL || 'unknown',
+          hasContent: !!value?.htmlContent
+        }))
+      });
+    
       const suggestionScope = 'micro';
       const enhancedPrompt = createRuleBasedSuggestionPrompt(suggestionScope, microRules, recentActions, logs, this.suggestionHistory, context.workspaceName);
       
@@ -889,6 +958,11 @@ class EnhancedProactiveService {
       }
     } catch (error) {
       console.error('[EnhancedProactiveService] Error in micro suggestion generation:', error);
+    } finally {
+      // Reset micro generation state
+      console.log('[EnhancedProactiveService] 🔬 Micro generation finished - setting state to FALSE');
+      this.isGeneratingMicro = false;
+      this.updateGeneratingState();
     }
   }
 
@@ -905,12 +979,18 @@ class EnhancedProactiveService {
     imageContext: any[], 
     currentHtmlContexts: Record<string, any>
   ) {
-    console.log('[EnhancedProactiveService] Generating macro suggestions for rules:', macroRules.map(r => r.id));
+    console.log('[EnhancedProactiveService] 🔭 Starting macro suggestions for rules:', macroRules.map(r => r.id));
     
-    // Check if any of the triggered rules are visualization-related
-    const hasVisualizationRules = macroRules.some(rule => 
-      rule.suggestionType === 'suggest-visualization' || 
-      rule.suggestionType === 'suggest-better-chart' ||
+    // Set macro generation state
+    this.isGeneratingMacro = true;
+    console.log('[EnhancedProactiveService] 🔭 Macro generation state set to TRUE');
+    this.updateGeneratingState();
+    
+    try {
+      // Check if any of the triggered rules are visualization-related
+      const hasVisualizationRules = macroRules.some(rule => 
+        rule.suggestionType === 'suggest-visualization' || 
+        rule.suggestionType === 'suggest-better-chart' ||
       rule.id.includes('visualization')
     );
     
@@ -947,6 +1027,14 @@ class EnhancedProactiveService {
     
     // For non-visualization suggestions or when user has been idle long enough, proceed immediately
     await this.generateAndDisplayMacroSuggestionsInternal(macroRules, recentActions, logs, context, currentMessages, textContext, imageContext, currentHtmlContexts);
+    } catch (error) {
+      console.error('[EnhancedProactiveService] Error in macro suggestion generation:', error);
+    } finally {
+      // Reset macro generation state
+      console.log('[EnhancedProactiveService] 🔭 Macro generation finished - setting state to FALSE');
+      this.isGeneratingMacro = false;
+      this.updateGeneratingState();
+    }
   }
 
   /**

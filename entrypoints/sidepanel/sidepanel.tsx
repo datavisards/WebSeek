@@ -80,6 +80,7 @@ const SidePanel = () => {
   // Proactive suggestion state
   const [suggestions, setSuggestions] = useState<ProactiveSuggestion[]>([]);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
+  const isGeneratingSuggestionsRef = useRef(false); // For real-time state checking
   const [showSettings, setShowSettings] = useState(false);
   
   // Workspace naming state
@@ -459,9 +460,20 @@ const SidePanel = () => {
   useEffect(() => {
     // Set up proactive service listeners
     proactiveService.onSuggestionsChange((newSuggestions) => {
-      console.log('[SidePanel] Received suggestion update from service:', newSuggestions.map(s => s.id));
+      console.log('[SidePanel] 📥 Received suggestion update from service:', {
+        count: newSuggestions.length,
+        suggestionIds: newSuggestions.map(s => s.id),
+        suggestionMessages: newSuggestions.map(s => s.message.substring(0, 50) + '...'),
+        timestamp: new Date().toISOString()
+      });
       setSuggestions(newSuggestions);
-      setIsGeneratingSuggestions(false);
+      
+      // Check current generation state when suggestions are received
+      const serviceState = proactiveService.getGenerationState();
+      console.log('[SidePanel] 📥 Service generation state when suggestions received:', serviceState);
+      
+      // NOTE: Do NOT set isGeneratingSuggestions here - let the generation state callback handle it
+      // This allows proper micro/macro state coordination
     });
 
     // Periodic sync to prevent UI/service state drift
@@ -517,7 +529,17 @@ const SidePanel = () => {
     });
 
     proactiveService.onGenerationStateChange((isGenerating) => {
+      console.log('[SidePanel] 🎯 Generation state callback received:', {
+        isGenerating,
+        timestamp: new Date().toISOString(),
+        previousReactState: isGeneratingSuggestionsRef.current
+      });
       setIsGeneratingSuggestions(isGenerating);
+      isGeneratingSuggestionsRef.current = isGenerating; // Update ref immediately
+      
+      // Also log the service's internal state for comparison
+      const serviceState = proactiveService.getGenerationState();
+      console.log('[SidePanel] 🎯 Service internal state when callback fired:', serviceState);
     });
 
     return () => {
