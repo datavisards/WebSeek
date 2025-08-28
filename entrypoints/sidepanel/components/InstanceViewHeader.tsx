@@ -164,9 +164,21 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
         style={{
           borderRadius: 4,
           marginLeft: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
         }}
         disabled={!isCaptureEnabled}
       >
+        <img 
+          src="/icon/capture.svg" 
+          alt="Capture" 
+          style={{ 
+            width: '12px', 
+            height: '12px',
+            opacity: isCaptureEnabled ? 1 : 0.5
+          }} 
+        />
         Capture
       </button>
 
@@ -178,8 +190,21 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
             e.preventDefault();
             setInstanceToolsOpen(v => !v);
           }}
-          style={{ minWidth: 110 }}
+          style={{ 
+            minWidth: 110,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+          }}
         >
+          <img 
+            src="/icon/tools.svg" 
+            alt="Tools" 
+            style={{ 
+              width: '12px', 
+              height: '12px'
+            }} 
+          />
           Instance Tools ▾
         </button>
         {instanceToolsOpen && (
