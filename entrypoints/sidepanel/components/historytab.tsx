@@ -142,9 +142,6 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                     ↶
                   </button>
                 )}
-                <span className="history-timestamp">
-                  {formatTimestamp(entry.timestamp)}
-                </span>
               </div>
             </div>
           ))

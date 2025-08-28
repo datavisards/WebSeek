@@ -903,7 +903,25 @@ const SidePanel = () => {
     
     try {
       console.log('[SidePanel] Current instances before tool execution:', instances.length);
-      const result = await executeMacroTool(toolCall, instances, recordableSetInstances);
+      
+      // Create a wrapper for recordableSetInstances that provides proper undo descriptions
+      const wrappedUpdateInstances = (newInstances: Instance[]) => {
+        console.log('[SidePanel] wrappedUpdateInstances called with:', {
+          toolName: toolCall.function,
+          currentInstancesCount: instances.length,
+          newInstancesCount: newInstances.length,
+          instancesChanged: instances !== newInstances,
+          areArraysEqual: JSON.stringify(instances) === JSON.stringify(newInstances)
+        });
+        
+        // Call recordableSetInstances with a description based on the tool being executed
+        const toolName = toolCall.function;
+        const description = `Execute ${toolName} macro tool`;
+        const logMessage = `Applied macro tool: ${toolName}`;
+        recordableSetInstances(newInstances, description, logMessage);
+      };
+      
+      const result = await executeMacroTool(toolCall, instances, wrappedUpdateInstances);
       console.log('[SidePanel] Tool execution result:', result);
       console.log('[SidePanel] Current instances after tool execution:', instances.length);
       
@@ -918,12 +936,7 @@ const SidePanel = () => {
         // Small delay to ensure suggestion dismissal is processed before log triggers new generation
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        // Add log for the successful execution
-        addLog(`Applied suggestion - ${result.message}`, {
-          type: 'tool-executed',
-          context: { toolCall, result },
-          metadata: { toolFunction: toolCall.function }
-        });
+        // Log already added by wrappedUpdateInstances - no need to add another log here
         
         console.log('[SidePanel] Successfully executed tool and removed suggestion:', suggestionId);
       } else {
@@ -974,7 +987,14 @@ const SidePanel = () => {
     
     try {
       const { executeCompositeSuggestion } = await import('./macro-tool-executor');
-      const result = await executeCompositeSuggestion({ toolSequence }, instances, recordableSetInstances);
+      
+      // Create a wrapper for recordableSetInstances that provides proper undo descriptions
+      const wrappedUpdateInstances = (newInstances: Instance[]) => {
+        const description = `Execute composite suggestion: ${toolSequence.goal}`;
+        recordableSetInstances(newInstances, description);
+      };
+      
+      const result = await executeCompositeSuggestion({ toolSequence }, instances, wrappedUpdateInstances);
       console.log('[SidePanel] Tool sequence execution result:', result);
       
       if (result.success) {
