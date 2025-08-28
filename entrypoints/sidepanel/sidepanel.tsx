@@ -197,9 +197,37 @@ const SidePanel = () => {
   const recordUserActionFromLog = (message: string) => {
     console.log('[SidePanel] Falling back to legacy log parsing for message:', message);
     
-    // Only keep essential parsing for any remaining cases
-    // Most actions should now be recorded directly
-    if (message.includes('Selected') && !message.includes('table-selected')) {
+    // Table editor operations
+    if (message.includes('Opened table editor')) {
+      const instanceId = extractInstanceId(message);
+      actionMonitor.recordAction(
+        'table-selected',
+        { message, editorOpened: true },
+        instanceId
+      );
+    }
+    // Table cell edits (Added/Appended to cell)
+    else if (message.includes('cell (') && (message.includes('Added') || message.includes('Appended'))) {
+      const instanceId = extractInstanceId(message);
+      const cellMatch = message.match(/cell \((\d+), ([A-Z])\)/);
+      if (cellMatch) {
+        actionMonitor.recordAction(
+          'cell-edited',
+          { 
+            message,
+            cellPosition: `${cellMatch[2]}${cellMatch[1]}`
+          },
+          instanceId,
+          {
+            column: cellMatch[2].charCodeAt(0) - 65, // Convert A,B,C to 0,1,2
+            row: parseInt(cellMatch[1]) - 1, // Convert 1,2,3 to 0,1,2
+            editType: message.includes('Added') ? 'add-content' : 'append-content'
+          }
+        );
+      }
+    }
+    // Element selection
+    else if (message.includes('Selected') && !message.includes('table-selected')) {
       actionMonitor.recordAction(
         'element-selected',
         { pageId: 'current', selector: 'element', message },
@@ -214,6 +242,22 @@ const SidePanel = () => {
         'visualization-created',
         { message },
         instanceId
+      );
+    }
+    // Instance creation (general)
+    else if (message.includes('Created') && (message.includes('Image') || message.includes('Text') || message.includes('Table') || message.includes('Sketch'))) {
+      const instanceId = extractInstanceId(message);
+      let instanceType = 'unknown';
+      if (message.includes('Image')) instanceType = 'image';
+      else if (message.includes('Text')) instanceType = 'text';
+      else if (message.includes('Table')) instanceType = 'table';
+      else if (message.includes('Sketch')) instanceType = 'sketch';
+      
+      actionMonitor.recordAction(
+        'instance-created',
+        { message, instanceType },
+        instanceId,
+        { instanceType }
       );
     }
   };
@@ -562,6 +606,13 @@ const SidePanel = () => {
           setLogsInternal(event.detail.logs);
           logsRef.current = event.detail.logs;
         }
+        
+        // Check if the currently editing table still exists after state restoration
+        if (editingTableId && !event.detail.instances.find((inst: Instance) => inst.id === editingTableId)) {
+          console.log('[SidePanel] Clearing editingTableId as table no longer exists after undo/redo:', editingTableId);
+          setEditingTableId(null);
+        }
+        
         console.log('[SidePanel] Global state change applied');
         
         // Clear the pending state since we applied it successfully
@@ -627,6 +678,13 @@ const SidePanel = () => {
         console.log(`[SidePanel] Adding log as part of instance change [${callId}]:`, logMessage);
         setLogsInternal(finalLogs);
         logsRef.current = finalLogs;
+        
+        // Record action for monitoring (similar to addLog fallback parsing)
+        recordUserActionFromLog(logMessage);
+        
+        // Trigger proactive service since we're bypassing addLog function
+        console.log("Triggering proactive suggestions due to log update in recordableSetInstances", finalLogs);
+        proactiveService.triggerLogsUpdate(finalLogs);
       }
 
       console.log('[SidePanel] About to record in undo manager:', {
