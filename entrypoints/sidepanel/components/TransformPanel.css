@@ -1,0 +1,318 @@
+.transform-panel {
+  position: absolute;
+  top: 30px;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  width: 350px;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.transform-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #eee;
+  background: #f8f9fa;
+  border-radius: 8px 8px 0 0;
+}
+
+.transform-panel-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #666;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.close-button:hover {
+  background: #e9ecef;
+  color: #333;
+}
+
+.transform-tabs {
+  display: flex;
+  border-bottom: 1px solid #eee;
+  background: #fafbfc;
+}
+
+.transform-tabs button {
+  flex: 1;
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.transform-tabs button:hover {
+  background: #e9ecef;
+  color: #333;
+}
+
+.transform-tabs button.active {
+  background: white;
+  color: #007acc;
+  font-weight: 600;
+  border-bottom: 2px solid #007acc;
+}
+
+.transform-content {
+  padding: 10px;
+}
+
+.transform-section h5 {
+  margin: 0 0 6px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+}
+
+.transform-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.transform-buttons button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  color: #333;
+  transition: all 0.2s;
+}
+
+.transform-buttons button:hover {
+  background: #f8f9fa;
+  border-color: #007acc;
+  color: #007acc;
+}
+
+.transform-icon {
+  font-size: 12px;
+  min-width: 14px;
+}
+
+.transform-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.option-group {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  background: #fafbfc;
+  flex-wrap: wrap;
+}
+
+.option-group label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  min-width: fit-content;
+}
+
+.option-group input,
+.option-group select {
+  padding: 3px 6px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 11px;
+  color: #333;
+  background: white;
+  min-width: 60px;
+  max-width: 120px;
+  flex: 1;
+}
+
+.option-group button {
+  padding: 3px 8px;
+  background: #007acc;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.option-group button:hover {
+  background: #005a9e;
+}
+
+.preview-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #eee;
+}
+
+.preview-section h5 {
+  margin: 0 0 6px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+}
+
+.preview-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.preview-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-family: monospace;
+}
+
+.preview-item .original {
+  color: #666;
+  flex: 1;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.preview-item .arrow {
+  color: #999;
+  font-size: 10px;
+}
+
+.preview-item .transformed {
+  color: #007acc;
+  flex: 1;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.preview-note {
+  font-size: 9px;
+  color: #666;
+  margin-top: 6px;
+  margin-bottom: 0;
+  font-style: italic;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .transform-panel {
+    width: 300px;
+  }
+  
+  .transform-buttons {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Compact layout for specific option groups */
+.option-group {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  background: #fafbfc;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.option-group.compact {
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 4px;
+  padding: 3px 5px;
+  margin-bottom: 4px;
+}
+
+.option-group.compact label {
+  margin: 0 4px 0 0;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.option-group.compact input[type="text"],
+.option-group.compact input[type="number"] {
+  width: 60px;
+  min-width: 50px;
+  max-width: 80px;
+  margin: 0 2px;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.option-group.compact select {
+  min-width: 60px;
+  max-width: 100px;
+  margin: 0 2px;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.option-group.compact button {
+  padding: 2px 6px;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+/* Ensure inline layout for all option groups */
+.transform-options .option-group {
+  flex-direction: row !important;
+  align-items: center !important;
+  flex-wrap: wrap;
+}
+
+/* Special handling for multi-input groups like split delimiter */
+.option-group:has(input + label) {
+  flex-wrap: wrap;
+}
+
+.option-group label + input,
+.option-group label + select {
+  margin-left: 2px;
+}
+
+.option-group input + label {
+  margin-left: 6px;
+}

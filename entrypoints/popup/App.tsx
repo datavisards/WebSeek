@@ -36,7 +36,7 @@ function App() {
       <h1>WebSeek</h1>
       <div className="card">
         <p>
-          WebSeek is a web extension that streamlines web data analysis by integrating example-driven idea demonstration with AI agents.
+          WebSeek is a data-first web extension that streamlines web data analysis by progressively constructing data artifacts with agentic AI assistance.
         </p>
         <button style={{ marginLeft: 12 }} onClick={openSidePanel}>
           Try it NOW

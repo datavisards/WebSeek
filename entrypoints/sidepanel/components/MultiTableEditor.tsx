@@ -61,6 +61,7 @@ interface MultiTableEditorProps {
   onRemoveColumn?: (tableId: string, colIndex: number) => void;
   onUpdateColumnType?: (tableId: string, colIndex: number, columnType: 'numeral' | 'categorical') => void;
   onUpdateColumnName?: (tableId: string, colIndex: number, columnName: string) => void;
+  onTransformColumn?: (tableId: string, colIndex: number, transformType: string, options?: any) => void;
   onLiftRowToHeader?: (tableId: string, rowIndex: number) => void;
   currentSuggestion?: ProactiveSuggestion;
   onOperation?: (message: string, actionDetails?: {
@@ -93,6 +94,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
   onRemoveColumn,
   onUpdateColumnType,
   onUpdateColumnName,
+  onTransformColumn,
   onLiftRowToHeader,
   currentSuggestion,
   onOperation,
@@ -1042,6 +1044,12 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     markTableDirty(activeTabId);
   }, [activeTabId, onUpdateColumnName, markTableDirty]);
 
+  const handleTransformColumnWrapped = useCallback((colIndex: number, transformType: string, options?: any) => {
+    if (!activeTabId || !onTransformColumn) return;
+    onTransformColumn(activeTabId, colIndex, transformType, options);
+    markTableDirty(activeTabId);
+  }, [activeTabId, onTransformColumn, markTableDirty]);
+
   const handleLiftRowToHeaderWrapped = useCallback((rowIndex: number) => {
     if (!activeTabId || !onLiftRowToHeader) return;
     onLiftRowToHeader(activeTabId, rowIndex);
@@ -1650,6 +1658,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
             onRemoveColumn={onRemoveColumn ? handleRemoveColumnWrapped : undefined}
             onUpdateColumnType={onUpdateColumnType ? handleUpdateColumnTypeWrapped : undefined}
             onUpdateColumnName={onUpdateColumnName ? handleUpdateColumnNameWrapped : undefined}
+            onTransformColumn={onTransformColumn ? handleTransformColumnWrapped : undefined}
             onLiftRowToHeader={onLiftRowToHeader ? handleLiftRowToHeaderWrapped : undefined}
             currentSuggestion={currentSuggestion}
             setIsInEditor={setIsInEditor}

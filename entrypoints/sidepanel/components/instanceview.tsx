@@ -1838,6 +1838,100 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     }));
   };
 
+  // Handle column transformation
+  const handleTransformColumn = (colIndex: number, transformType: string, options?: any) => {
+    if (!editingTableId) return;
+    
+    setInstances(prev => prev.map(inst => {
+      if (inst.id === editingTableId && inst.type === 'table') {
+        const newCells = inst.cells.map(row => {
+          const cell = row[colIndex];
+          if (!cell || cell.type !== 'text' || !cell.content) return row;
+          
+          let transformedContent = cell.content;
+          
+          try {
+            switch (transformType) {
+              case 'uppercase':
+                transformedContent = cell.content.toUpperCase();
+                break;
+              case 'lowercase':
+                transformedContent = cell.content.toLowerCase();
+                break;
+              case 'title-case':
+                transformedContent = cell.content.replace(/\w\S*/g, (txt) => 
+                  txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
+                );
+                break;
+              case 'trim':
+                transformedContent = cell.content.trim();
+                break;
+              case 'remove-spaces':
+                transformedContent = cell.content.replace(/\s+/g, '');
+                break;
+              case 'extract-prefix':
+                const prefixLength = options?.extractLength || 3;
+                transformedContent = cell.content.substring(0, prefixLength);
+                break;
+              case 'extract-suffix':
+                const suffixLength = options?.extractLength || 3;
+                transformedContent = cell.content.substring(cell.content.length - suffixLength);
+                break;
+              case 'split':
+                const delimiter = options?.splitDelimiter || ' ';
+                const parts = cell.content.split(delimiter);
+                const partIndex = options?.splitKeepPart || 0;
+                transformedContent = partIndex === -1 ? 
+                  parts[parts.length - 1] || '' : 
+                  parts[partIndex] || '';
+                break;
+              case 'format-currency':
+                const num = parseFloat(cell.content.replace(/[^0-9.-]/g, ''));
+                transformedContent = isNaN(num) ? cell.content : `$${num.toFixed(2)}`;
+                break;
+              case 'format-number':
+                const number = parseFloat(cell.content.replace(/[^0-9.-]/g, ''));
+                transformedContent = isNaN(number) ? cell.content : number.toLocaleString();
+                break;
+              case 'format-percentage':
+                const percent = parseFloat(cell.content.replace(/[^0-9.-]/g, ''));
+                transformedContent = isNaN(percent) ? cell.content : `${percent}%`;
+                break;
+              case 'find-replace':
+                if (options?.customPattern && options?.replacement !== undefined) {
+                  transformedContent = cell.content.replace(
+                    new RegExp(options.customPattern, 'g'), 
+                    options.replacement
+                  );
+                }
+                break;
+              default:
+                // No transformation
+                break;
+            }
+          } catch (error) {
+            console.warn('Transformation failed for cell:', cell.content, error);
+            transformedContent = cell.content; // Keep original on error
+          }
+          
+          // Create new row with transformed cell
+          const newRow = [...row];
+          newRow[colIndex] = {
+            ...cell,
+            content: transformedContent
+          };
+          return newRow;
+        });
+        
+        return { ...inst, cells: newCells };
+      }
+      return inst;
+    }));
+    
+    // Log the transformation
+    onOperation(`Transformed column ${colIndex + 1} using ${transformType}${options ? ' with options' : ''}`);
+  };
+
   // Handle lifting row to header (convert row values to column names)
   const handleLiftRowToHeader = (rowIndex: number) => {
     if (!editingTableId) return;
@@ -2483,6 +2577,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
             onUpdateColumnType={(_tableId: string, colIndex: number, columnType: 'numeral' | 'categorical') => handleUpdateColumnType(colIndex, columnType)}
             onOperation={onOperation}
             onUpdateColumnName={(_tableId: string, colIndex: number, columnName: string) => handleUpdateColumnName(colIndex, columnName)}
+            onTransformColumn={(_tableId: string, colIndex: number, transformType: string, options?: any) => handleTransformColumn(colIndex, transformType, options)}
             onLiftRowToHeader={(_tableId: string, rowIndex: number) => handleLiftRowToHeader(rowIndex)}
             currentSuggestion={currentSuggestion}
             setIsInEditor={setIsInEditor}

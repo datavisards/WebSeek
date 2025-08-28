@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { TableInstance, Instance, EmbeddedInstance, EmbeddedTextInstance, ProactiveSuggestion, InstanceEvent } from '../types';
 import { getInstanceGeometry, indexToLetters, areInstancesContentEqual } from '../utils';
 import InlineSuggestion from './InlineSuggestion';
+import TransformPanel from './TransformPanel';
 import './tablegrid.css';
 
 interface TableGridProps {
@@ -19,6 +20,7 @@ interface TableGridProps {
   onRemoveColumn?: (colIndex: number) => void;
   onUpdateColumnType?: (colIndex: number, columnType: 'numeral' | 'categorical') => void;
   onUpdateColumnName?: (colIndex: number, columnName: string) => void;
+  onTransformColumn?: (colIndex: number, transformType: string, options?: any) => void;
   onLiftRowToHeader?: (rowIndex: number) => void;
   currentSuggestion?: ProactiveSuggestion;
   onAcceptSuggestion?: () => void;
@@ -50,6 +52,7 @@ const TableGrid: React.FC<TableGridProps> = ({
   onRemoveColumn,
   onUpdateColumnType,
   onUpdateColumnName,
+  onTransformColumn,
   onLiftRowToHeader,
   currentSuggestion,
   onAcceptSuggestion,
@@ -103,6 +106,7 @@ const TableGrid: React.FC<TableGridProps> = ({
     max?: number; // for numerical
   }>>(new Map());
   const [openFilterDropdown, setOpenFilterDropdown] = useState<number | null>(null);
+  const [transformPanelColumn, setTransformPanelColumn] = useState<number | null>(null);
 
   // Compute effective table dimensions including suggestions
   const effectiveTable = useMemo(() => {
@@ -1278,13 +1282,19 @@ const TableGrid: React.FC<TableGridProps> = ({
           setOpenFilterDropdown(null);
         }
       }
+      if (transformPanelColumn !== null) {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.transform-panel')) {
+          setTransformPanelColumn(null);
+        }
+      }
     };
 
-    if (openFilterDropdown !== null) {
+    if (openFilterDropdown !== null || transformPanelColumn !== null) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
     }
-  }, [openFilterDropdown]);
+  }, [openFilterDropdown, transformPanelColumn]);
 
   return (
     <div
@@ -1449,6 +1459,26 @@ const TableGrid: React.FC<TableGridProps> = ({
                 }}
                 title="Filter column"
               />
+              {/* Transformation Toolkit Icon */}
+              <img
+                src="/icon/transform.svg"
+                alt="Transform"
+                onClick={e => {
+                  e.stopPropagation();
+                  if (!isReadOnly) {
+                    setTransformPanelColumn(transformPanelColumn === colIndex ? null : colIndex);
+                  }
+                }}
+                style={{
+                  width: '12px',
+                  height: '12px',
+                  cursor: isReadOnly ? 'default' : 'pointer',
+                  opacity: transformPanelColumn === colIndex ? 1 : (isReadOnly ? 0.6 : 0.8),
+                  userSelect: 'none',
+                  filter: transformPanelColumn === colIndex ? 'brightness(0) saturate(100%) invert(42%) sepia(100%) saturate(1352%) hue-rotate(195deg) brightness(98%) contrast(101%)' : 'none'
+                }}
+                title="Transform column data"
+              />
             </div>
           </div>
         </div>
@@ -1484,6 +1514,29 @@ const TableGrid: React.FC<TableGridProps> = ({
               });
             }}
             onClose={() => setOpenFilterDropdown(null)}
+          />
+        </div>
+      )}
+
+      {/* Transform Panel */}
+      {transformPanelColumn !== null && !isReadOnly && onTransformColumn && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '30px',
+            left: `${Math.max(10, 50 + transformPanelColumn * effectiveCellWidth - 100)}px`,
+            zIndex: 2000
+          }}
+        >
+          <TransformPanel
+            columnIndex={transformPanelColumn}
+            columnName={getColumnName(transformPanelColumn)}
+            columnData={table.cells.map(row => {
+              const cell = row[transformPanelColumn];
+              return cell && cell.type === 'text' && cell.content ? cell.content.trim() : '';
+            })}
+            onTransform={onTransformColumn}
+            onClose={() => setTransformPanelColumn(null)}
           />
         </div>
       )}
