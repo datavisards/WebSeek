@@ -51,6 +51,14 @@ class EnhancedProactiveService {
     suggestionType: string;
   }> = new Map();
 
+  // State change tracking for generation validation
+  private generationStartState: {
+    instancesHash: string;
+    logsLength: number;
+    editingTableId: string | null;
+    timestamp: number;
+  } | null = null;
+
   // Event listeners
   private onSuggestionsUpdated: ((suggestions: ProactiveSuggestion[]) => void) | null = null;
   private onSuggestionAccepted: ((suggestion: ProactiveSuggestion) => void) | null = null;
@@ -59,6 +67,62 @@ class EnhancedProactiveService {
   constructor() {
     this.resetSession();
     this.initializeEnhancedSystem();
+  }
+
+  /**
+   * Create a snapshot of the current state for generation validation
+   */
+  private createStateSnapshot() {
+    const instances = this.currentContext.instances || [];
+    const logs = this.currentContext.logs || [];
+    
+    // Create a simple hash of instances to detect structural changes
+    const instancesHash = instances.map(inst => {
+      if (inst.type === 'table') {
+        const table = inst as any;
+        return `${inst.id}:${inst.type}:${table.rows}x${table.cols}:${JSON.stringify(table.columnNames || [])}:${JSON.stringify(table.cells || [])}`;
+      }
+      return `${inst.id}:${inst.type}`;
+    }).join('|');
+    
+    return {
+      instancesHash,
+      logsLength: logs.length,
+      editingTableId: this.currentContext.editingTableId,
+      timestamp: Date.now()
+    };
+  }
+
+  /**
+   * Check if the current state matches the snapshot taken at generation start
+   */
+  private hasStateChangedSinceGeneration(): boolean {
+    if (!this.generationStartState) {
+      console.log('[EnhancedProactiveService] No generation start state to compare against');
+      return false; // No baseline to compare
+    }
+
+    const currentState = this.createStateSnapshot();
+    
+    const changed = (
+      currentState.instancesHash !== this.generationStartState.instancesHash ||
+      currentState.logsLength !== this.generationStartState.logsLength ||
+      currentState.editingTableId !== this.generationStartState.editingTableId
+    );
+
+    if (changed) {
+      console.log('[EnhancedProactiveService] State change detected:', {
+        startState: this.generationStartState,
+        currentState,
+        changes: {
+          instancesChanged: currentState.instancesHash !== this.generationStartState.instancesHash,
+          logsChanged: currentState.logsLength !== this.generationStartState.logsLength,
+          editingTableChanged: currentState.editingTableId !== this.generationStartState.editingTableId
+        }
+      });
+    }
+
+    return changed;
   }
 
   /**
@@ -258,6 +322,10 @@ class EnhancedProactiveService {
    * Process logs and generate enhanced suggestions with intelligent debouncing
    */
   private async processLogsAndGenerateSuggestions() {
+    // Capture state snapshot at generation start for validation
+    this.generationStartState = this.createStateSnapshot();
+    console.log('[EnhancedProactiveService] Captured generation start state:', this.generationStartState);
+    
     // Always use the most current logs from context to avoid stale data
     const logs = this.currentContext.logs;
     console.log('[EnhancedProactiveService] Using current context logs for suggestions:', logs.length);
@@ -289,6 +357,7 @@ class EnhancedProactiveService {
       console.error('[EnhancedProactiveService] Error generating suggestions:', error);
     } finally {
       this.isGenerating = false;
+      this.generationStartState = null; // Clear the generation state snapshot
       if (this.onGenerationStateChanged) {
         this.onGenerationStateChanged(false);
       }
@@ -795,7 +864,14 @@ class EnhancedProactiveService {
         const microSuggestions = this.createSuggestionsFromAIResult(result, suggestionScope, microRules);
         
         if (microSuggestions.length > 0) {
-          console.log('[EnhancedProactiveService] Generated', microSuggestions.length, 'micro suggestions - processing independently');
+          console.log('[EnhancedProactiveService] Generated', microSuggestions.length, 'micro suggestions - validating state before display');
+          
+          // Validate that state hasn't changed since generation started
+          if (this.hasStateChangedSinceGeneration()) {
+            console.log('[EnhancedProactiveService] State changed during micro suggestion generation - aborting display');
+            console.log('[EnhancedProactiveService] Aborted suggestions:', microSuggestions.map(s => ({ id: s.id, message: s.message })));
+            return;
+          }
           
           // Add to current suggestions
           this.addSuggestions(microSuggestions);
@@ -935,7 +1011,14 @@ class EnhancedProactiveService {
         const macroSuggestions = this.createSuggestionsFromAIResult(result, suggestionScope, macroRules);
         
         if (macroSuggestions.length > 0) {
-          console.log('[EnhancedProactiveService] Generated', macroSuggestions.length, 'macro suggestions - processing independently');
+          console.log('[EnhancedProactiveService] Generated', macroSuggestions.length, 'macro suggestions - validating state before display');
+          
+          // Validate that state hasn't changed since generation started
+          if (this.hasStateChangedSinceGeneration()) {
+            console.log('[EnhancedProactiveService] State changed during macro suggestion generation - aborting display');
+            console.log('[EnhancedProactiveService] Aborted suggestions:', macroSuggestions.map(s => ({ id: s.id, message: s.message })));
+            return;
+          }
           
           // Ensure macro suggestions are peripheral
           macroSuggestions.forEach(suggestion => {
