@@ -10,7 +10,6 @@ import { proactiveService } from './proactive-service-enhanced';
 import { actionMonitor } from './action-monitor';
 import SuggestionIndicator from './components/SuggestionIndicator.tsx';
 import ProactiveSettings from './components/ProactiveSettings.tsx';
-import MacroSuggestionPanel from './components/MacroSuggestionPanel.tsx';
 import { executeMacroTool } from './macro-tool-executor';
 import { chatWithAgent } from './apis';
 import { requestSuggestionRefinement as refinementAPI } from './refinement-api';
@@ -44,9 +43,6 @@ const SidePanel = () => {
   useEffect(() => {
     console.log('[SidePanel] Instances state changed:', instances.length, instances.map(i => ({ id: i.id, type: i.type })));
   }, [instances]);
-  
-  // AI suggestion panel collapse state
-  const [isSuggestionPanelCollapsed, setIsSuggestionPanelCollapsed] = useState(false);
   
   // Editor context state - tracks if user is currently in any editor
   const [isInEditor, setIsInEditor] = useState(false);
@@ -718,11 +714,6 @@ const SidePanel = () => {
     setIsToolViewCollapsed(prev => !prev);
   }, []);
 
-  // AI suggestion panel collapse toggle
-  const handleToggleSuggestionPanelCollapse = useCallback(() => {
-    setIsSuggestionPanelCollapsed(prev => !prev);
-  }, []);
-
   // Global keyboard event handler for suggestion acceptance and dismissal
   const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {
     if (suggestions.length > 0) {
@@ -770,6 +761,27 @@ const SidePanel = () => {
     <div 
       className="side-panel"
     >
+      {/* ToolView now appears first/above */}
+      <ToolView 
+        logs={logs} 
+        htmlContext={htmlContext} 
+        messages={messages} 
+        addMessage={addMessage} 
+        setMessages={setMessages} 
+        agentLoading={agentLoading} 
+        setAgentLoading={setAgentLoading} 
+        instances={instances} 
+        setInstances={setInstances}
+        isCollapsed={isToolViewCollapsed}
+        onToggleCollapse={handleToggleToolViewCollapse}
+        suggestions={suggestions}
+        onAcceptSuggestion={handleAcceptSuggestion}
+        onDismissSuggestion={handleDismissSuggestion}
+        onExecuteTool={handleToolExecutionWithConfirmation}
+        onExecuteToolSequence={handleExecuteToolSequence}
+      />
+      
+      {/* InstanceView now appears second/below */}
       <InstanceView 
         instances={instances} 
         setInstances={setInstances} 
@@ -794,30 +806,6 @@ const SidePanel = () => {
             .find(s => s.instances && s.instances.length > 0) || 
           (suggestions.length > 0 ? suggestions.sort((a, b) => b.confidence - a.confidence)[0] : undefined)
         }
-      />
-      <ToolView 
-        logs={logs} 
-        htmlContext={htmlContext} 
-        messages={messages} 
-        addMessage={addMessage} 
-        setMessages={setMessages} 
-        agentLoading={agentLoading} 
-        setAgentLoading={setAgentLoading} 
-        instances={instances} 
-        setInstances={setInstances}
-        isCollapsed={isToolViewCollapsed}
-        onToggleCollapse={handleToggleToolViewCollapse}
-      />
-      
-      {/* Enhanced Proactive Suggestions UI */}
-      <MacroSuggestionPanel
-        suggestions={suggestions}
-        onAccept={handleAcceptSuggestion}
-        onDismiss={handleDismissSuggestion}
-        onExecuteTool={handleToolExecutionWithConfirmation}
-        onExecuteToolSequence={handleExecuteToolSequence}
-        isCollapsed={isSuggestionPanelCollapsed}
-        onToggleCollapse={handleToggleSuggestionPanelCollapse}
       />
       
       <SuggestionIndicator

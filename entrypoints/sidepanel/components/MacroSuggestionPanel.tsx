@@ -193,7 +193,7 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
                   </button>
                 </div>
 
-                <div className="suggestion-content">
+                <div className="suggestion-content-macro">
                   {detectMarkdown(suggestion.message) ? (
                     <h4 
                       className="suggestion-message markdown-content"

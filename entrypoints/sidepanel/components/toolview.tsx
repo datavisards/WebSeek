@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Message, Instance } from '../types';
+import { Message, Instance, ProactiveSuggestion } from '../types';
 import './toolview.css';
 import ChatTab from './chattab';
 import CodeTab from './codetab';
+import MacroSuggestionPanel from './MacroSuggestionPanel';
 
 interface ToolViewProps {
     logs: string[];
@@ -16,6 +17,12 @@ interface ToolViewProps {
     setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
     isCollapsed?: boolean;
     onToggleCollapse?: () => void;
+    // New props for suggestions
+    suggestions?: ProactiveSuggestion[];
+    onAcceptSuggestion?: (suggestionId: string) => void;
+    onDismissSuggestion?: (suggestionId: string) => void;
+    onExecuteTool?: (toolCall: { function: string; parameters: any }, suggestionId: string) => void;
+    onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => void;
 }
 
 const ToolView: React.FC<ToolViewProps> = ({
@@ -29,9 +36,14 @@ const ToolView: React.FC<ToolViewProps> = ({
     instances,
     setInstances,
     isCollapsed = false,
-    onToggleCollapse
+    onToggleCollapse,
+    suggestions = [],
+    onAcceptSuggestion,
+    onDismissSuggestion,
+    onExecuteTool,
+    onExecuteToolSequence
 }) => {
-    const [activeTab, setActiveTab] = useState<'chat' | 'code'>('chat');
+    const [activeTab, setActiveTab] = useState<'chat' | 'code' | 'suggestions'>('chat');
 
     return (
         <div className={`view-container tool-view ${isCollapsed ? 'collapsed' : ''}`}>
@@ -48,6 +60,12 @@ const ToolView: React.FC<ToolViewProps> = ({
                 >
                     Code
                 </h3> */}
+                <h3
+                    className={`tab-button ${activeTab === 'suggestions' ? 'active' : ''} ${isCollapsed ? 'disabled' : ''}`}
+                    onClick={() => !isCollapsed && setActiveTab('suggestions')}
+                >
+                    AI Suggestions {suggestions.filter(s => s.scope === 'macro').length > 0 && `(${suggestions.filter(s => s.scope === 'macro').length})`}
+                </h3>
                 <div className="collapse-toggle-container">
                     <button
                         className="collapse-toggle"
@@ -82,6 +100,17 @@ const ToolView: React.FC<ToolViewProps> = ({
                     {/* {activeTab === 'code' && (
                         <CodeTab instances={instances} setInstances={setInstances} />
                     )} */}
+                    {activeTab === 'suggestions' && (
+                        <MacroSuggestionPanel
+                            suggestions={suggestions}
+                            onAccept={onAcceptSuggestion || (() => {})}
+                            onDismiss={onDismissSuggestion || (() => {})}
+                            onExecuteTool={onExecuteTool || (() => {})}
+                            onExecuteToolSequence={onExecuteToolSequence}
+                            className="embedded-suggestions-panel"
+                            isCollapsed={false}
+                        />
+                    )}
                 </div>
             )}
         </div>

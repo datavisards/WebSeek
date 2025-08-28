@@ -3,6 +3,8 @@
 .suggestion-cell {
   position: relative;
   transition: all 0.2s ease;
+  width: 100%;
+  height: 100%;
 }
 
 /* Cell states for different suggestion types */
@@ -117,18 +119,20 @@ suggestion-mark.remove {
 /* Controls hint */
 .suggestion-controls {
   position: absolute;
-  bottom: -20px;
+  bottom: 4px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.85);
   color: white;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 9px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 10px;
   white-space: nowrap;
   opacity: 0;
-  transition: opacity 0.2s;
-  z-index: 20;
+  transition: opacity 0.2s ease;
+  z-index: 1000;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .suggestion-cell:hover .suggestion-controls {
@@ -136,12 +140,13 @@ suggestion-mark.remove {
 }
 
 .suggestion-controls kbd {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
-  padding: 1px 3px;
-  font-size: 8px;
+  background: rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: 9px;
   margin: 0 1px;
+  font-weight: 500;
 }
 
 /* Animations */
@@ -186,12 +191,12 @@ suggestion-mark.remove {
   height: 100%;
   width: 100%;
   position: relative;
-  padding-left: 12px; /* Make room for +/- indicators */
+  /* padding-left: 12px;  */
 }
 
 .suggestion-diff .suggestion-old,
 .suggestion-diff .suggestion-new {
-  padding-left: 12px; /* Make room for +/- indicators */
+  padding-left: 12px; 
 }
 
 /* Image suggestions */

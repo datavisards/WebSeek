@@ -56,3 +56,26 @@
 .tool-view.collapsed .view-content {
     display: none;
 }
+
+/* Embedded suggestions panel styles */
+.embedded-suggestions-panel {
+    height: 100%;
+    border: none;
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+}
+
+.embedded-suggestions-panel .panel-header {
+    display: none; /* Hide the panel's own header since it's now a tab */
+}
+
+.embedded-suggestions-panel .suggestions-list {
+    flex: 1; /* Take up all available space */
+    overflow-y: auto; /* Allow scrolling if needed */
+}
+
+.embedded-suggestions-panel .view-content {
+    padding: 0;
+    margin: 0;
+}
