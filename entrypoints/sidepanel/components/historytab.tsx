@@ -128,20 +128,23 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
                 <span className="history-action">
                   {renderActionWithLinks(entry.action)}
                 </span>
+                {/* Only show restore button for non-latest items */}
+                {displayIndex > 0 && (
+                  <button 
+                    className="restore-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRestoreClick(entry.index);
+                    }}
+                    disabled={!onRestoreToCheckpoint}
+                    title="Restore to this checkpoint"
+                  >
+                    ↶
+                  </button>
+                )}
                 <span className="history-timestamp">
                   {formatTimestamp(entry.timestamp)}
                 </span>
-                <button 
-                  className="restore-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRestoreClick(entry.index);
-                  }}
-                  disabled={!onRestoreToCheckpoint}
-                  title="Restore to this checkpoint"
-                >
-                  ↶
-                </button>
               </div>
             </div>
           ))
