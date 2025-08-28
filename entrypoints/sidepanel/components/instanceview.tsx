@@ -25,7 +25,11 @@ import { proactiveService } from '../proactive-service-enhanced';
 // Props interface for the component
 interface InstanceViewProps {
   instances: Instance[];
-  setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
+  setInstances: (
+    newStateOrUpdater: React.SetStateAction<Instance[]>,
+    description?: string,
+    logMessage?: string
+  ) => void;
   logs: string[];
   htmlContextRef: React.RefObject<Record<string, {pageURL: string, htmlContent: string}>>;
   messages: Message[];
@@ -36,7 +40,7 @@ interface InstanceViewProps {
     context?: any;
     instanceId?: string;
     metadata?: any;
-  }) => void;
+  }, recordInUndo?: boolean) => void;
   updateHTMLContext: React.Dispatch<React.SetStateAction<Record<string, {pageURL: string, htmlContent: string}>>>;
   addMessage: (message: Message) => void;
   setAgentLoading: (loading: boolean) => void;
@@ -630,10 +634,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       content: [],
       thumbnail: ''
     };
-    setInstances(prev => [...prev, newSketch]);
+    
+    const logMessage = `Open sketch editor to create a new sketch "${newId}"`;
+    setInstances(prev => [...prev, newSketch], `Create new sketch "${newId}"`, logMessage);
     setAvailableInstances(instances.filter(inst => inst.type !== 'sketch'));
     setEditingSketchId(newSketch.id);
-    onOperation(`Open sketch editor to create a new sketch "${newId}"`);
   };
 
   // Add an instance to the sketch
@@ -735,7 +740,13 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         }
       })
       .join(', ');
-    onOperation(`Created [${sketch.id}](#instance-${sketch.id})` + (originalInstanceId ? ` from [${originalInstanceId}](#instance-${originalInstanceId})` : '') + (withstr ? ` with ${withstr}` : ''));
+    
+    const logMessage = `Created [${sketch.id}](#instance-${sketch.id})` + (originalInstanceId ? ` from [${originalInstanceId}](#instance-${originalInstanceId})` : '') + (withstr ? ` with ${withstr}` : '');
+    
+    // Record the save operation with the existing instance update
+    // Note: Since setInstances was already called above without log, we need to add the log separately
+    // TODO: Refactor to combine setInstances and log in one operation
+    onOperation(logMessage);
     setCurrentStroke(null);
     setEditingSketchId(null);
     setAvailableInstances([]);
@@ -747,8 +758,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   // Cancel sketch creation
   const handleCancelSketch = () => {
     if (!editingSketchId) return;
-    onOperation(`Cancel sketch creation for "${editingSketchId}"`);
-    setInstances(prev => prev.filter(inst => inst.id !== editingSketchId));
+    
+    const logMessage = `Cancel sketch creation for "${editingSketchId}"`;
+    setInstances(prev => prev.filter(inst => inst.id !== editingSketchId), 
+                `Cancel sketch creation for "${editingSketchId}"`, 
+                logMessage);
     setEditingSketchId(null);
     setAvailableInstances([]);
     
@@ -898,7 +912,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       const text = message.data;
       const newId = `Text${textCountRef.current + 1}`;
       setTextCount(prev => prev + 1);
-      onOperation(`Created [${text}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`);
+      
+      const logMessage = `Created [${text}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`;
+      
       setInstances(prev => [
         ...prev,
         {
@@ -915,11 +931,13 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
             locator: message.locator || 'unknown'
           },
         }
-      ]);
+      ], `Create text "${newId}" from element selection`, logMessage);
     } else if (message.type === 'image') {
       const newId = `Image${imageCountRef.current + 1}`;
       setImageCount(prev => prev + 1);
-      onOperation(`Created [${newId}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`);
+      
+      const logMessage = `Created [${newId}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`;
+      
       setInstances(prev => [
         ...prev,
         {
@@ -936,16 +954,45 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
             locator: message.locator || 'unknown'
           },
         }
-      ]);
+      ], `Create image "${newId}" from element selection`, logMessage);
     }
     setIsCaptureEnabled(true);
   };
 
+  // Add debouncing for web content operations to prevent duplicates
+  const lastOperationRef = useRef<{ type: string; cellKey: string; timestamp: number } | null>(null);
+
   // Handle captured content for table cells
   const handleTableCellCapture = (message: any) => {
+    console.log('[InstanceView] handleTableCellCapture called:', {
+      messageType: message.type,
+      captureTarget: captureTargetRef.current,
+      timestamp: Date.now()
+    });
+    
     if (!captureTargetRef.current) return;
 
     const { tableId, row, col } = captureTargetRef.current;
+    
+    // Create a unique key for this operation
+    const cellKey = `${tableId}-${row}-${col}`;
+    const operationType = `${message.type}-${cellKey}`;
+    const now = Date.now();
+    
+    // Prevent duplicate operations within 1 second
+    if (lastOperationRef.current && 
+        lastOperationRef.current.type === operationType && 
+        (now - lastOperationRef.current.timestamp) < 1000) {
+      console.log('[InstanceView] Preventing duplicate operation:', operationType);
+      setCaptureTarget(null);
+      setIsCaptureEnabled(true);
+      return;
+    }
+    
+    // Record this operation
+    lastOperationRef.current = { type: operationType, cellKey, timestamp: now };
+    console.log('[InstanceView] Recording operation:', { type: operationType, cellKey, timestamp: now });
+
     const table = instancesRef.current.find(inst => inst.id === tableId && inst.type === 'table') as TableInstance | undefined;
 
     if (!table) {
@@ -979,7 +1026,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           content: combinedText
         };
 
-        // Update the table
+        const logMessage = `Appended text to cell (${row + 1}, ${String.fromCharCode(65 + col)}) from [${message.pageId}](${message.pageURL})`;
+        
+        // Update the table and record log in a single atomic operation
         setInstances(prev => prev.map(inst => {
           if (inst.id === tableId && inst.type === 'table') {
             const newCells = [...inst.cells];
@@ -987,26 +1036,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
             return { ...inst, cells: newCells };
           }
           return inst;
-        }));
+        }), `Append text to cell (${row + 1}, ${String.fromCharCode(65 + col)})`, logMessage);
 
-        const logMessage = `Appended text to cell (${row + 1}, ${String.fromCharCode(65 + col)}) from [${message.pageId}](${message.pageURL})`;
-        onOperation(logMessage, {
-          type: 'cell-edited',
-          context: { 
-            value: 'web-content',
-            message: logMessage,
-            pageId: message.pageId,
-            cellPosition: `${String.fromCharCode(65 + col)}${row + 1}`,
-            contentType: 'text'
-          },
-          instanceId: undefined, // No specific instanceId for web captures
-          metadata: { 
-            column: col, 
-            row: row,
-            editType: 'web-capture',
-            sourceType: 'web'
-          }
-        });
+        // Note: No need to call onOperation since setInstances handles both instance and log changes
       } else {
         alert('Cannot append text to a cell containing non-text content. Please remove the existing content first.');
       }
@@ -1024,7 +1056,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           src: message.data
         };
 
-        // Update the table
+        const logMessage = `Added image to cell (${row + 1}, ${String.fromCharCode(65 + col)}) from [${message.pageId}](${message.pageURL})`;
+        
+        // Update the table and record log in a single atomic operation
         setInstances(prev => prev.map(inst => {
           if (inst.id === tableId && inst.type === 'table') {
             const newCells = [...inst.cells];
@@ -1032,26 +1066,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
             return { ...inst, cells: newCells };
           }
           return inst;
-        }));
+        }), `Add image to cell (${row + 1}, ${String.fromCharCode(65 + col)})`, logMessage);
 
-        const logMessage = `Added image to cell (${row + 1}, ${String.fromCharCode(65 + col)}) from [${message.pageId}](${message.pageURL})`;
-        onOperation(logMessage, {
-          type: 'cell-edited',
-          context: { 
-            value: 'web-content',
-            message: logMessage,
-            pageId: message.pageId,
-            cellPosition: `${String.fromCharCode(65 + col)}${row + 1}`,
-            contentType: 'image'
-          },
-          instanceId: undefined, // No specific instanceId for web captures
-          metadata: { 
-            column: col, 
-            row: row,
-            editType: 'web-capture',
-            sourceType: 'web'
-          }
-        });
+        // Note: No need to call onOperation since setInstances handles both instance and log changes
       } else {
         alert('Cannot add image to a cell that already contains content. Please remove the existing content first.');
       }
@@ -1065,7 +1082,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   const handleScreenshotFinished = (message: any) => {
     const newId = `Image${imageCountRef.current + 1}`;
     setImageCount(prev => prev + 1);
-    onOperation(`Created [${newId}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`);
+    
+    const logMessage = `Created [${newId}](#instance-${newId}) from [${message.pageId}](${message.pageURL})`;
+    
+    // Update instances and record log in a single atomic operation
     setInstances(prev => [
       ...prev,
       {
@@ -1082,7 +1102,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           locator: message.locator || 'unknown'
         },
       }
-    ]);
+    ], `Create image "${newId}" from screenshot`, logMessage);
+    
     setIsCaptureEnabled(true);
   }
 
@@ -1094,15 +1115,16 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     const instanceToDelete = instancesRef.current.find(inst => inst.id === instanceId);
     if (!instanceToDelete) return;
 
-    onOperation(`Delete ${instanceToDelete.type} "${instanceId}"`);
-    // Set all state updates together
-    setInstances(prev => prev.filter(inst => inst.id !== instanceId));
+    const logMessage = `Delete ${instanceToDelete.type} "${instanceId}"`;
+    
+    // Set all state updates together with atomic log recording
+    setInstances(prev => prev.filter(inst => inst.id !== instanceId), `Delete ${instanceToDelete.type} "${instanceId}"`, logMessage);
     setDeletedInstances(prev => [...prev, instanceToDelete]);
     setSelectedInstanceId(null);
   }, []);
 
   const handleDelete = useCallback((instance: Instance) => {
-    setInstances(prev => prev.filter(inst => inst.id !== instance.id));
+    setInstances(prev => prev.filter(inst => inst.id !== instance.id), `Delete ${instance.type} "${instance.id}"`);
     setDeletedInstances(prev => [...prev, instance]);
     if (selectedInstanceId === instance.id) {
       setSelectedInstanceId(null);
@@ -1117,7 +1139,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     onOperation(`Restore ${instanceToRestore.type} "${instanceId}" from trash`);
     // Update states
     setDeletedInstances(prev => prev.filter(inst => inst.id !== instanceId));
-    setInstances(prev => [...prev, instanceToRestore]);
+    setInstances(prev => [...prev, instanceToRestore], `Restore ${instanceToRestore.type} "${instanceId}" from trash`);
   }, []);
 
   const handleCaptureStart = () => {
@@ -1247,7 +1269,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       }
       newTable.id = newId;
       newTable.cells = newTable.cells.map(rowArr => rowArr.map(cell => cell ? { ...cell, id: generateId() } : null));
-      setInstances(prev => [...prev, newTable]);
+      setInstances(prev => [...prev, newTable], `Create table edit copy "${newTable.id}"`);
       setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
       setEditingTableId(newTable.id);
       onOperation(`Edit table "${instance.id}" by editing the embedded table "${newTable.id}"`);
@@ -1265,6 +1287,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
 
     const newTextId = `Text${textCountRef.current + 1}`;
     setTextCount(prev => prev + 1);
+    const newDisplay = editingTextContent;
+    
+    const logMessage = `Save text editing of "${original.id}" changing value from "${originalDisplay}" to "${newDisplay}" creating new text "${newTextId}"`;
     setInstances(prev => [
       ...prev,
       {
@@ -1277,10 +1302,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         width: original.width,
         height: original.height
       }
-    ]);
-    const newDisplay = editingTextContent;
-
-    onOperation(`Save text editing of "${original.id}" changing value from "${originalDisplay}" to "${newDisplay}" creating new text "${newTextId}"`);
+    ], `Create text instance "${newTextId}"`, logMessage);
 
     setEditingTextId(null);
     
@@ -1432,15 +1454,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     });
 
     setEditingTableId(newId);
-    setInstances(prev => [...prev, newTable]);
-    setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
     
     const logMessage = `Opened table editor to created a new table with ID "${newId}"`;
-    onOperation(logMessage, {
-      type: 'table-selected',
-      context: { message: logMessage, editorOpened: true },
-      instanceId: newId
-    });
+    setInstances(prev => [...prev, newTable], `Create new table "${newId}"`, logMessage);
+    setAvailableInstances(instances.filter(inst => inst.type !== 'table' && inst.type !== 'sketch'));
   };
 
   // Handle adding to table cell (for both click and drag-and-drop)
@@ -1493,14 +1510,15 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           return { ...inst, cells: newCells };
         }
         return inst;
-      }));
+      }), `Add ${instance.type} to table cell (${row + 1}, ${String.fromCharCode(65 + col)})`);
     }
   }, [editingTableId, setInstances, instances]);
 
   // Remove content from table cell
   const removeCellContent = (row: number, col: number) => {
     if (!editingTableId) return;
-    onOperation(`Remove content from table cell (${row + 1}, ${String.fromCharCode(65 + col)}) in table "${editingTableId}"`);
+    
+    const logMessage = `Remove content from table cell (${row + 1}, ${String.fromCharCode(65 + col)}) in table "${editingTableId}"`;
     setInstances(prev => prev.map(inst => {
       if (inst.id === editingTableId && inst.type === 'table') {
         const newCells = [...inst.cells];
@@ -1508,7 +1526,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         return { ...inst, cells: newCells };
       }
       return inst;
-    }));
+    }), `Remove cell content (${row + 1}, ${String.fromCharCode(65 + col)})`, logMessage);
   };
 
   const saveTable = (tableId?: string, isDirty?: boolean) => {
@@ -1572,13 +1590,13 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     if (!editingTableId) return;
     
     // Always remove the temporary table when canceling
-    setInstances(prev => prev.filter(inst => inst.id !== editingTableId));
+    const logMessage = originalInstanceId 
+      ? `Cancelled table editing for "${originalInstanceId}" and closed the table editor`
+      : `Cancelled table creation for "${editingTableId}" and closed the table editor`;
     
-    if (originalInstanceId) {
-      onOperation(`Cancelled table editing for "${originalInstanceId}" and closed the table editor`);
-    } else {
-      onOperation(`Cancelled table creation for "${editingTableId}" and closed the table editor`);
-    }
+    setInstances(prev => prev.filter(inst => inst.id !== editingTableId), 
+                `Cancel table edit "${editingTableId}"`, 
+                logMessage);
     
     setEditingTableId(null);
     setAvailableInstances([]);
@@ -2085,8 +2103,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     const updatedInstances = updateInstanceReferences(oldId, newId);
 
     // Update state with the fully updated instance tree
-    setInstances(updatedInstances);
-    onOperation(`Rename instance "${oldId}" to "${newId}"`);
+    const logMessage = `Rename instance "${oldId}" to "${newId}"`;
+    setInstances(updatedInstances, `Rename "${oldId}" to "${newId}"`, logMessage);
 
     // Update component state variables that reference the instance
     if (selectedInstanceId === oldId) setSelectedInstanceId(newId);
@@ -2173,8 +2191,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   // Batch delete selected
   const handleBatchDelete = () => {
     if (selectedInstanceIds.length === 0) return;
-    onOperation(`Delete batch selection: ${selectedInstanceIds.map(id => `"${id}"`).join(', ')}`);
-    setInstances(prev => prev.filter(inst => !selectedInstanceIds.includes(inst.id)));
+    
+    const logMessage = `Delete batch selection: ${selectedInstanceIds.map(id => `"${id}"`).join(', ')}`;
+    
+    setInstances(prev => prev.filter(inst => !selectedInstanceIds.includes(inst.id)), 'Batch delete instances', logMessage);
     setDeletedInstances(prev => [
       ...prev,
       ...instances.filter(inst => selectedInstanceIds.includes(inst.id))
@@ -2209,8 +2229,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       })),
       thumbnail: ''
     };
-    setInstances(prev => [...prev, newSketch]);
-    onOperation(`Created [${newId}](#instance-${newId}) from batch selection: ${selected.map(inst => `[${inst.id}](#instance-${inst.id})`).join(', ')}`);
+    
+    const logMessage = `Created [${newId}](#instance-${newId}) from batch selection: ${selected.map(inst => `[${inst.id}](#instance-${inst.id})`).join(', ')}`;
+    setInstances(prev => [...prev, newSketch], `Create sketch from batch selection "${newId}"`, logMessage);
     setSelectedInstanceIds([]);
   };
 
@@ -2248,8 +2269,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       width: 400,
       height: 50 + 60 * rows
     });
-    setInstances(prev => [...prev, newTable]);
-    onOperation(`Created [${newId}](#instance-${newId}) as table from batch selection: ${selected.map(inst => `[${inst.id}](#instance-${inst.id})`).join(', ')}`);
+    
+    const logMessage = `Created [${newId}](#instance-${newId}) as table from batch selection: ${selected.map(inst => `[${inst.id}](#instance-${inst.id})`).join(', ')}`;
+    setInstances(prev => [...prev, newTable], `Create table from batch selection "${newId}"`, logMessage);
     setSelectedInstanceIds([]);
   };
 

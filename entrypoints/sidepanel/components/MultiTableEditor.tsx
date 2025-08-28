@@ -1294,12 +1294,8 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     return (
       <div className="view-container">
         <div className="view-title-container">
-          <h3>No Tables Open</h3>
+          <h3 style={{ margin: 0 }}>No Tables Open</h3>
           <button onClick={onCancel}>Close</button>
-        </div>
-        <div style={{ padding: '20px', textAlign: 'center' }}>
-          <p>Select a table to start editing</p>
-          <button onClick={() => setShowTableSelector(true)}>Open Table</button>
         </div>
       </div>
     );

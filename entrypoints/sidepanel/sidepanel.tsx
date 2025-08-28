@@ -15,16 +15,67 @@ import { chatWithAgent } from './apis';
 import { requestSuggestionRefinement as refinementAPI } from './refinement-api';
 import WorkspaceNameModal from './components/WorkspaceNameModal.tsx';
 import { updateInstances } from './utils';
+import { globalUndoManager } from './global-undo-manager';
 
 const SidePanel = () => {
-  const [logs, setLogs] = useState<string[]>([]);
+  console.log('[SidePanel] Component mounting/re-mounting');
+  
+  const [logs, setLogsInternal] = useState<string[]>([]);
   const logsRef = useRef<string[]>([]);
   const [htmlContext, setHtmlContexts] = useState<Record<string, {pageURL: string, htmlContent: string}>>({});
   const htmlContextRef = useRef<Record<string, {pageURL: string, htmlContent: string}>>({});
   const [htmlLoadingStates, setHtmlLoadingStates] = useState<Record<string, boolean>>({});
   const [messages, setMessages] = useState<Message[]>([]);
   const [agentLoading, setAgentLoading] = useState(false);
-  const [instances, setInstances] = useState<Instance[]>([]);
+  const [instances, setInstancesInternal] = useState<Instance[]>([]);
+
+  // Track component lifecycle
+  useEffect(() => {
+    console.log('[SidePanel] Component mounted, checking undo manager state');
+    console.log('[SidePanel] Undo manager can undo:', globalUndoManager.canUndo());
+    console.log('[SidePanel] Undo manager can redo:', globalUndoManager.canRedo());
+    console.log('[SidePanel] Current history length:', globalUndoManager.getHistory().length);
+    
+    // Check if we have persisted state from a component remount during undo
+    try {
+      const pendingUndo = sessionStorage.getItem('pendingUndoState');
+      if (pendingUndo) {
+        const undoData = JSON.parse(pendingUndo);
+        console.log('[SidePanel] Found pending undo state, applying:', undoData);
+        
+        setInstancesInternal(undoData.instances);
+        setLogsInternal(undoData.logs);
+        logsRef.current = undoData.logs;
+        
+        // Clear the pending state
+        sessionStorage.removeItem('pendingUndoState');
+      }
+    } catch (error) {
+      console.log('[SidePanel] Failed to restore pending undo state:', error);
+    }
+    
+    return () => {
+      console.log('[SidePanel] Component unmounting');
+    };
+  }, []);
+
+  // Wrapper for setInstances with logging
+  const setInstances = useCallback((newStateOrUpdater: React.SetStateAction<Instance[]>) => {
+    console.log('[SidePanel] setInstances called directly (not through recordable)');
+    console.log('[SidePanel] setInstances newState:', typeof newStateOrUpdater === 'function' ? 'function' : newStateOrUpdater);
+    console.log('[SidePanel] Stack trace for direct setInstances call:');
+    console.trace();
+    setInstancesInternal(newStateOrUpdater);
+  }, []);
+
+  // Wrapper for setLogs with logging
+  const setLogs = useCallback((newStateOrUpdater: React.SetStateAction<string[]>) => {
+    console.log('[SidePanel] setLogs called directly');
+    console.log('[SidePanel] setLogs newState:', typeof newStateOrUpdater === 'function' ? 'function' : newStateOrUpdater);
+    console.log('[SidePanel] Stack trace for direct setLogs call:');
+    console.trace();
+    setLogsInternal(newStateOrUpdater);
+  }, []);
   
   // Proactive suggestion state
   const [suggestions, setSuggestions] = useState<ProactiveSuggestion[]>([]);
@@ -41,8 +92,27 @@ const SidePanel = () => {
   
   // Debug: Track instances changes
   useEffect(() => {
-    console.log('[SidePanel] Instances state changed:', instances.length, instances.map(i => ({ id: i.id, type: i.type })));
+    console.log('[SidePanel] Instances state changed:', {
+      count: instances.length,
+      instances: instances.map(i => ({ id: i.id, type: i.type })),
+      stackTrace: new Error('State change').stack?.split('\n').slice(1, 4)
+    });
+    
+    // Check for suspicious empty state
+    if (instances.length === 0 && logs.length === 0) {
+      console.warn('[SidePanel] WARNING: Both instances and logs are empty! This might be a state reset.');
+      console.trace('[SidePanel] Empty state stack trace');
+    }
   }, [instances]);
+
+  // Debug: Track logs changes  
+  useEffect(() => {
+    console.log('[SidePanel] Logs state changed:', {
+      count: logs.length,
+      logs: logs,
+      stackTrace: new Error('Log change').stack?.split('\n').slice(1, 4)
+    });
+  }, [logs]);
   
   // Editor context state - tracks if user is currently in any editor
   const [isInEditor, setIsInEditor] = useState(false);
@@ -66,11 +136,43 @@ const SidePanel = () => {
     context?: any;
     instanceId?: string;
     metadata?: any;
-  }) => {
+  }, recordInUndo: boolean = true) => {
+    const previousLogs = [...logsRef.current];
     const updatedLogs = [...logsRef.current, message];
-    setLogs(updatedLogs);
+    console.log('[SidePanel] Adding log:', {
+      message,
+      previousLogsCount: previousLogs.length,
+      updatedLogsCount: updatedLogs.length,
+      previousLogs,
+      updatedLogs,
+      recordInUndo
+    });
     
-    // Record action directly if provided, otherwise fall back to parsing
+    setLogsInternal(updatedLogs);
+    logsRef.current = updatedLogs;
+    
+    // Record this log change for undo/redo only if requested
+    if (recordInUndo) {
+      console.log('[SidePanel] Recording log change in undo manager:', {
+        instancesCount: instances.length,
+        previousLogsCount: previousLogs.length,
+        newLogsCount: updatedLogs.length,
+        description: message
+      });
+      
+      globalUndoManager.recordStateChange({
+        previousState: instances,
+        newState: instances, // Instances don't change when adding logs
+        previousLogs: previousLogs,
+        newLogs: updatedLogs,
+        description: message,
+        undoable: true
+      });
+    } else {
+      console.log('[SidePanel] Skipping undo recording for log (will be recorded by accompanying instance change)');
+    }
+    
+    // Always record action for monitoring regardless of undo recording
     if (actionDetails) {
       actionMonitor.recordAction(
         actionDetails.type,
@@ -407,6 +509,171 @@ const SidePanel = () => {
     };
   }, []);
 
+  // Set up global undo/redo system
+  useEffect(() => {
+    console.log('[SidePanel] Setting up global undo/redo system');
+    console.log('[SidePanel] Current state:', { 
+      instancesCount: instances.length, 
+      logsCount: logs.length 
+    });
+    
+    // Only initialize if not already initialized (prevent overwriting existing history)
+    if (globalUndoManager.getHistoryLength() === 0) {
+      console.log('[SidePanel] Initializing with current state as baseline');
+      globalUndoManager.initializeWithState(instances, logs, 'Initial application state');
+    } else {
+      console.log('[SidePanel] Global undo manager already initialized with', globalUndoManager.getHistoryLength(), 'entries');
+    }
+
+    // Register global keyboard shortcuts
+    const cleanupShortcuts = globalUndoManager.registerGlobalKeyboardShortcuts();
+
+    // Listen for global state changes from undo/redo
+    const handleGlobalStateChange = (event: CustomEvent) => {
+      console.log('[SidePanel] Applying global state from undo/redo:', event.detail.description);
+      console.log('[SidePanel] Event detail:', {
+        instancesCount: event.detail.instances.length,
+        logsCount: event.detail.logs?.length || 0,
+        logs: event.detail.logs
+      });
+      
+      console.log('[SidePanel] Current state before applying:', {
+        currentInstancesCount: instances.length,
+        currentLogsCount: logs.length,
+        currentLogs: logs
+      });
+      
+      // Save the undo state to survive potential component remounting
+      try {
+        sessionStorage.setItem('pendingUndoState', JSON.stringify({
+          instances: event.detail.instances,
+          logs: event.detail.logs
+        }));
+      } catch (error) {
+        console.log('[SidePanel] Failed to save pending undo state:', error);
+      }
+      
+      // Use setTimeout to ensure this happens after any component re-mounting
+      setTimeout(() => {
+        console.log('[SidePanel] Applying undo/redo state after component stabilization');
+        setInstancesInternal(event.detail.instances);
+        if (event.detail.logs) {
+          console.log('[SidePanel] Setting logs to:', event.detail.logs);
+          setLogsInternal(event.detail.logs);
+          logsRef.current = event.detail.logs;
+        }
+        console.log('[SidePanel] Global state change applied');
+        
+        // Clear the pending state since we applied it successfully
+        try {
+          sessionStorage.removeItem('pendingUndoState');
+        } catch (error) {
+          console.log('[SidePanel] Failed to clear pending undo state:', error);
+        }
+      }, 0);
+    };    // Listen for instance operations from undo/redo system
+    const handleInstanceOperations = (event: CustomEvent) => {
+      console.log('[SidePanel] Applying instance operations from undo/redo:', event.detail.operations);
+      // Apply operations by updating instances state directly
+      // For now, we'll implement basic operations - this can be extended
+      event.detail.operations.forEach((operation: any) => {
+        console.log('[SidePanel] Processing operation:', operation);
+        // Operations will be applied through the existing state management
+      });
+    };
+
+    document.addEventListener('applyGlobalState', handleGlobalStateChange as EventListener);
+    document.addEventListener('applyInstanceOperations', handleInstanceOperations as EventListener);
+
+    return () => {
+      cleanupShortcuts();
+      document.removeEventListener('applyGlobalState', handleGlobalStateChange as EventListener);
+      document.removeEventListener('applyInstanceOperations', handleInstanceOperations as EventListener);
+    };
+  }, []);
+
+  // Create a wrapper function for recording state changes
+  const recordableSetInstances = useCallback((
+    newStateOrUpdater: React.SetStateAction<Instance[]>,
+    description: string = 'State change',
+    logMessage?: string
+  ) => {
+    const callId = Math.random().toString(36).substr(2, 9);
+    console.log(`[SidePanel] recordableSetInstances called [${callId}]:`, {
+      description,
+      logMessage,
+      currentInstancesCount: instances.length,
+      timestamp: Date.now()
+    });
+    console.trace(`[SidePanel] Stack trace for recordableSetInstances call [${callId}]:`);
+    
+    setInstancesInternal(prevInstances => {
+      console.log(`[SidePanel] Inside setInstancesInternal callback [${callId}]:`, {
+        previousCount: prevInstances.length,
+        logMessage,
+        description
+      });
+
+      const newInstances = typeof newStateOrUpdater === 'function' 
+        ? newStateOrUpdater(prevInstances) 
+        : newStateOrUpdater;
+
+      // If a log message is provided, add it first (without recording in undo)
+      let finalLogs = logsRef.current;
+      let previousLogs = logsRef.current; // Save the original logs before modification
+      
+      if (logMessage) {
+        finalLogs = [...logsRef.current, logMessage];
+        console.log(`[SidePanel] Adding log as part of instance change [${callId}]:`, logMessage);
+        setLogsInternal(finalLogs);
+        logsRef.current = finalLogs;
+      }
+
+      console.log('[SidePanel] About to record in undo manager:', {
+        description,
+        previousInstancesCount: prevInstances.length,
+        newInstancesCount: newInstances.length,
+        previousLogsCount: previousLogs.length,
+        finalLogsCount: finalLogs.length
+      });
+
+      // Record the state change for global undo/redo (including any log change)
+      try {
+        globalUndoManager.recordStateChange({
+          previousState: prevInstances,
+          newState: newInstances,
+          previousLogs: previousLogs, // Use the logs before modification
+          newLogs: finalLogs,
+          description: logMessage || description, // Use log message as description if provided
+          undoable: true
+        });
+        console.log('[SidePanel] Successfully recorded state change in undo manager');
+      } catch (error) {
+        console.error('[SidePanel] Error recording state change:', error);
+      }
+
+      return newInstances;
+    });
+  }, []);  // History restoration handler
+  const handleRestoreToCheckpoint = useCallback((logIndex: number) => {
+    console.log(`[SidePanel] Restoring to checkpoint at log index: ${logIndex}`);
+    
+    const success = globalUndoManager.restoreToLogCheckpoint(
+      logIndex, 
+      logs, 
+      () => instances,
+      () => logs
+    );
+    
+    if (success) {
+      addLog(`Restored system to checkpoint: "${logs[logIndex]}"`);
+      console.log(`[SidePanel] Successfully restored to checkpoint: "${logs[logIndex]}"`);
+    } else {
+      addLog(`Failed to restore to checkpoint at index ${logIndex}`);
+      console.warn(`[SidePanel] Failed to restore to checkpoint at index ${logIndex}`);
+    }
+  }, [logs, instances, addLog]);
+
   // Suggestion handlers
   const handleAcceptSuggestion = useCallback(async (suggestionId: string) => {
     console.log('[SidePanel] handleAcceptSuggestion called with:', suggestionId);
@@ -578,7 +845,7 @@ const SidePanel = () => {
     
     try {
       console.log('[SidePanel] Current instances before tool execution:', instances.length);
-      const result = await executeMacroTool(toolCall, instances, setInstances);
+      const result = await executeMacroTool(toolCall, instances, recordableSetInstances);
       console.log('[SidePanel] Tool execution result:', result);
       console.log('[SidePanel] Current instances after tool execution:', instances.length);
       
@@ -649,7 +916,7 @@ const SidePanel = () => {
     
     try {
       const { executeCompositeSuggestion } = await import('./macro-tool-executor');
-      const result = await executeCompositeSuggestion({ toolSequence }, instances, setInstances);
+      const result = await executeCompositeSuggestion({ toolSequence }, instances, recordableSetInstances);
       console.log('[SidePanel] Tool sequence execution result:', result);
       
       if (result.success) {
@@ -771,7 +1038,7 @@ const SidePanel = () => {
         agentLoading={agentLoading} 
         setAgentLoading={setAgentLoading} 
         instances={instances} 
-        setInstances={setInstances}
+        setInstances={recordableSetInstances}
         isCollapsed={isToolViewCollapsed}
         onToggleCollapse={handleToggleToolViewCollapse}
         suggestions={suggestions}
@@ -779,12 +1046,13 @@ const SidePanel = () => {
         onDismissSuggestion={handleDismissSuggestion}
         onExecuteTool={handleToolExecutionWithConfirmation}
         onExecuteToolSequence={handleExecuteToolSequence}
+        onRestoreToCheckpoint={handleRestoreToCheckpoint}
       />
       
       {/* InstanceView now appears second/below */}
       <InstanceView 
         instances={instances} 
-        setInstances={setInstances} 
+        setInstances={recordableSetInstances} 
         logs={logs} 
         htmlContextRef={htmlContextRef} 
         messages={messages} 

@@ -2083,8 +2083,11 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
   private async handleInstanceOperations(operations: any[]) {
     console.log('[EnhancedProactiveService] Applying instance operations:', operations);
     
-    // Operations are now handled directly by the sidepanel through updateContext()
-    // No need to apply operations to a separate context service
+    // Dispatch event for the sidepanel to handle the operations
+    const event = new CustomEvent('applyInstanceOperations', {
+      detail: { operations }
+    });
+    document.dispatchEvent(event);
   }
 
   // Legacy compatibility methods

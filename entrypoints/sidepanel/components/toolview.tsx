@@ -3,6 +3,7 @@ import { Message, Instance, ProactiveSuggestion } from '../types';
 import './toolview.css';
 import ChatTab from './chattab';
 import CodeTab from './codetab';
+import HistoryTab from './historytab';
 import MacroSuggestionPanel from './MacroSuggestionPanel';
 
 interface ToolViewProps {
@@ -23,6 +24,8 @@ interface ToolViewProps {
     onDismissSuggestion?: (suggestionId: string) => void;
     onExecuteTool?: (toolCall: { function: string; parameters: any }, suggestionId: string) => void;
     onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => void;
+    // History restoration callback
+    onRestoreToCheckpoint?: (logIndex: number) => void;
 }
 
 const ToolView: React.FC<ToolViewProps> = ({
@@ -41,9 +44,10 @@ const ToolView: React.FC<ToolViewProps> = ({
     onAcceptSuggestion,
     onDismissSuggestion,
     onExecuteTool,
-    onExecuteToolSequence
+    onExecuteToolSequence,
+    onRestoreToCheckpoint
 }) => {
-    const [activeTab, setActiveTab] = useState<'chat' | 'code' | 'suggestions'>('suggestions');
+    const [activeTab, setActiveTab] = useState<'chat' | 'code' | 'suggestions' | 'history'>('suggestions');
 
     return (
         <div className={`view-container tool-view ${isCollapsed ? 'collapsed' : ''}`}>
@@ -59,6 +63,12 @@ const ToolView: React.FC<ToolViewProps> = ({
                     onClick={() => !isCollapsed && setActiveTab('chat')}
                 >
                     Chat
+                </h3>
+                <h3
+                    className={`tab-button ${activeTab === 'history' ? 'active' : ''} ${isCollapsed ? 'disabled' : ''}`}
+                    onClick={() => !isCollapsed && setActiveTab('history')}
+                >
+                    History {logs.length > 0 && `(${logs.length})`}
                 </h3>
                 <div className="collapse-toggle-container">
                     <button
@@ -99,6 +109,12 @@ const ToolView: React.FC<ToolViewProps> = ({
                             htmlContext={htmlContext}
                             setInstances={setInstances}
                             logs={logs}
+                        />
+                    )}
+                    {activeTab === 'history' && (
+                        <HistoryTab
+                            logs={logs}
+                            onRestoreToCheckpoint={onRestoreToCheckpoint}
                         />
                     )}
                 </div>
