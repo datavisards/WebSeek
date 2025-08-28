@@ -1266,6 +1266,25 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     }
   }, [openTables, onCancel]);
 
+  // Function to handle cancel with confirmation
+  const handleCancel = useCallback(() => {
+    const dirtyTables = openTables.filter(t => t.isDirty);
+    
+    if (dirtyTables.length > 0) {
+      const tableNames = dirtyTables.map(t => t.originalName).join(', ');
+      const message = dirtyTables.length === 1 
+        ? `You have unsaved changes in "${tableNames}". Are you sure you want to cancel and lose these changes?`
+        : `You have unsaved changes in ${dirtyTables.length} tables (${tableNames}). Are you sure you want to cancel and lose these changes?`;
+      
+      if (window.confirm(message)) {
+        onCancel();
+      }
+    } else {
+      // No changes to lose
+      onCancel();
+    }
+  }, [openTables, onCancel]);
+
   // Get active table
   const activeTable = useMemo(() => {
     return openTables.find(t => t.id === activeTabId);
@@ -1361,7 +1380,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
             Save {openTables.filter(t => t.isDirty).length > 0 && `(${openTables.filter(t => t.isDirty).length})`}
           </button>
           
-          <button onClick={onCancel}>Cancel</button>
+          <button onClick={handleCancel}>Cancel</button>
           
           {onCaptureToCell && (
             <button 

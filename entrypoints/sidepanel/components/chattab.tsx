@@ -370,7 +370,13 @@ const ChatTab: React.FC<ChatTabProps> = ({
         <>
             <div className="messages-container">
                 {messages.length === 0 ? (
-                    <div className="empty-message">No messages yet. Start a conversation!</div>
+                    <div className="chat-empty-state">
+                        <div className="empty-icon">💬</div>
+                        <div className="empty-text">
+                            <p>No messages yet. Start a conversation!</p>
+                            <small>Ask questions about your data or get AI assistance</small>
+                        </div>
+                    </div>
                 ) : (
                     messages.map((msg, index) => (
                         <div
@@ -397,7 +403,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder="Type your message..."
+                        placeholder="Type your message... (Use '@' to mention existing instances)"
                         className="message-input"
                         disabled={agentLoading}
                         rows={1}

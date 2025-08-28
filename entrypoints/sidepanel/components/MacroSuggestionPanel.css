@@ -85,6 +85,7 @@
   padding: 20px 12px; /* Reduced padding */
   text-align: center;
   color: #6b7280;
+  height: 100%;
 }
 
 .empty-icon {

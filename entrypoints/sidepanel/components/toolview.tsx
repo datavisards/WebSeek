@@ -43,28 +43,22 @@ const ToolView: React.FC<ToolViewProps> = ({
     onExecuteTool,
     onExecuteToolSequence
 }) => {
-    const [activeTab, setActiveTab] = useState<'chat' | 'code' | 'suggestions'>('chat');
+    const [activeTab, setActiveTab] = useState<'chat' | 'code' | 'suggestions'>('suggestions');
 
     return (
         <div className={`view-container tool-view ${isCollapsed ? 'collapsed' : ''}`}>
             <div className="view-title-container">
                 <h3
-                    className={`tab-button ${activeTab === 'chat' ? 'active' : ''} ${isCollapsed ? 'disabled' : ''}`}
-                    onClick={() => !isCollapsed && setActiveTab('chat')}
-                >
-                    Chat
-                </h3>
-                {/* <h3
-                    className={`tab-button ${activeTab === 'code' ? 'active' : ''} ${isCollapsed ? 'disabled' : ''}`}
-                    onClick={() => !isCollapsed && setActiveTab('code')}
-                >
-                    Code
-                </h3> */}
-                <h3
                     className={`tab-button ${activeTab === 'suggestions' ? 'active' : ''} ${isCollapsed ? 'disabled' : ''}`}
                     onClick={() => !isCollapsed && setActiveTab('suggestions')}
                 >
                     AI Suggestions {suggestions.filter(s => s.scope === 'macro').length > 0 && `(${suggestions.filter(s => s.scope === 'macro').length})`}
+                </h3>
+                <h3
+                    className={`tab-button ${activeTab === 'chat' ? 'active' : ''} ${isCollapsed ? 'disabled' : ''}`}
+                    onClick={() => !isCollapsed && setActiveTab('chat')}
+                >
+                    Chat
                 </h3>
                 <div className="collapse-toggle-container">
                     <button
@@ -83,6 +77,17 @@ const ToolView: React.FC<ToolViewProps> = ({
                     flexDirection: 'column',
                     flex: 1,
                 }}>
+                    {activeTab === 'suggestions' && (
+                        <MacroSuggestionPanel
+                            suggestions={suggestions}
+                            onAccept={onAcceptSuggestion || (() => {})}
+                            onDismiss={onDismissSuggestion || (() => {})}
+                            onExecuteTool={onExecuteTool || (() => {})}
+                            onExecuteToolSequence={onExecuteToolSequence}
+                            className="embedded-suggestions-panel"
+                            isCollapsed={false}
+                        />
+                    )}
                     {activeTab === 'chat' && (
                         <ChatTab
                             messages={messages}
@@ -94,21 +99,6 @@ const ToolView: React.FC<ToolViewProps> = ({
                             htmlContext={htmlContext}
                             setInstances={setInstances}
                             logs={logs}
-                        />
-                    )}
-                    {/* Temporarily hide code tab */}
-                    {/* {activeTab === 'code' && (
-                        <CodeTab instances={instances} setInstances={setInstances} />
-                    )} */}
-                    {activeTab === 'suggestions' && (
-                        <MacroSuggestionPanel
-                            suggestions={suggestions}
-                            onAccept={onAcceptSuggestion || (() => {})}
-                            onDismiss={onDismissSuggestion || (() => {})}
-                            onExecuteTool={onExecuteTool || (() => {})}
-                            onExecuteToolSequence={onExecuteToolSequence}
-                            className="embedded-suggestions-panel"
-                            isCollapsed={false}
                         />
                     )}
                 </div>
