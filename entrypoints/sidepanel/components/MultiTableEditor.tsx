@@ -1363,17 +1363,23 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
           
           <button onClick={onCancel}>Cancel</button>
           
-          {selectedCell && onCaptureToCell && (
+          {onCaptureToCell && (
             <button 
               onClick={() => {
-                // Use original row index if available for data operations
-                const rowToUse = selectedCell.originalRow ?? selectedCell.row;
-                onCaptureToCell?.(selectedCell.tableId, rowToUse, selectedCell.col);
-                markTableDirty(selectedCell.tableId);
+                if (selectedCell) {
+                  // Use original row index if available for data operations
+                  const rowToUse = selectedCell.originalRow ?? selectedCell.row;
+                  onCaptureToCell?.(selectedCell.tableId, rowToUse, selectedCell.col);
+                  markTableDirty(selectedCell.tableId);
+                }
               }}
-              disabled={!isCaptureEnabled}
+              disabled={!isCaptureEnabled || !selectedCell}
+              title={!selectedCell ? "Click on a table cell first to capture content to it" : `Capture content to cell (${selectedCell.row + 1}, ${String.fromCharCode(65 + selectedCell.col)})`}
             >
-              Capture to Cell ({selectedCell.row + 1}, {String.fromCharCode(65 + selectedCell.col)})
+              {selectedCell 
+                ? `Capture to Cell (${selectedCell.row + 1}, ${String.fromCharCode(65 + selectedCell.col)})` 
+                : "Capture to Cell"
+              }
             </button>
           )}
           
