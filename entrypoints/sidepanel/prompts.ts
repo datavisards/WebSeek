@@ -923,17 +923,56 @@ Before suggesting any sort operation, you MUST:
 **REQUIRED RESPONSE FORMAT FOR THIS RULE:**
     - category: "suggest-useful-websites"
     - ruleIds: ["suggest-useful-websites"] 
-    - message: Must contain actual URLs in formats like:
-      * "Visit [Site Name](https://url.com) for purpose"
-      * "Check out Site Name: https://url.com for purpose"
-      * "Try Site Name (https://url.com) for purpose"
+    - message: Brief description of what websites are being suggested and why
     - instances: MUST be empty array [] - this rule provides external guidance, NOT workspace modifications
+    - For single website: Use "toolCall" with "openPage" function
+    - For multiple websites: Use "toolSequence" with multiple "openPage" steps
     
-**EXAMPLE MESSAGE:**
-"Visit [DPReview](https://www.dpreview.com) for in-depth camera reviews and [B&H Photo](https://www.bhphotovideo.com) for technical specifications to supplement your Product Research."
+**EXAMPLE SINGLE WEBSITE:**
+{
+  "message": "Open DPReview for professional camera reviews and buying guides",
+  "toolCall": {
+    "function": "openPage",
+    "parameters": {
+      "url": "https://www.dpreview.com",
+      "description": "Professional camera reviews and buying guides"
+    }
+  }
+}
+
+**EXAMPLE MULTIPLE WEBSITES:**
+{
+  "message": "Open multiple camera research websites for comprehensive product information",
+  "toolSequence": {
+    "goal": "Open camera research websites",
+    "steps": [
+      {
+        "description": "Open DPReview for camera reviews",
+        "toolCall": {
+          "function": "openPage",
+          "parameters": {
+            "url": "https://www.dpreview.com",
+            "description": "Professional camera reviews and buying guides"
+          }
+        }
+      },
+      {
+        "description": "Open B&H Photo for specifications and pricing",
+        "toolCall": {
+          "function": "openPage",
+          "parameters": {
+            "url": "https://www.bhphotovideo.com",
+            "description": "Technical specifications and pricing information"
+          }
+        }
+      }
+    ]
+  }
+}
     
 DO NOT suggest data extraction or table completion - this rule is ONLY for suggesting external websites.
-DO NOT include any instance operations in the instances array.`;
+DO NOT include any instance operations in the instances array.
+ALWAYS use openPage tool calls, never put URLs directly in the message.`;
         
         default:
           return `- ${rule.name}: Verify that the rule conditions are genuinely met based on user context and actions.`;
