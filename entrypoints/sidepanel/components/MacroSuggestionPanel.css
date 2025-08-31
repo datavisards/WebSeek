@@ -159,6 +159,7 @@
   border-radius: 4px;
   font-weight: 500;
   font-size: 9px; /* Smaller font */
+  cursor: help; /* Show help cursor to indicate tooltip is available */
 }
 
 .expand-btn {

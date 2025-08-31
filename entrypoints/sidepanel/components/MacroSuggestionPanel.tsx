@@ -122,6 +122,17 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
     }
   };
 
+  const getConfidenceTooltip = (confidence: number) => {
+    const percentage = Math.round(confidence * 100);
+    if (confidence >= 0.8) {
+      return `High confidence (${percentage}%): This suggestion is highly relevant and likely to be useful`;
+    }
+    if (confidence >= 0.6) {
+      return `Medium confidence (${percentage}%): This suggestion is moderately relevant and may be useful`;
+    }
+    return `Low confidence (${percentage}%): This suggestion is potentially relevant but may need verification`;
+  };
+
   return (
     <div className={`macro-suggestion-panel ${isCollapsed ? 'collapsed' : ''} ${className}`}>
       <div className="panel-header">
@@ -179,7 +190,10 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
                     <span className="priority-indicator">
                       {getPriorityIcon(suggestion.priority)}
                     </span>
-                    <span className="confidence-score">
+                    <span 
+                      className="confidence-score"
+                      title={getConfidenceTooltip(suggestion.confidence)}
+                    >
                       {Math.round(suggestion.confidence * 100)}%
                     </span>
                   </div>
@@ -207,13 +221,6 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
                     <div className="impact-indicator">
                       <span className="impact-label">Impact:</span>
                       <span className="impact-text">{suggestion.estimatedImpact}</span>
-                    </div>
-                  )}
-
-                  {suggestion.toolCall && (
-                    <div className="tool-indicator">
-                      <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
-                      <span className="tool-name">{getToolDisplayName(suggestion.toolCall.function)}</span>
                     </div>
                   )}
 
