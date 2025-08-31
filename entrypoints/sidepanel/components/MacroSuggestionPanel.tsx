@@ -214,7 +214,6 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
                     <div className="tool-indicator">
                       <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
                       <span className="tool-name">{getToolDisplayName(suggestion.toolCall.function)}</span>
-                      <span className="tool-action">Action available</span>
                     </div>
                   )}
 

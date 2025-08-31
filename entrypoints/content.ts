@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 import { createStableIdLocator, injectStableIdsIntoLivePage, setupStableIdObserver, findElementByLocator, cleanHTMLScript } from './sidepanel/utils';
 import type { Locator } from './sidepanel/types';
+import pako from 'pako';
 
 let highlightElement: HTMLElement | null = null;
 let isSelecting = false;
@@ -19,6 +20,17 @@ function generatePageId(): string {
   }
   return currentPageId;
 }
+
+// Helper function to convert a Uint8Array (binary data) to a Base64 string
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+}
+
 
 // Convert relative URLs to absolute URLs in HTML
 function convertRelativeToAbsoluteUrls(html: string): string {
@@ -78,13 +90,19 @@ async function createSnapshot(pageId: string): Promise<boolean> {
 
   try {
     const rawHtml = document.documentElement.outerHTML;
-    // const extendedHtml = convertRelativeToAbsoluteUrls(rawHtml);
-    // const finalHtml = cleanHTMLScript(extendedHtml);
-    const finalHtml = convertRelativeToAbsoluteUrls(rawHtml);
+    const extendedHtml = convertRelativeToAbsoluteUrls(rawHtml);
+    const finalHtml = cleanHTMLScript(extendedHtml);
+    // const finalHtml = convertRelativeToAbsoluteUrls(rawHtml);
+
+    // 1. Gzip the HTML content. pako.gzip returns a Uint8Array (binary data).
+    const compressedHtml = pako.gzip(finalHtml);
+
+    // 2. Base64 encode the binary data to safely include it in JSON.
+    const compressedHtmlBase64 = uint8ArrayToBase64(compressedHtml);
 
     const requestPayload = {
       snapshotId: pageId,
-      htmlContent: finalHtml,
+      htmlContentGzipBase64: compressedHtmlBase64, 
       originalUrl: document.location.href
     };
 
