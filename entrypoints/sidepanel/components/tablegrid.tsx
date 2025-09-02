@@ -30,6 +30,7 @@ interface TableGridProps {
   onCopyColumn?: (colIndex: number) => void;
   onPasteToRow?: (rowIndex: number) => void;
   onPasteToColumn?: (colIndex: number) => void;
+  onPaste?: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   // Selection operations
   selectedRange?: { startRow: number; endRow: number; startCol: number; endCol: number } | null;
   onRangeSelectionChange?: (range: { startRow: number; endRow: number; startCol: number; endCol: number } | null) => void;
@@ -61,6 +62,7 @@ const TableGrid: React.FC<TableGridProps> = ({
   onCopyColumn,
   onPasteToRow,
   onPasteToColumn,
+  onPaste,
   selectedRange,
   onRangeSelectionChange,
   setIsInEditor
@@ -681,15 +683,136 @@ const TableGrid: React.FC<TableGridProps> = ({
     return null;
   };
 
+  // Extend a formula by adjusting cell references for drag-fill
+  const extendFormula = (formula: string, sourceRow: number, targetRow: number): string => {
+    // Remove the leading = sign for processing
+    const expr = formula.startsWith('=') ? formula.slice(1) : formula;
+    
+    // Calculate the row offset
+    const rowOffset = targetRow - sourceRow;
+    
+    // Replace cell references with adjusted references
+    return '=' + expr.replace(/([A-Z]+)(\d+)/g, (match, colLetters, rowStr) => {
+      const originalRow = parseInt(rowStr);
+      const newRow = originalRow + rowOffset;
+      return `${colLetters}${newRow}`;
+    });
+  };
+
+  // Detect and extend formula patterns for flashfill (keeping old function for backward compatibility)
+  const detectFormulaPattern = (startCell: { row: number, col: number }, targetRow: number): string | null => {
+    // Get formulas from cells in the column to detect patterns
+    const formulas: string[] = [];
+    for (let r = 0; r <= startCell.row; r++) {
+      const cell = table.cells[r]?.[startCell.col];
+      if (cell?.type === 'text' && (cell as EmbeddedTextInstance).content?.startsWith('=')) {
+        formulas.push((cell as EmbeddedTextInstance).content);
+      }
+    }
+
+    if (formulas.length < 2) return null;
+
+    // Try to detect simple cell reference increment patterns like =A1, =A2, =A3
+    const cellRefPattern = /^=([A-Z]+)(\d+)$/;
+    let canExtendCellRefs = true;
+    let baseCol = '';
+    let startRowNum = -1;
+
+    for (let i = 0; i < formulas.length; i++) {
+      const match = formulas[i].match(cellRefPattern);
+      if (!match) {
+        canExtendCellRefs = false;
+        break;
+      }
+      
+      const [, col, rowStr] = match;
+      const rowNum = parseInt(rowStr);
+      
+      if (i === 0) {
+        baseCol = col;
+        startRowNum = rowNum;
+      } else {
+        // Check if column is same and row increments properly
+        if (col !== baseCol || rowNum !== startRowNum + i) {
+          canExtendCellRefs = false;
+          break;
+        }
+      }
+    }
+
+    if (canExtendCellRefs && baseCol && startRowNum > 0) {
+      // Generate the next formula in the pattern
+      const nextRowNum = startRowNum + targetRow;
+      return `=${baseCol}${nextRowNum}`;
+    }
+
+    // Try to detect arithmetic operation patterns like =A1+1, =A2+1, =A3+1
+    const arithmeticPattern = /^=([A-Z]+)(\d+)([\+\-\*/])(\d+)$/;
+    let canExtendArithmetic = true;
+    let arithCol = '';
+    let arithStartRow = -1;
+    let operator = '';
+    let operand = '';
+
+    for (let i = 0; i < formulas.length; i++) {
+      const match = formulas[i].match(arithmeticPattern);
+      if (!match) {
+        canExtendArithmetic = false;
+        break;
+      }
+      
+      const [, col, rowStr, op, opnd] = match;
+      const rowNum = parseInt(rowStr);
+      
+      if (i === 0) {
+        arithCol = col;
+        arithStartRow = rowNum;
+        operator = op;
+        operand = opnd;
+      } else {
+        // Check if pattern matches
+        if (col !== arithCol || rowNum !== arithStartRow + i || op !== operator || opnd !== operand) {
+          canExtendArithmetic = false;
+          break;
+        }
+      }
+    }
+
+    if (canExtendArithmetic && arithCol && arithStartRow > 0) {
+      // Generate the next formula in the pattern
+      const nextRowNum = arithStartRow + targetRow;
+      return `=${arithCol}${nextRowNum}${operator}${operand}`;
+    }
+
+    return null;
+  };
+
   const generateFlashfillSuggestions = (row: number, col: number): string[] => {
     if (!selectedCell || selectedCell.col !== col) return [];
+    
+    // Check if there's a formula in the row above that we can extend
+    if (row > 0) {
+      const cellAbove = table.cells[row - 1]?.[col];
+      if (cellAbove?.type === 'text' && (cellAbove as EmbeddedTextInstance).content?.startsWith('=')) {
+        const formula = (cellAbove as EmbeddedTextInstance).content;
+        const extendedFormula = extendFormula(formula, row - 1, row);
+        return [extendedFormula];
+      }
+    }
     
     // Get examples from cells above current position
     const examples: string[] = [];
     for (let r = 0; r < row; r++) {
       const cell = table.cells[r]?.[col];
       if (cell?.type === 'text') {
-        examples.push((cell as EmbeddedTextInstance).content);
+        const content = (cell as EmbeddedTextInstance).content;
+        // For formulas, use the evaluated result for pattern detection
+        if (content && content.startsWith('=')) {
+          const evaluatedValue = evaluateFormula(content);
+          examples.push(evaluatedValue === '#ERROR' ? content : evaluatedValue);
+        } else {
+          examples.push(content || '');
+        }
       } else {
         examples.push('');
       }
@@ -752,12 +875,34 @@ const TableGrid: React.FC<TableGridProps> = ({
   const applyFlashfillToCells = (startCell: { row: number, col: number }, targetCells: { row: number, col: number }[]) => {
     console.log('applyFlashfillToCells called:', { startCell, targetCells });
     
-    // Get the pattern from cells above the start cell
+    // Check if the start cell contains a formula that should be extended
+    const startCellContent = table.cells[startCell.row]?.[startCell.col];
+    if (startCellContent?.type === 'text' && (startCellContent as EmbeddedTextInstance).content?.startsWith('=')) {
+      // This is a formula - extend the formula rather than detecting patterns from values
+      console.log('Extending formula pattern from:', (startCellContent as EmbeddedTextInstance).content);
+      targetCells.forEach(({ row, col }) => {
+        const extendedFormula = extendFormula((startCellContent as EmbeddedTextInstance).content, startCell.row, row);
+        console.log(`Setting cell (${row}, ${col}) to formula: "${extendedFormula}"`);
+        if (extendedFormula) {
+          onEditCellContent(row, col, extendedFormula);
+        }
+      });
+      return;
+    }
+
+    // Get the pattern from cells above the start cell (for non-formula cells)
     const examples: string[] = [];
     for (let r = 0; r <= startCell.row; r++) {
       const cell = table.cells[r]?.[startCell.col];
       if (cell?.type === 'text') {
-        examples.push((cell as EmbeddedTextInstance).content);
+        const content = (cell as EmbeddedTextInstance).content;
+        // For formulas, use the evaluated result for pattern detection
+        if (content && content.startsWith('=')) {
+          const evaluatedValue = evaluateFormula(content);
+          examples.push(evaluatedValue === '#ERROR' ? content : evaluatedValue);
+        } else {
+          examples.push(content || '');
+        }
       } else {
         examples.push('');
       }
@@ -786,9 +931,9 @@ const TableGrid: React.FC<TableGridProps> = ({
               break;
               
             case 'text_transform':
-              const sourceCell = table.cells[row]?.[pattern.pattern.sourceCol];
-              if (sourceCell?.type === 'text') {
-                const sourceText = (sourceCell as EmbeddedTextInstance).content;
+              const sourceCell2 = table.cells[row]?.[pattern.pattern.sourceCol];
+              if (sourceCell2?.type === 'text') {
+                const sourceText = (sourceCell2 as EmbeddedTextInstance).content;
                 switch (pattern.pattern.transform) {
                   case 'uppercase':
                     value = sourceText.toUpperCase();
@@ -818,6 +963,15 @@ const TableGrid: React.FC<TableGridProps> = ({
       console.log('No target cells');
     }
   };
+
+  // Ensure table grid gets initial focus
+  useEffect(() => {
+    const tableGrid = document.querySelector('.table-grid') as HTMLElement;
+    if (tableGrid && !document.activeElement?.closest('.table-grid')) {
+      console.log('[TableGrid] Setting initial focus on table grid');
+      tableGrid.focus();
+    }
+  }, []);
 
   useEffect(() => {
     if (editingCell !== null && inputRef.current) {
@@ -872,6 +1026,12 @@ const TableGrid: React.FC<TableGridProps> = ({
       setCurrentRange(null);
       onRangeSelectionChange?.(null);
     }
+    
+    // Ensure the table grid is focused so it can receive paste events
+    const tableGrid = document.querySelector('.table-grid') as HTMLElement;
+    if (tableGrid) {
+      tableGrid.focus();
+    }
   };
 
   const handleContentClick = (e: React.MouseEvent, row: number, col: number, originalRow?: number) => {
@@ -885,6 +1045,12 @@ const TableGrid: React.FC<TableGridProps> = ({
     if (currentRange) {
       setCurrentRange(null);
       onRangeSelectionChange?.(null);
+    }
+    
+    // Ensure the table grid is focused so it can receive paste events
+    const tableGrid = document.querySelector('.table-grid') as HTMLElement;
+    if (tableGrid) {
+      tableGrid.focus();
     }
   };
 
@@ -975,6 +1141,13 @@ const TableGrid: React.FC<TableGridProps> = ({
   const handleGridKeyDown = (e: React.KeyboardEvent) => {
     // Don't handle keyboard events when editing a cell
     if (editingCell) return;
+    
+    // Handle Ctrl+V / Cmd+V for paste
+    if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      console.log('[TableGrid] Ctrl+V detected, but paste events should be handled by onPaste');
+      // Don't prevent default here - let the paste event fire naturally
+      return;
+    }
     
     if (isReadOnly || !selectedCell) return;
 
@@ -1306,8 +1479,46 @@ const TableGrid: React.FC<TableGridProps> = ({
         border: '1px solid #ccc',
         width: 'fit-content',
         flex: '1 1 auto',
+        outline: 'none', // Remove focus outline for better UX
       }}
       onKeyDown={handleGridKeyDown}
+      onPaste={(event) => {
+        console.log('[TableGrid] onPaste event triggered:', {
+          hasClipboardData: !!event.clipboardData,
+          itemsLength: event.clipboardData?.items?.length,
+          types: event.clipboardData?.types,
+          eventType: event.type,
+          isTrusted: event.isTrusted,
+          targetTagName: (event.target as HTMLElement)?.tagName,
+          currentTargetTagName: (event.currentTarget as HTMLElement)?.tagName
+        });
+        
+        // Log clipboard content for debugging
+        if (event.clipboardData?.items) {
+          for (let i = 0; i < event.clipboardData.items.length; i++) {
+            const item = event.clipboardData.items[i];
+            console.log(`[TableGrid] Clipboard item ${i}:`, {
+              kind: item.kind,
+              type: item.type
+            });
+          }
+        } else {
+          console.log('[TableGrid] No clipboard items found in event');
+        }
+        
+        if (onPaste) {
+          console.log('[TableGrid] Calling onPaste handler');
+          onPaste(event);
+        } else {
+          console.log('[TableGrid] No onPaste handler provided');
+        }
+      }}
+      onFocus={() => {
+        console.log('[TableGrid] Table grid focused - ready for paste events');
+      }}
+      onBlur={() => {
+        console.log('[TableGrid] Table grid blurred');
+      }}
       tabIndex={0}
     >
       {/* Corner Header */}

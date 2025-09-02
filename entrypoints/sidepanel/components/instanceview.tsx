@@ -1701,11 +1701,20 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           ...currentColumnTypes.slice(newColIndex)
         ];
 
+        // Handle column names
+        const currentColumnNames = inst.columnNames || [];
+        const newColumnNames = [
+          ...currentColumnNames.slice(0, newColIndex),
+          '', // Empty name for the new column
+          ...currentColumnNames.slice(newColIndex)
+        ];
+
         return {
           ...inst,
           cols: newCols,
           cells: newCells,
-          columnTypes: newColumnTypes
+          columnTypes: newColumnTypes,
+          columnNames: newColumnNames
         };
       }
       return inst;
@@ -1733,11 +1742,19 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           ...currentColumnTypes.slice(colIndex + 1)
         ];
 
+        // Handle column names
+        const currentColumnNames = inst.columnNames || [];
+        const newColumnNames = [
+          ...currentColumnNames.slice(0, colIndex),
+          ...currentColumnNames.slice(colIndex + 1)
+        ];
+
         return {
           ...inst,
           cols: newCols,
           cells: newCells,
-          columnTypes: newColumnTypes
+          columnTypes: newColumnTypes,
+          columnNames: newColumnNames
         };
       }
       return inst;

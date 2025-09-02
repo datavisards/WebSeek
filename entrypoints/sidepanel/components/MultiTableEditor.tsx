@@ -339,7 +339,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
   }, [activeTabId, onEditCellContent, markTableDirty]);
 
   // Enhanced copy functionality
-  const handleCopy = useCallback(() => {
+  const handleCopy = useCallback(async () => {
     console.log('=== COPY OPERATION START ===');
     console.log('activeTabId:', activeTabId);
     console.log('selectedRange:', selectedRange);
@@ -464,15 +464,101 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     
     console.log('=== COPY OPERATION END ===');
     
-    // Note: Keeping data in internal clipboard only to avoid permission issues
-    // TSV data is prepared but not written to system clipboard
-    // const tsvData = stringData.map(row => row.join('\t')).join('\n');
-    // navigator.clipboard?.writeText(tsvData);
+    // Also write to system clipboard for external paste
+    try {
+      const tsvData = stringData.map(row => row.join('\t')).join('\n');
+      await navigator.clipboard.writeText(tsvData);
+      console.log('Successfully wrote to system clipboard');
+    } catch (error) {
+      console.log('Failed to write to system clipboard:', error);
+      // Continue without system clipboard - internal clipboard still works
+    }
   }, [selectedCell, selectedRange, activeTabId, openTables]);
 
-  // Enhanced paste functionality
-  const handlePaste = useCallback(async () => {
+  // Helper function to proceed with paste after data is available
+  const proceedWithPaste = useCallback((dataToPaste: any[][], isInternalCopy: boolean, pasteTarget: { startRow: number; startCol: number }, currentActiveTabId: string) => {
+    if (dataToPaste.length === 0) return;
+    
+    const table = openTables.find(t => t.id === currentActiveTabId)?.instance;
+    if (!table) return;
+    
+    // Calculate required table dimensions
+    const maxTargetRow = pasteTarget.startRow + dataToPaste.length - 1;
+    const maxTargetCol = pasteTarget.startCol + Math.max(...dataToPaste.map(row => row.length)) - 1;
+    
+    // Expand table if necessary
+    let needsRowExpansion = maxTargetRow >= table.rows;
+    let needsColExpansion = maxTargetCol >= table.cols;
+    
+    // Create a function to paste data after table expansion
+    const pasteDataAfterExpansion = () => {
+      // Paste data
+      for (let dataRow = 0; dataRow < dataToPaste.length; dataRow++) {
+        const targetRow = pasteTarget.startRow + dataRow;
+        for (let dataCol = 0; dataCol < dataToPaste[dataRow].length; dataCol++) {
+          const targetCol = pasteTarget.startCol + dataCol;
+          const cellData = dataToPaste[dataRow][dataCol];
+          
+          if (cellData) {
+            if (isInternalCopy && cellData.type !== 'text') {
+              // For non-text cells from internal copy, use addToTable to preserve full instance
+              onAddToTable(currentActiveTabId, cellData, targetRow, targetCol);
+            } else if (cellData.type === 'text' || typeof cellData === 'string') {
+              // For text cells, use editCellContent
+              const content = typeof cellData === 'string' ? cellData : cellData.content;
+              if (content) {
+                onEditCellContent(currentActiveTabId, targetRow, targetCol, content);
+              }
+            }
+          }
+        }
+      }
+      markTableDirty(currentActiveTabId);
+      
+      // Reset the paste flag to allow future paste operations
+      setTimeout(() => {
+        (window as any).__pasteInProgress = false;
+        console.log('[MultiTableEditor] Paste operation completed, flag reset');
+      }, 0);
+    };
+
+    // Handle table expansion and pasting
+    if (needsRowExpansion || needsColExpansion) {
+      // First expand the table
+      setTimeout(() => {
+        // Add rows if needed
+        if (needsRowExpansion && onAddRow) {
+          const rowsToAdd = maxTargetRow - table.rows + 1;
+          for (let i = 0; i < rowsToAdd; i++) {
+            onAddRow(currentActiveTabId, 'after', table.rows - 1);
+          }
+        }
+        
+        // Add columns if needed
+        if (needsColExpansion && onAddColumn) {
+          const colsToAdd = maxTargetCol - table.cols + 1;
+          for (let i = 0; i < colsToAdd; i++) {
+            onAddColumn(currentActiveTabId, 'after', table.cols - 1);
+          }
+        }
+        
+        // Wait a bit more for the table state to update, then paste
+        setTimeout(pasteDataAfterExpansion, 50);
+      }, 0);
+    } else {
+      // No expansion needed, paste immediately
+      setTimeout(pasteDataAfterExpansion, 0);
+    }
+  }, [onAddToTable, onEditCellContent, onAddRow, onAddColumn, markTableDirty, openTables]);
+
+  // Enhanced paste functionality with clipboard event support
+  const handlePasteFromClipboardEvent = useCallback(async (clipboardData?: DataTransfer) => {
     console.log('=== PASTE OPERATION START ===');
+    console.log('[MultiTableEditor] handlePasteFromClipboardEvent called with:', {
+      hasClipboardData: !!clipboardData,
+      itemsLength: clipboardData?.items?.length,
+      types: clipboardData?.types
+    });
     console.log('copiedData:', copiedData ? { 
       type: copiedData.type, 
       sourceTableId: copiedData.sourceTableId,
@@ -713,94 +799,185 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     } else {
       return;
     }
-    
-    let dataToPaste: any[][] = [];
-    let isInternalCopy = false;
-    
-    // Only use internal clipboard data
+
+    // Try internal clipboard data first, then external clipboard data
     if (copiedData) {
-      dataToPaste = copiedData.data;
-      isInternalCopy = true;
-    } else {
-      // No internal clipboard data available
-      if (onOperation) {
-        onOperation('No data to paste. Use Ctrl+C to copy data within the table editor first.');
-      }
+      console.log('[MultiTableEditor] Using internal clipboard data');
+      const dataToPaste = copiedData.data;
+      const isInternalCopy = true;
+      proceedWithPaste(dataToPaste, isInternalCopy, pasteTarget, activeTabId);
       return;
     }
     
-    if (dataToPaste.length === 0) return;
-    
-    const currentActiveTabId = activeTabId;
-    const table = openTables.find(t => t.id === activeTabId)?.instance;
-    if (!table) return;
-    
-    // Calculate required table dimensions
-    const maxTargetRow = pasteTarget.startRow + dataToPaste.length - 1;
-    const maxTargetCol = pasteTarget.startCol + Math.max(...dataToPaste.map(row => row.length)) - 1;
-    
-    // Expand table if necessary
-    let needsRowExpansion = maxTargetRow >= table.rows;
-    let needsColExpansion = maxTargetCol >= table.cols;
-    
-    // Create a function to paste data after table expansion
-    const pasteDataAfterExpansion = () => {
-      // Paste data
-      for (let dataRow = 0; dataRow < dataToPaste.length; dataRow++) {
-        const targetRow = pasteTarget.startRow + dataRow;
-        for (let dataCol = 0; dataCol < dataToPaste[dataRow].length; dataCol++) {
-          const targetCol = pasteTarget.startCol + dataCol;
-          const cellData = dataToPaste[dataRow][dataCol];
+    // If no internal clipboard data, try external clipboard data
+    if (clipboardData) {
+      console.log('[MultiTableEditor] No internal clipboard data, trying external clipboard data');
+      
+      // Prevent duplicate paste processing
+      if ((window as any).__pasteInProgress) {
+        console.log('[MultiTableEditor] Paste already in progress, ignoring duplicate');
+        return;
+      }
+      (window as any).__pasteInProgress = true;
+      
+      // Use clipboard data from paste event (same pattern as working instance view)
+      console.log('Processing clipboard data from paste event...');
+      
+      const items = clipboardData.items;
+      let foundTextData = false;
+      
+      // Use a variable outside the loop to prevent duplicate processing
+      let hasProcessedText = false;
+      
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        console.log(`[MultiTableEditor] Processing clipboard item ${i}:`, { kind: item.kind, type: item.type });
+        
+        if (item.type === 'text/plain' && !hasProcessedText) {
+          foundTextData = true;
+          hasProcessedText = true; // Set flag immediately before calling getAsString
           
-          if (cellData) {
-            if (isInternalCopy && cellData.type !== 'text') {
-              // For non-text cells from internal copy, use addToTable to preserve full instance
-              onAddToTable(currentActiveTabId, cellData, targetRow, targetCol);
-            } else if (cellData.type === 'text' || typeof cellData === 'string') {
-              // For text cells, use editCellContent
-              const content = typeof cellData === 'string' ? cellData : cellData.content;
-              if (content) {
-                onEditCellContent(currentActiveTabId, targetRow, targetCol, content);
+          // Use the same async pattern as the working instance view
+          item.getAsString((clipboardText) => {
+            console.log('Clipboard text received:', { 
+              hasText: !!clipboardText, 
+              length: clipboardText?.length, 
+              preview: clipboardText?.slice(0, 100) 
+            });
+            
+            if (clipboardText && clipboardText.trim()) {
+              console.log('Processing clipboard text:', clipboardText.slice(0, 100) + '...');
+              
+              // Parse clipboard text as TSV/CSV data
+              const lines = clipboardText.trim().split('\n');
+              const parsedData: any[][] = [];
+              
+              // Special handling for single line text
+              if (lines.length === 1 && !lines[0].includes('\t') && !lines[0].includes(',')) {
+                // Single cell text
+                const singleText = lines[0].trim();
+                if (singleText) {
+                  parsedData.push([{
+                    id: `text_${Date.now()}_${Math.random()}`,
+                    type: 'text' as const,
+                    content: singleText
+                  }]);
+                }
+              } else {
+                // Multi-line or structured data
+                for (const line of lines) {
+                  // Try tab-separated first, then comma-separated
+                  let cells = line.split('\t');
+                  if (cells.length === 1 && line.includes(',')) {
+                    // Fallback to comma-separated if no tabs found
+                    cells = line.split(',');
+                  }
+                  
+                  // Convert each cell to a text instance
+                  const rowData = cells.map(cellText => {
+                    const trimmedText = cellText.trim();
+                    if (trimmedText) {
+                      return {
+                        id: `text_${Date.now()}_${Math.random()}`,
+                        type: 'text' as const,
+                        content: trimmedText
+                      };
+                    }
+                    return null;
+                  });
+                  
+                  parsedData.push(rowData);
+                }
               }
+              
+              console.log('Parsed clipboard data:', { 
+                totalRows: parsedData.length, 
+                nonEmptyRows: parsedData.filter(row => row.some(cell => cell !== null)).length,
+                sampleRow: parsedData[0]
+              });
+              
+              if (parsedData.length > 0 && parsedData.some(row => row.some(cell => cell !== null))) {
+                const dataToPaste = parsedData;
+                const isInternalCopy = false;
+                console.log('Successfully parsed clipboard data - proceeding with paste');
+                
+                // Continue with the paste operation
+                proceedWithPaste(dataToPaste, isInternalCopy, pasteTarget, activeTabId);
+              } else {
+                console.log('No valid data found in clipboard');
+                if (onOperation) {
+                  onOperation('No valid data found in clipboard.');
+                }
+                // Reset flag if no valid data
+                (window as any).__pasteInProgress = false;
+              }
+            } else {
+              console.log('Empty clipboard text');
+              if (onOperation) {
+                onOperation('Clipboard appears to be empty.');
+              }
+              // Reset flag if empty clipboard
+              (window as any).__pasteInProgress = false;
             }
-          }
+          });
+          break; // Exit the loop after finding and processing the first text data
         }
       }
-      markTableDirty(currentActiveTabId);
-    };
-
-    // Handle table expansion and pasting
-    if (needsRowExpansion || needsColExpansion) {
-      // First expand the table
-      setTimeout(() => {
-        // Add rows if needed
-        if (needsRowExpansion && onAddRow) {
-          const rowsToAdd = maxTargetRow - table.rows + 1;
-          for (let i = 0; i < rowsToAdd; i++) {
-            onAddRow(currentActiveTabId, 'after', table.rows - 1);
-          }
+      
+      if (!foundTextData) {
+        console.log('No text data found in clipboard items');
+        if (onOperation) {
+          onOperation('No text data found in clipboard.');
         }
-        
-        // Add columns if needed
-        if (needsColExpansion && onAddColumn) {
-          const colsToAdd = maxTargetCol - table.cols + 1;
-          for (let i = 0; i < colsToAdd; i++) {
-            onAddColumn(currentActiveTabId, 'after', table.cols - 1);
-          }
-        }
-        
-        // Wait a bit more for the table state to update, then paste
-        setTimeout(pasteDataAfterExpansion, 50);
-      }, 0);
-    } else {
-      // No expansion needed, paste immediately
-      setTimeout(pasteDataAfterExpansion, 0);
+        // Reset flag if no data was found
+        (window as any).__pasteInProgress = false;
+      }
+      
+      // Return early - the actual paste logic will be called from the callback
+      return;
     }
+    
+    // No clipboard data available - inform user
+    console.log('[MultiTableEditor] No clipboard event data available, checking internal clipboard');
+    
+    if (onOperation) {
+      onOperation('No data to paste. Use Ctrl+C within the table editor to copy data first.');
+    }
+    // Reset flag if no clipboard data
+    (window as any).__pasteInProgress = false;
+    return;
   }, [copiedData, selectedCell, selectedRange, activeTabId, onEditCellContent, onAddToTable, onAddRow, onAddColumn, markTableDirty, openTables, setOpenTables, setActiveTabId, onOperation]);
+
+  // Wrapper function for keyboard shortcut
+  const handlePaste = useCallback(async () => {
+    await handlePasteFromClipboardEvent();
+  }, [handlePasteFromClipboardEvent]);
+
+  // Paste event handler that has access to clipboard data
+  const handlePasteEvent = useCallback(async (event: React.ClipboardEvent<HTMLDivElement>) => {
+    console.log('[MultiTableEditor] handlePasteEvent called:', {
+      hasEvent: !!event,
+      hasClipboardData: !!event.clipboardData,
+      itemsLength: event.clipboardData?.items?.length,
+      types: event.clipboardData?.types,
+      eventType: event.type,
+      isTrusted: event.isTrusted
+    });
+    
+    // Prevent duplicate paste processing
+    if ((window as any).__pasteInProgress) {
+      console.log('[MultiTableEditor] Paste already in progress, ignoring React paste event');
+      event.preventDefault();
+      return;
+    }
+    
+    event.preventDefault();
+    await handlePasteFromClipboardEvent(event.clipboardData || undefined);
+  }, [handlePasteFromClipboardEvent]);
 
 
   // Row/Column copy handlers for context menu
-  const handleRowCopy = useCallback((rowIndex: number) => {
+  const handleRowCopy = useCallback(async (rowIndex: number) => {
     if (!activeTabId) return;
     
     const table = openTables.find(t => t.id === activeTabId)?.instance;
@@ -853,11 +1030,15 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       }
     });
     
-    // Note: Keeping data in internal clipboard only
-    // navigator.clipboard?.writeText(rowStringData.join('\t'));
+    // Also write to system clipboard for external paste
+    try {
+      await navigator.clipboard.writeText(rowStringData.join('\t'));
+    } catch (error) {
+      console.log('Failed to write row to system clipboard:', error);
+    }
   }, [activeTabId, openTables]);
 
-  const handleColumnCopy = useCallback((colIndex: number) => {
+  const handleColumnCopy = useCallback(async (colIndex: number) => {
     if (!activeTabId) return;
     
     const table = openTables.find(t => t.id === activeTabId)?.instance;
@@ -908,8 +1089,12 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       }
     });
     
-    // Note: Keeping data in internal clipboard only
-    // navigator.clipboard?.writeText(columnStringData.join('\n'));
+    // Also write to system clipboard for external paste
+    try {
+      await navigator.clipboard.writeText(columnStringData.join('\n'));
+    } catch (error) {
+      console.log('Failed to write column to system clipboard:', error);
+    }
   }, [activeTabId, openTables]);
 
   // Paste to row/column handlers
@@ -1118,11 +1303,22 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
         (activeElement as HTMLElement).contentEditable === 'true'
       );
       
+      // Check if the focus is on a table grid - if so, let the table grid handle paste events
+      const isOnTableGrid = activeElement && (
+        activeElement.classList.contains('table-grid') ||
+        activeElement.closest('.table-grid')
+      );
+      
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'c') {
           e.preventDefault();
           handleCopy();
         } else if (e.key === 'v') {
+          // If focus is on table grid, don't intercept - let the table grid's onPaste handle it
+          if (isOnTableGrid) {
+            console.log('[MultiTableEditor] Ctrl+V detected on table grid - letting table grid handle paste event');
+            return; // Don't prevent default, let the paste event fire naturally
+          }
           e.preventDefault();
           handlePaste();
         }
@@ -1310,7 +1506,12 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
   }
 
   return (
-    <div className="view-container" style={{ position: 'relative' }}>
+    <div 
+      className="view-container" 
+      style={{ position: 'relative' }}
+      onPaste={handlePasteEvent}
+      tabIndex={0}
+    >
       {/* Tab Bar */}
       <div className="tab-bar" style={{ 
         display: 'flex', 
@@ -1644,6 +1845,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
             onCopyColumn={handleColumnCopy}
             onPasteToRow={copiedData ? handleRowPaste : undefined}
             onPasteToColumn={copiedData ? handleColumnPaste : undefined}
+            onPaste={handlePasteEvent}
             // Range selection
             selectedRange={selectedRange && selectedRange.tableId === activeTabId ? {
               startRow: selectedRange.startRow,
