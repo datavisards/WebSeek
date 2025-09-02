@@ -1914,6 +1914,45 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                 const percent = parseFloat(cell.content.replace(/[^0-9.-]/g, ''));
                 transformedContent = isNaN(percent) ? cell.content : `${percent}%`;
                 break;
+              case 'format-date':
+                // Attempt to parse and format various date formats
+                try {
+                  const dateInput = cell.content.trim();
+                  let date: Date | null = null;
+                  
+                  // Try parsing various date formats
+                  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(dateInput)) {
+                    // ISO format: YYYY-MM-DD or YYYY-M-D
+                    date = new Date(dateInput);
+                  } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateInput)) {
+                    // US format: MM/DD/YYYY or M/D/YYYY
+                    date = new Date(dateInput);
+                  } else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(dateInput)) {
+                    // Dash format: MM-DD-YYYY or M-D-YYYY
+                    date = new Date(dateInput);
+                  } else if (/^\d{1,2}\/\d{1,2}\/\d{2}$/.test(dateInput)) {
+                    // Short year format: MM/DD/YY or M/D/YY
+                    const parts = dateInput.split('/');
+                    const year = parseInt(parts[2]) + (parseInt(parts[2]) > 50 ? 1900 : 2000);
+                    date = new Date(year, parseInt(parts[0]) - 1, parseInt(parts[1]));
+                  } else {
+                    // Try direct Date parsing as fallback
+                    date = new Date(dateInput);
+                  }
+                  
+                  if (date && !isNaN(date.getTime())) {
+                    // Format date as MM/DD/YYYY
+                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    const day = date.getDate().toString().padStart(2, '0');
+                    const year = date.getFullYear();
+                    transformedContent = `${month}/${day}/${year}`;
+                  } else {
+                    transformedContent = cell.content; // Keep original if parsing fails
+                  }
+                } catch (error) {
+                  transformedContent = cell.content; // Keep original if parsing fails
+                }
+                break;
               case 'find-replace':
                 if (options?.customPattern && options?.replacement !== undefined) {
                   transformedContent = cell.content.replace(

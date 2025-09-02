@@ -62,7 +62,9 @@ const TransformPanel: React.FC<TransformPanelProps> = ({
         case 'split':
           const parts = value.split(transformOptions.splitDelimiter || ' ');
           const partIndex = transformOptions.splitKeepPart || 0;
-          return parts[partIndex] || '';
+          return partIndex === -1 ? 
+            parts[parts.length - 1] || '' : 
+            parts[partIndex] || '';
         case 'remove-spaces':
           return value.replace(/\s+/g, '');
         case 'format-currency':
@@ -204,12 +206,12 @@ const TransformPanel: React.FC<TransformPanelProps> = ({
                 <label>Split by delimiter:</label>
                 <input 
                   type="text" 
-                  value={transformOptions.splitDelimiter || ' '}
+                  value={transformOptions.splitDelimiter || ''}
                   onChange={(e) => setTransformOptions({
                     ...transformOptions, 
                     splitDelimiter: e.target.value
                   })}
-                  placeholder="Space, comma, etc."
+                  placeholder="e.g., /, space, comma"
                 />
                 <label>Keep part:</label>
                 <select 
