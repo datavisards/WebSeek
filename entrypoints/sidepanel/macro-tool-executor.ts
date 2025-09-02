@@ -10,6 +10,71 @@ import { extractNumericalValue, getVisualizationThumbnail } from './utils';
 export class MacroToolExecutor {
   
   /**
+   * Defensive column name resolution - handles cases where LLM uses default column names
+   * like "A", "B", "C" instead of actual column names
+   */
+  private static resolveColumnName(
+    requestedColumnName: string, 
+    tableInstance: TableInstance
+  ): { columnIndex: number; actualColumnName: string } | null {
+    // First, try exact match with actual column names
+    const exactIndex = tableInstance.columnNames?.indexOf(requestedColumnName);
+    if (exactIndex !== undefined && exactIndex !== -1) {
+      return {
+        columnIndex: exactIndex,
+        actualColumnName: requestedColumnName
+      };
+    }
+
+    // If exact match fails, check if it's a default column name pattern (A, B, C, etc.)
+    const defaultColumnPattern = /^[A-Z]$/;
+    if (defaultColumnPattern.test(requestedColumnName)) {
+      // Convert letter to index (A=0, B=1, C=2, etc.)
+      const defaultIndex = requestedColumnName.charCodeAt(0) - 'A'.charCodeAt(0);
+      
+      // Check if this index is valid for the table
+      if (defaultIndex >= 0 && defaultIndex < (tableInstance.columnNames?.length || 0)) {
+        const actualColumnName = tableInstance.columnNames![defaultIndex];
+        console.log(`🔧 Defensive column resolution: LLM used '${requestedColumnName}' (default), mapped to actual column '${actualColumnName}' at index ${defaultIndex}`);
+        
+        return {
+          columnIndex: defaultIndex,
+          actualColumnName: actualColumnName
+        };
+      }
+    }
+
+    // Also try multi-letter patterns like "AA", "AB", etc. for larger tables
+    const extendedColumnPattern = /^[A-Z]{1,2}$/;
+    if (extendedColumnPattern.test(requestedColumnName)) {
+      let extendedIndex = 0;
+      
+      if (requestedColumnName.length === 1) {
+        // Single letter: A=0, B=1, ..., Z=25
+        extendedIndex = requestedColumnName.charCodeAt(0) - 'A'.charCodeAt(0);
+      } else if (requestedColumnName.length === 2) {
+        // Double letter: AA=26, AB=27, ..., ZZ=701
+        const firstChar = requestedColumnName.charCodeAt(0) - 'A'.charCodeAt(0);
+        const secondChar = requestedColumnName.charCodeAt(1) - 'A'.charCodeAt(0);
+        extendedIndex = (firstChar + 1) * 26 + secondChar;
+      }
+      
+      // Check if this index is valid for the table
+      if (extendedIndex >= 0 && extendedIndex < (tableInstance.columnNames?.length || 0)) {
+        const actualColumnName = tableInstance.columnNames![extendedIndex];
+        console.log(`🔧 Defensive column resolution: LLM used '${requestedColumnName}' (extended default), mapped to actual column '${actualColumnName}' at index ${extendedIndex}`);
+        
+        return {
+          columnIndex: extendedIndex,
+          actualColumnName: actualColumnName
+        };
+      }
+    }
+
+    return null;
+  }
+  
+  /**
    * Execute a tool call from a macro suggestion
    */
   static async executeTool(
@@ -222,17 +287,18 @@ export class MacroToolExecutor {
       console.log(`🔍 Column names:`, tableInstance.columnNames);
       console.log(`🏷️ Column types:`, tableInstance.columnTypes);
 
-      // Find column index by name
-      const columnIndex = tableInstance.columnNames?.indexOf(params.columnName);
-      if (columnIndex === undefined || columnIndex === -1) {
-        console.error(`❌ Column '${params.columnName}' not found`);
+      // Use defensive column name resolution
+      const columnResolution = this.resolveColumnName(params.columnName, tableInstance);
+      if (!columnResolution) {
+        console.error(`❌ Column '${params.columnName}' not found and couldn't be resolved to a default column pattern`);
         return {
           success: false,
           message: `Column '${params.columnName}' not found in table '${params.instanceId}'. Available columns: ${tableInstance.columnNames.join(', ')}`
         };
       }
 
-      console.log(`📍 Sorting by column '${params.columnName}' at index ${columnIndex}`);
+      const { columnIndex, actualColumnName } = columnResolution;
+      console.log(`📍 Sorting by column '${actualColumnName}' at index ${columnIndex}`);
 
       // Create sorted version of the table
       const sortedCells = [...tableInstance.cells];
@@ -373,15 +439,17 @@ export class MacroToolExecutor {
       console.log(`🔍 Current column names:`, tableInstance.columnNames);
       console.log(`🏷️ Current column types:`, tableInstance.columnTypes);
 
-      // Find the column index
-      const columnIndex = tableInstance.columnNames.indexOf(params.columnName);
-      if (columnIndex === -1) {
-        console.error(`❌ Column '${params.columnName}' not found`);
+      // Use defensive column name resolution
+      const columnResolution = this.resolveColumnName(params.columnName, tableInstance);
+      if (!columnResolution) {
+        console.error(`❌ Column '${params.columnName}' not found and couldn't be resolved to a default column pattern`);
         return {
           success: false,
           message: `Column '${params.columnName}' not found in table '${params.instanceId}'. Available columns: ${tableInstance.columnNames.join(', ')}`
         };
       }
+
+      const { columnIndex, actualColumnName } = columnResolution;
 
       console.log(`📍 Column '${params.columnName}' found at index ${columnIndex}`);
 
@@ -506,15 +574,17 @@ export class MacroToolExecutor {
       console.log(`📋 Found table with ${tableInstance.rows} rows, ${tableInstance.cols} columns`);
       console.log(`🔍 Current column names:`, tableInstance.columnNames);
 
-      // Find the column index
-      const columnIndex = tableInstance.columnNames.indexOf(params.oldColumnName);
-      if (columnIndex === -1) {
-        console.error(`❌ Column '${params.oldColumnName}' not found`);
+      // Use defensive column name resolution
+      const columnResolution = this.resolveColumnName(params.oldColumnName, tableInstance);
+      if (!columnResolution) {
+        console.error(`❌ Column '${params.oldColumnName}' not found and couldn't be resolved to a default column pattern`);
         return {
           success: false,
           message: `Column '${params.oldColumnName}' not found in table '${params.instanceId}'. Available columns: ${tableInstance.columnNames.join(', ')}`
         };
       }
+
+      const { columnIndex, actualColumnName } = columnResolution;
 
       // Check if new column name already exists
       if (tableInstance.columnNames.includes(params.newColumnName)) {
@@ -525,7 +595,7 @@ export class MacroToolExecutor {
         };
       }
 
-      console.log(`📍 Column '${params.oldColumnName}' found at index ${columnIndex}, renaming to '${params.newColumnName}'`);
+      console.log(`📍 Column '${actualColumnName}' found at index ${columnIndex}, renaming to '${params.newColumnName}'`);
 
       // Update column names
       const updatedColumnNames = [...tableInstance.columnNames];
@@ -589,9 +659,14 @@ export class MacroToolExecutor {
       // Filter rows based on conditions
       const filteredCells = tableInstance.cells.filter(row => {
         const results = params.conditions.map(condition => {
-          const columnIndex = tableInstance.columnNames?.indexOf(condition.column);
-          if (columnIndex === undefined || columnIndex === -1) return false;
+          // Use defensive column name resolution
+          const columnResolution = this.resolveColumnName(condition.column, tableInstance);
+          if (!columnResolution) {
+            console.warn(`⚠️ Column '${condition.column}' not found in filter condition, skipping`);
+            return false;
+          }
           
+          const { columnIndex } = columnResolution;
           const cell = row[columnIndex];
           const cellValue = cell && cell.type === 'text' ? cell.content || '' : '';
           
@@ -678,34 +753,44 @@ export class MacroToolExecutor {
         };
       }
 
-      // Find column indices
-      const xAxisIndex = tableInstance.columnNames?.indexOf(params.xAxis);
-      const yAxisIndex = params.yAxis ? tableInstance.columnNames?.indexOf(params.yAxis) : undefined;
-      
-      if (xAxisIndex === undefined || xAxisIndex === -1) {
+      // Use defensive column name resolution for axes
+      const xAxisResolution = this.resolveColumnName(params.xAxis, tableInstance);
+      if (!xAxisResolution) {
         return {
           success: false,
-          message: `X-axis column '${params.xAxis}' not found in table`
+          message: `X-axis column '${params.xAxis}' not found in table and couldn't be resolved to default column pattern`
         };
       }
       
-      if (params.yAxis && (yAxisIndex === undefined || yAxisIndex === -1)) {
-        return {
-          success: false,
-          message: `Y-axis column '${params.yAxis}' not found in table`
-        };
+      const { columnIndex: xAxisIndex, actualColumnName: actualXAxis } = xAxisResolution;
+      
+      let yAxisIndex: number | undefined;
+      let actualYAxis: string | undefined;
+      
+      if (params.yAxis) {
+        const yAxisResolution = this.resolveColumnName(params.yAxis, tableInstance);
+        if (!yAxisResolution) {
+          return {
+            success: false,
+            message: `Y-axis column '${params.yAxis}' not found in table and couldn't be resolved to default column pattern`
+          };
+        }
+        yAxisIndex = yAxisResolution.columnIndex;
+        actualYAxis = yAxisResolution.actualColumnName;
       }
 
       // Convert table data to Vega-Lite format
       const data = tableInstance.cells.map(row => {
         const record: any = {};
-        record[params.xAxis] = row[xAxisIndex] && row[xAxisIndex].type === 'text' ? row[xAxisIndex].content : '';
-        if (params.yAxis && yAxisIndex !== undefined) {
-          const yValue = row[yAxisIndex] && row[yAxisIndex].type === 'text' ? row[yAxisIndex].content : '';
-          record[params.yAxis] = isNaN(Number(yValue)) ? yValue : Number(yValue);
+        const xCell = row[xAxisIndex];
+        record[actualXAxis] = xCell && xCell.type === 'text' ? (xCell as any).content || '' : '';
+        if (actualYAxis && yAxisIndex !== undefined) {
+          const yCell = row[yAxisIndex];
+          const yValue = yCell && yCell.type === 'text' ? (yCell as any).content || '' : '';
+          record[actualYAxis] = isNaN(Number(yValue)) ? yValue : Number(yValue);
         }
         return record;
-      }).filter(record => record[params.xAxis] !== ''); // Remove empty rows
+      }).filter(record => record[actualXAxis] !== ''); // Remove empty rows
 
       // Create Vega-Lite specification
       let vegaSpec: any = {
@@ -1016,9 +1101,17 @@ export class MacroToolExecutor {
 
       if (instance.type === 'table') {
         const tableInstance = instance as TableInstance;
-        const columnIndex = params.columnName ? 
-          tableInstance.columnNames?.indexOf(params.columnName) : 
-          undefined;
+        let columnIndex: number | undefined;
+        
+        if (params.columnName) {
+          const columnResolution = this.resolveColumnName(params.columnName, tableInstance);
+          if (!columnResolution) {
+            console.warn(`⚠️ Column '${params.columnName}' not found for search and replace, will search all columns`);
+            columnIndex = undefined;
+          } else {
+            columnIndex = columnResolution.columnIndex;
+          }
+        }
         
         // Create updated cells
         const updatedCells = tableInstance.cells.map(row => 
@@ -1184,22 +1277,25 @@ export class MacroToolExecutor {
         
         console.log(`🔄 Performing ${params.mergeStrategy} on ${leftColumn} = ${rightColumn}`);
 
-        const leftColIndex = leftTable.columnNames?.indexOf(leftColumn);
-        const rightColIndex = rightTable.columnNames?.indexOf(rightColumn);
-        
-        if (leftColIndex === undefined || leftColIndex === -1) {
+        // Use defensive column name resolution for join columns
+        const leftColumnResolution = this.resolveColumnName(leftColumn, leftTable);
+        if (!leftColumnResolution) {
           return {
             success: false,
-            message: `Join column '${leftColumn}' not found in left table '${params.sourceInstanceIds[0]}'. Available columns: ${leftTable.columnNames?.join(', ')}`
+            message: `Join column '${leftColumn}' not found in left table '${params.sourceInstanceIds[0]}' and couldn't be resolved to default column pattern. Available columns: ${leftTable.columnNames?.join(', ')}`
           };
         }
         
-        if (rightColIndex === undefined || rightColIndex === -1) {
+        const rightColumnResolution = this.resolveColumnName(rightColumn, rightTable);
+        if (!rightColumnResolution) {
           return {
             success: false,
-            message: `Join column '${rightColumn}' not found in right table '${params.sourceInstanceIds[1]}'. Available columns: ${rightTable.columnNames?.join(', ')}`
+            message: `Join column '${rightColumn}' not found in right table '${params.sourceInstanceIds[1]}' and couldn't be resolved to default column pattern. Available columns: ${rightTable.columnNames?.join(', ')}`
           };
         }
+
+        const leftColIndex = leftColumnResolution.columnIndex;
+        const rightColIndex = rightColumnResolution.columnIndex;
 
         // Perform join based on strategy
         const joinedRows: any[][] = [];
