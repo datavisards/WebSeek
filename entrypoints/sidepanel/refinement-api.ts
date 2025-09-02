@@ -77,7 +77,8 @@ The refined suggestion should accomplish: "${originalSuggestion.message}"`;
       [], // No recent actions needed for refinement
       context.logs.slice(-5), // Include recent logs for context
       new Map(), // No suggestion history for refinement
-      undefined // No specific workspace name needed
+      undefined, // No specific workspace name needed
+      undefined // No application context needed for refinement
     );
 
     // Call the LLM API for suggestion refinement using the macro system

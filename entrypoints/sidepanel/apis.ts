@@ -32,6 +32,12 @@ export async function chatWithAgent(
     imageContext: any[] = [],
     htmlContext: Record<string, {pageURL: string, htmlContent: string}> = {},
     logs: string[] = [],
+    applicationContext: {
+        currentToolViewTab?: string;
+        currentPageInfo?: {pageId: string, url: string} | null;
+        isInEditor?: boolean;
+        editingTableId?: string | null;
+    } = {}
 ): Promise<{
     message: string;
     instances?: any[];
@@ -66,8 +72,34 @@ export async function chatWithAgent(
         console.log('DEBUG: Logs array:', logs);
         console.log('DEBUG: Log text:', logText);
 
+        // Construct application context string
+        let applicationContextString = '';
+        if (applicationContext) {
+            const contextParts = [];
+            
+            if (applicationContext.currentPageInfo) {
+                contextParts.push(`Current active webpage: ${applicationContext.currentPageInfo.url} (Page ID: ${applicationContext.currentPageInfo.pageId})`);
+            }
+            
+            if (applicationContext.currentToolViewTab) {
+                contextParts.push(`Current view: User is currently in the "${applicationContext.currentToolViewTab}" tab of the tool panel`);
+            }
+            
+            if (applicationContext.isInEditor) {
+                if (applicationContext.editingTableId) {
+                    contextParts.push(`Editing mode: User is currently editing a table (Table ID: ${applicationContext.editingTableId})`);
+                } else {
+                    contextParts.push(`Editing mode: User is currently in editing mode`);
+                }
+            }
+            
+            if (contextParts.length > 0) {
+                applicationContextString = contextParts.join('\n');
+            }
+        }
+
         // Construct system prompt
-        const systemPrompt = getPrompt(chatType, htmlContextString, instanceContext, conversationText, logText);
+        const systemPrompt = getPrompt(chatType, htmlContextString, instanceContext, conversationText, logText, applicationContextString);
 
         console.log('System prompt:', systemPrompt);
         console.log('User message:', userMessage);

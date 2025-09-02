@@ -1,7 +1,7 @@
 import { ChatType } from "./types";
 import { generateToolDocumentation } from "./macro-tools";
 
-export const promptInfer = (htmlContextString: string, instanceContextString: string) => `You are an AI assistant in WebSeek, a web extension for web data preparation and analysis.
+export const promptInfer = (htmlContextString: string, instanceContextString: string, applicationContextString?: string) => `You are an AI assistant in WebSeek, a web extension for web data preparation and analysis.
 WebSeek's interface includes an InstanceView (canvas for data instances: text, image, sketch, table, visualization, etc.) and a ChatView (for users to call the AI assistant for data tasks). 
 Users may build data instances (some are just examples for intent demonstration, some are intermediate results, and some are final production-ready results) in the canvas and perform tasks such as data completion, summarization, and analysis through human-AI collaboration.
 
@@ -182,17 +182,21 @@ Response for this example:
   ]
 }
 
+${applicationContextString || ''}
 
 Now, analyze the provided instance and return the JSON response.
 `.trim();
 
-export const promptChat = (htmlContextString: string, instanceContextString: string, conversationText: string) => `You are an AI assistant in WebSeek, a web extension for web data preparation and analysis.
+export const promptChat = (htmlContextString: string, instanceContextString: string, conversationText: string, applicationContextString?: string) => `You are an AI assistant in WebSeek, a web extension for web data preparation and analysis.
 WebSeek's interface includes an InstanceView (canvas for data instances: text, image, sketch, table, visualization, etc.) and a ChatView (for users to call the AI assistant for data tasks). 
 Users may build data instances (some are just examples for intent demonstration, some are intermediate results, and some are final production-ready results) in the canvas and perform tasks such as data completion, summarization, and analysis through human-AI collaboration.
 
 Now the user is chatting with you. You can analyze web content, understand user intentions, and generate structured data in various formats.
 
-### Your Capabilities:
+${applicationContextString ? `### Current Application State:
+${applicationContextString}
+
+` : ''}### Your Capabilities:
 1. **Text Analysis**: Extract and process text content from web pages
 2. **Image Processing**: Work with images and visual content
 3. **Table Creation**: Generate structured tables from data
@@ -308,7 +312,7 @@ ${instanceContextString}
 
 Now, respond to the user's message appropriately.`.trim();
 
-export const promptSuggest = (htmlContextString: string, instanceContextString: string, conversationText: string, logText: string) => `You are an **proactive AI assistant** in WebSeek, a web extension for web data preparation and analysis.
+export const promptSuggest = (htmlContextString: string, instanceContextString: string, conversationText: string, logText: string, applicationContextString?: string) => `You are an **proactive AI assistant** in WebSeek, a web extension for web data preparation and analysis.
 WebSeek's interface includes an InstanceView (canvas for data instances: text, image, sketch, table, visualization, etc.) and a ChatView (for users to call the AI assistant for data tasks). 
 Users may build data instances (some are just examples for intent demonstration, some are intermediate results, and some are final production-ready results) in the canvas and perform tasks such as data completion, summarization, and analysis through human-AI collaboration.
 
@@ -397,16 +401,18 @@ The type of "instances" in suggestions is InstanceEvent[], defined as:
 
 **IMPORTANT:** When suggesting instances from web content, use WebCaptureSource with proper pageId and locator (data-aid-id from HTML). For created/synthesized content, use ManualSource.
 
+${applicationContextString || ''}
+
 Now analyze the current context and provide intelligent suggestions for the user's next steps.
 `.trim();
 
-export const getPrompt = (chatType: ChatType, htmlContextString: string, instanceContextString: string, conversationText: string, logText: string) => {
+export const getPrompt = (chatType: ChatType, htmlContextString: string, instanceContextString: string, conversationText: string, logText: string, applicationContextString?: string) => {
     if (chatType === 'chat') {
-        return promptChat(htmlContextString, instanceContextString, conversationText);
+        return promptChat(htmlContextString, instanceContextString, conversationText, applicationContextString);
     } else if (chatType === 'infer') {
-        return promptInfer(htmlContextString, instanceContextString);
+        return promptInfer(htmlContextString, instanceContextString, applicationContextString);
     } else if (chatType === 'suggest') {
-        return promptSuggest(htmlContextString, instanceContextString, conversationText, logText);
+        return promptSuggest(htmlContextString, instanceContextString, conversationText, logText, applicationContextString);
     } else {
         throw new Error(`Unsupported chat type: ${chatType}`);
     }
@@ -421,7 +427,8 @@ export const createRuleBasedSuggestionPrompt = (
   recentActions: any[], 
   logs: string[],
   suggestionHistory?: Map<string, any>,
-  workspaceName?: string
+  workspaceName?: string,
+  applicationContextString?: string
 ): string => {
     const ruleDescriptions = triggeredRules.map(rule => 
       `- ${rule.name}: ${rule.description} (Priority: ${rule.priority})`
@@ -467,7 +474,10 @@ ${generateToolDocumentation()}` :
 - They are displayed as preview instances in the main workspace`}
 ${workspaceContext}
 
-**TRIGGERED RULES:**
+${applicationContextString ? `**CURRENT APPLICATION STATE:**
+${applicationContextString}
+
+` : ''}**TRIGGERED RULES:**
 The following heuristic rules have been triggered and require suggestions:
 ${ruleDescriptions}
 

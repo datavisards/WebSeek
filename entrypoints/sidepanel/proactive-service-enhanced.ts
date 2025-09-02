@@ -40,6 +40,7 @@ class EnhancedProactiveService {
     logs: [] as string[],
     isInEditor: false, // Track if user is currently in an editor
     editingTableId: null as string | null, // Track which table is currently being edited
+    currentPageInfo: null as {pageId: string, url: string} | null, // Track current page
   };
   private isSuggestionsStopped = false;
   private shouldAutoResume = false;
@@ -58,6 +59,7 @@ class EnhancedProactiveService {
     instancesHash: string;
     logsLength: number;
     editingTableId: string | null;
+    currentPageInfo: {pageId: string, url: string} | null;
     timestamp: number;
   } | null = null;
 
@@ -91,6 +93,7 @@ class EnhancedProactiveService {
       instancesHash,
       logsLength: logs.length,
       editingTableId: this.currentContext.editingTableId,
+      currentPageInfo: this.currentContext.currentPageInfo,
       timestamp: Date.now()
     };
   }
@@ -109,7 +112,8 @@ class EnhancedProactiveService {
     const changed = (
       currentState.instancesHash !== this.generationStartState.instancesHash ||
       currentState.logsLength !== this.generationStartState.logsLength ||
-      currentState.editingTableId !== this.generationStartState.editingTableId
+      currentState.editingTableId !== this.generationStartState.editingTableId ||
+      JSON.stringify(currentState.currentPageInfo) !== JSON.stringify(this.generationStartState.currentPageInfo)
     );
 
     if (changed) {
@@ -119,7 +123,8 @@ class EnhancedProactiveService {
         changes: {
           instancesChanged: currentState.instancesHash !== this.generationStartState.instancesHash,
           logsChanged: currentState.logsLength !== this.generationStartState.logsLength,
-          editingTableChanged: currentState.editingTableId !== this.generationStartState.editingTableId
+          editingTableChanged: currentState.editingTableId !== this.generationStartState.editingTableId,
+          pageChanged: JSON.stringify(currentState.currentPageInfo) !== JSON.stringify(this.generationStartState.currentPageInfo)
         }
       });
     }
@@ -170,7 +175,13 @@ class EnhancedProactiveService {
     imageContext?: any[],
     htmlContext?: Record<string, any>,
     logs?: string[],
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    applicationContext?: {
+      currentToolViewTab?: string;
+      currentPageInfo?: {pageId: string, url: string} | null;
+      isInEditor?: boolean;
+      editingTableId?: string | null;
+    }
   ): Promise<any> {
     // Check if already aborted
     if (signal?.aborted) {
@@ -190,7 +201,7 @@ class EnhancedProactiveService {
 
       // Call the original chatWithAgent function
       const chatPromise = conversationHistory !== undefined
-        ? chatWithAgent(chatType, userMessage, conversationHistory, instanceContext, imageContext, htmlContext, logs)
+        ? chatWithAgent(chatType, userMessage, conversationHistory, instanceContext, imageContext, htmlContext, logs, applicationContext)
         : chatWithAgent(chatType, userMessage);
 
       chatPromise
@@ -211,6 +222,44 @@ class EnhancedProactiveService {
           reject(error);
         });
     });
+  }
+
+  /**
+   * Create application context for LLM prompts
+   */
+  private createApplicationContext() {
+    return {
+      currentToolViewTab: 'suggestions', // Default to suggestions since this is called from proactive service
+      currentPageInfo: this.currentContext.currentPageInfo,
+      isInEditor: this.currentContext.isInEditor,
+      editingTableId: this.currentContext.editingTableId
+    };
+  }
+
+  /**
+   * Create application context string for LLM prompts
+   */
+  private createApplicationContextString() {
+    const context = this.createApplicationContext();
+    const contextParts = [];
+    
+    if (context.currentPageInfo) {
+      contextParts.push(`Current active webpage: ${context.currentPageInfo.url} (Page ID: ${context.currentPageInfo.pageId})`);
+    }
+    
+    if (context.currentToolViewTab) {
+      contextParts.push(`Current view: User is currently in the "${context.currentToolViewTab}" tab of the tool panel`);
+    }
+    
+    if (context.isInEditor) {
+      if (context.editingTableId) {
+        contextParts.push(`Editing mode: User is currently editing a table (Table ID: ${context.editingTableId})`);
+      } else {
+        contextParts.push(`Editing mode: User is currently in editing mode`);
+      }
+    }
+    
+    return contextParts.length > 0 ? contextParts.join('\n') : '';
   }
 
   /**
@@ -289,7 +338,7 @@ class EnhancedProactiveService {
   }
 
   // Update context with new instances, messages, HTML contexts, editor state, and editing table ID
-  updateContext({instances, messages, htmlContexts, htmlLoadingStates, isInEditor, editingTableId}: {instances?: Instance[], messages?: Message[], htmlContexts?: Record<string, any>, htmlLoadingStates?: Record<string, boolean>, isInEditor?: boolean, editingTableId?: string | null}) {
+  updateContext({instances, messages, htmlContexts, htmlLoadingStates, isInEditor, editingTableId, currentPageInfo}: {instances?: Instance[], messages?: Message[], htmlContexts?: Record<string, any>, htmlLoadingStates?: Record<string, boolean>, isInEditor?: boolean, editingTableId?: string | null, currentPageInfo?: {pageId: string, url: string} | null}) {
     if (instances) {
       this.currentContext.instances = instances;
     }
@@ -321,6 +370,13 @@ class EnhancedProactiveService {
         to: editingTableId
       });
       this.currentContext.editingTableId = editingTableId;
+    }
+    if (currentPageInfo !== undefined) {
+      console.log('[EnhancedProactiveService] currentPageInfo updating:', {
+        from: this.currentContext.currentPageInfo,
+        to: currentPageInfo
+      });
+      this.currentContext.currentPageInfo = currentPageInfo;
     }
   }
 
@@ -896,7 +952,7 @@ class EnhancedProactiveService {
       });
     
       const suggestionScope = 'micro';
-      const enhancedPrompt = createRuleBasedSuggestionPrompt(suggestionScope, microRules, recentActions, logs, this.suggestionHistory, context.workspaceName);
+      const enhancedPrompt = createRuleBasedSuggestionPrompt(suggestionScope, microRules, recentActions, logs, this.suggestionHistory, context.workspaceName, this.createApplicationContextString());
       
       let result;
       if (import.meta.env.WXT_USE_LLM == "true") {
@@ -908,7 +964,8 @@ class EnhancedProactiveService {
           imageContext,
           currentHtmlContexts,
           logs,
-          this.currentGenerationController?.signal
+          this.currentGenerationController?.signal,
+          this.createApplicationContext()
         );
       } else {
         result = await this.chatWithAgentAbortable(
@@ -919,7 +976,8 @@ class EnhancedProactiveService {
           undefined,
           undefined,
           undefined,
-          this.currentGenerationController?.signal
+          this.currentGenerationController?.signal,
+          this.createApplicationContext()
         );
       }
 
@@ -1062,7 +1120,7 @@ class EnhancedProactiveService {
     
     try {
       const suggestionScope = 'macro';
-      const enhancedPrompt = createRuleBasedSuggestionPrompt(suggestionScope, macroRules, recentActions, logs, this.suggestionHistory, context.workspaceName);
+      const enhancedPrompt = createRuleBasedSuggestionPrompt(suggestionScope, macroRules, recentActions, logs, this.suggestionHistory, context.workspaceName, this.createApplicationContextString());
       
       let result;
       if (import.meta.env.WXT_USE_LLM == "true") {
@@ -1074,7 +1132,8 @@ class EnhancedProactiveService {
           imageContext,
           currentHtmlContexts,
           logs,
-          this.currentGenerationController?.signal
+          this.currentGenerationController?.signal,
+          this.createApplicationContext()
         );
       } else {
         result = await this.chatWithAgentAbortable(
@@ -1085,7 +1144,8 @@ class EnhancedProactiveService {
           undefined,
           undefined,
           undefined,
-          this.currentGenerationController?.signal
+          this.currentGenerationController?.signal,
+          this.createApplicationContext()
         );
       }
 
@@ -1831,12 +1891,19 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
           textContext,
           imageContext,
           currentHtmlContexts,
-          logs
+          logs,
+          this.createApplicationContext()
         );
       } else {
         result = await chatWithAgent(
           'suggest',
-          'Provide proactive suggestions based on the current context.'
+          'Provide proactive suggestions based on the current context.',
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          this.createApplicationContext()
         );
       }
 
@@ -2414,7 +2481,8 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
         recentActions, 
         this.currentContext.logs, 
         this.suggestionHistory, 
-        workspaceName
+        workspaceName,
+        this.createApplicationContextString()
       );
       
       console.log('[EnhancedProactiveService] Generating AI-driven suggestions for debounced rule:', rule.id);
@@ -2432,12 +2500,21 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
           textContext,
           imageContext,
           context.htmlContexts,
-          context.logs
+          context.logs,
+          undefined,
+          this.createApplicationContext()
         );
       } else {
         result = await this.chatWithAgentAbortable(
           'suggest',
-          enhancedPrompt
+          enhancedPrompt,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          this.createApplicationContext()
         );
       }
       

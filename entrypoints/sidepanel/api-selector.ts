@@ -11,10 +11,16 @@ export const chatWithAgent = async (
     imageContext?: any[],
     htmlContext?: Record<string, {pageURL: string, htmlContent: string}>,
     logs?: string[],
+    applicationContext?: {
+        currentToolViewTab?: string;
+        currentPageInfo?: {pageId: string, url: string} | null;
+        isInEditor?: boolean;
+        editingTableId?: string | null;
+    }
 ) => {
     // if (USE_LLM) {
         const apiModule = await import('./apis');
-        return apiModule.chatWithAgent(chatType, userMessage, conversationHistory, instanceContext, imageContext, htmlContext, logs);
+        return apiModule.chatWithAgent(chatType, userMessage, conversationHistory, instanceContext, imageContext, htmlContext, logs, applicationContext);
     // } else {
     //     const apiModule = await import('./apis');
     //     return apiModule.chatWithAgent(chatType, userMessage);

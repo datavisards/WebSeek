@@ -26,6 +26,10 @@ interface ToolViewProps {
     onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => void;
     // History restoration callback
     onRestoreToCheckpoint?: (logIndex: number) => void;
+    // Application state context
+    currentPageInfo?: {pageId: string, url: string} | null;
+    isInEditor?: boolean;
+    editingTableId?: string | null;
 }
 
 const ToolView: React.FC<ToolViewProps> = ({
@@ -45,7 +49,10 @@ const ToolView: React.FC<ToolViewProps> = ({
     onDismissSuggestion,
     onExecuteTool,
     onExecuteToolSequence,
-    onRestoreToCheckpoint
+    onRestoreToCheckpoint,
+    currentPageInfo,
+    isInEditor,
+    editingTableId
 }) => {
     const [activeTab, setActiveTab] = useState<'chat' | 'code' | 'suggestions' | 'history'>('suggestions');
 
@@ -109,6 +116,10 @@ const ToolView: React.FC<ToolViewProps> = ({
                             htmlContext={htmlContext}
                             setInstances={setInstances}
                             logs={logs}
+                            currentToolViewTab={activeTab}
+                            currentPageInfo={currentPageInfo}
+                            isInEditor={isInEditor}
+                            editingTableId={editingTableId}
                         />
                     )}
                     {activeTab === 'history' && (

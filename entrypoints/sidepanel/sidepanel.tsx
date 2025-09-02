@@ -374,7 +374,13 @@ const SidePanel = () => {
         
         if (response?.pageId) {
           console.log('[SidePanel] Got pageId from content script:', response.pageId);
-          setCurrentPageInfo({ pageId: response.pageId, url: tab.url });
+          const newPageInfo = { pageId: response.pageId, url: tab.url };
+          setCurrentPageInfo(newPageInfo);
+          
+          // Update proactive service with current page info
+          proactiveService.updateContext({
+            currentPageInfo: newPageInfo
+          });
           
           // Now fetch the HTML content using the pageId
           const fetchHtmlContent = async (retryCount = 0) => {
@@ -1147,6 +1153,9 @@ const SidePanel = () => {
         onExecuteTool={handleToolExecutionWithConfirmation}
         onExecuteToolSequence={handleExecuteToolSequence}
         onRestoreToCheckpoint={handleRestoreToCheckpoint}
+        currentPageInfo={currentPageInfo}
+        isInEditor={isInEditor}
+        editingTableId={editingTableId}
       />
       
       {/* InstanceView now appears second/below */}

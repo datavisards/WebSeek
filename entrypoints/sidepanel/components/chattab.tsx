@@ -15,6 +15,10 @@ interface ChatTabProps {
     htmlContext: Record<string, { pageURL: string, htmlContent: string }>;
     setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
     logs: string[];
+    currentToolViewTab?: 'chat' | 'code' | 'suggestions' | 'history';
+    currentPageInfo?: {pageId: string, url: string} | null;
+    isInEditor?: boolean;
+    editingTableId?: string | null;
 }
 
 const ChatTab: React.FC<ChatTabProps> = ({
@@ -26,7 +30,11 @@ const ChatTab: React.FC<ChatTabProps> = ({
     instances,
     htmlContext,
     setInstances,
-    logs
+    logs,
+    currentToolViewTab,
+    currentPageInfo,
+    isInEditor,
+    editingTableId
 }) => {
     const [inputValue, setInputValue] = useState('');
     const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -175,17 +183,35 @@ const ChatTab: React.FC<ChatTabProps> = ({
         
         if (import.meta.env.WXT_USE_LLM == "true") {
             const { imageContext, textContext } = await generateInstanceContext(currentInstances);
+            
+            // Construct application context
+            const applicationContext = {
+                currentToolViewTab,
+                currentPageInfo,
+                isInEditor,
+                editingTableId
+            };
+            
             let result = await chatWithAgent(chatType, userMessage,
                 conversationHistory,
                 textContext,
                 imageContext,
                 htmlContext,
-                logs
+                logs,
+                applicationContext
             );
             message = result.message;
             newInstances = result.instances || [];
         } else {
-            const result = await chatWithAgent(chatType, userMessage);
+            // Construct application context even when LLM is disabled
+            const applicationContext = {
+                currentToolViewTab,
+                currentPageInfo,
+                isInEditor,
+                editingTableId
+            };
+            
+            const result = await chatWithAgent(chatType, userMessage, [], '', [], {}, [], applicationContext);
             message = result.message;
             newInstances = result.instances || [];
         }
