@@ -214,8 +214,12 @@ ${applicationContextString}
 ### Response Format:
 You can respond:
 
-1. **A textual message**: Provide helpful explanations, suggestions, or answers to questions
-2. **A list of actions on the instances**: When the user asks for specific data extraction or creation, you can update the instances in the instance view.
+1. **For information/help requests**: Provide a helpful text message with instances array set to empty array
+2. **For data extraction/creation requests**: Provide both a text message and specific instance operations
+
+**Examples:**
+- User: "Suggest websites for data validation" → Response: text with recommendations, instances: []
+- User: "Extract the table from this webpage" → Response: text + table instance
 
 Organize your response as follows:
 \`\`\`json
@@ -223,7 +227,7 @@ Organize your response as follows:
   "success": boolean,
   "error_message"?: string, // Only if success is false
   "message": string, // A helpful response to the user's query
-  "instances": InstanceEvent[] // Can be [] if no instances need to be created, removed or updated
+  "instances": InstanceEvent[] // EMPTY ARRAY for information requests, populated for data operations
 }
 \`\`\`
 
@@ -283,9 +287,16 @@ export type Locator = string; // Stable ID (AID)
         }
 
 ### Instructions:
-- If the user is asking for information or help, provide a helpful text response with markdown formatting when appropriate
-- Use markdown formatting to improve readability: **bold** for emphasis, *italic* for subtle emphasis, \`code\` for technical terms, and lists for step-by-step instructions
-- If the user wants to extract data, create structured content, or generate a visualization, provide both a text response and structured results
+
+**IMPORTANT: When to create instances vs. when to just respond:**
+- **Information requests, explanations, guidance, recommendations**: Provide ONLY a text response with empty instances array
+- **Data extraction, content creation, visualization requests**: Provide both text response AND instance updates
+
+**Response Guidelines:**
+- If the user is asking for information, help, recommendations, explanations, or guidance, provide ONLY a helpful text response with markdown formatting and leave instances array empty
+- **Website recommendations, research guidance, how-to instructions**: These are information requests - respond with text only, NO instances
+- Use markdown formatting to improve readability: **bold** for emphasis, *italic* for subtle emphasis, \`code\` for technical terms, and lists for step-by-step instructions  
+- Only create instances when the user explicitly wants to extract data, create structured content, or generate a visualization
 - Use the HTML contexts when URLs are mentioned to understand web content
 - Reference existing instances when relevant using their IDs
 - Be conversational and helpful while maintaining focus on web automation and visualization tasks
@@ -351,7 +362,7 @@ Return your response strictly as a JSON object in the following format:
 
 ---
 
-### HTML Context (web pages the user is viewing):
+### HTML Context:
 ${htmlContextString}
 
 ### Instance Context (current instances on the canvas):
@@ -471,7 +482,13 @@ ${generateToolDocumentation()}` :
   `- Focus on immediate, contextual improvements within the current editing context (table editor, cell operations)
 - MICRO SUGGESTIONS: Include specific instance operations in the "instances" array
 - Micro suggestions provide direct data manipulation and show ghost previews
-- They are displayed as preview instances in the main workspace`}
+- They are displayed as preview instances in the main workspace
+
+**CRITICAL CONSTRAINTS FOR MICRO SUGGESTIONS (IN-SITU):**
+- ONLY edit the table that is currently being edited - DO NOT modify any other instances
+- When suggesting table completion/expansion, add AT MOST 30 rows at a time
+- If more than 30 rows are needed, suggest only the first 30 rows
+- Focus on the immediate editing context - do not suggest changes to other tables or instances`}
 ${workspaceContext}
 
 ${applicationContextString ? `**CURRENT APPLICATION STATE:**
@@ -650,7 +667,12 @@ Use toolSequence when the user's goal requires prerequisite steps. Common scenar
 - The "instances" array contains specific operations to modify workspace data
 - These create ghost previews that users can accept or reject
 - Focus on immediate data manipulation and completion tasks
-- Do NOT include "toolCall" field for micro suggestions`}
+- Do NOT include "toolCall" field for micro suggestions
+
+**CRITICAL MICRO SUGGESTION CONSTRAINTS:**
+- ONLY modify the table currently being edited - targetId MUST match the editing table ID
+- When adding rows to tables, add AT MOST 30 rows in a single suggestion
+- Do NOT suggest modifications to any other instances outside the current editing context`}
 
 **EXAMPLE FOR RULE "suggest-useful-websites":**
 If suggesting websites, your response must include:
@@ -734,6 +756,12 @@ If you cannot identify meaningful, substantial improvements to the table (more r
   "instances": [],
   "suggestions": []
 }
+
+**MICRO SUGGESTION CONSTRAINTS (FOR IN-SITU SUGGESTIONS):**
+- ONLY suggest updates to the table currently being edited - DO NOT modify other instances
+- When adding rows to a table, add AT MOST 30 rows in a single suggestion
+- If more than 30 rows are needed, limit the suggestion to the first 30 rows
+- Focus ONLY on the immediate editing context
 
 DO NOT suggest trivial additions or formatting changes. DO NOT suggest completion if you cannot make meaningful improvements to the table.`;
         

@@ -23,14 +23,27 @@
   transition: flex 0.3s ease;
 }
 
-/* Tool view gets smaller proportion (1/3 of total space) */
-.tool-view {
-  flex: 2;
+/* Tool view gets different proportions based on height mode */
+.tool-view.height-minimum {
+  flex: 0 0 auto;
 }
 
-/* When tool view is collapsed, expand instance view to take all space */
-.side-panel:has(.tool-view.collapsed) .view-container:not(.tool-view) {
+.tool-view.height-small {
+  flex: 2; /* ~33% when instance view has flex: 4 */
+}
+
+.tool-view.height-large {
+  flex: 4; /* ~66% when instance view has flex: 2 */
+}
+
+/* When tool view is in minimum mode, expand instance view to take most space */
+.side-panel:has(.tool-view.height-minimum) .view-container:not(.tool-view) {
   flex: 6;
+}
+
+/* When tool view is in large mode, make instance view smaller */
+.side-panel:has(.tool-view.height-large) .view-container:not(.tool-view) {
+  flex: 2;
 }
 
 .operation-view {

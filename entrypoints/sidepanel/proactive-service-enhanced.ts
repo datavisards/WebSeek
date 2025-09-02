@@ -244,7 +244,10 @@ class EnhancedProactiveService {
     const contextParts = [];
     
     if (context.currentPageInfo) {
+      console.log('[ProactiveService] Current page info for suggestions:', context.currentPageInfo);
       contextParts.push(`Current active webpage: ${context.currentPageInfo.url} (Page ID: ${context.currentPageInfo.pageId})`);
+    } else {
+      console.log('[ProactiveService] No current page info available for suggestions');
     }
     
     if (context.currentToolViewTab) {
@@ -1691,7 +1694,51 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
         
         // STRICT VALIDATION: Check for redundant table suggestions
         let isRedundantTableSuggestion = false;
+        let violatesMicroConstraints = false;
+        
         if (result.instances && result.instances.length > 0) {
+          // Check for micro suggestion constraints
+          if (scope === 'micro' || aiSuggestion.modality === 'in-situ') {
+            const currentEditingTableId = this.currentContext.editingTableId;
+            
+            // Constraint 1: Only edit the current table being edited
+            const instancesEditingOtherTables = result.instances.filter((inst: any) => {
+              return inst.action === 'update' && inst.targetId && inst.targetId !== currentEditingTableId;
+            });
+            
+            if (instancesEditingOtherTables.length > 0) {
+              violatesMicroConstraints = true;
+              console.warn('[EnhancedProactiveService] REJECTING micro suggestion - violates constraint: editing instances other than current table');
+            }
+            
+            // Constraint 2: Limit table row additions to 30 rows max
+            const tableUpdates = result.instances.filter((inst: any) => {
+              return inst.action === 'update' && inst.instance?.type === 'table';
+            });
+            
+            for (const tableUpdate of tableUpdates) {
+              const suggestedTable = tableUpdate.instance;
+              const currentInstances = this.currentContext.instances || [];
+              const currentTable = currentInstances.find(inst => inst.id === tableUpdate.targetId);
+              
+              if (currentTable && currentTable.type === 'table') {
+                const currentRows = (currentTable as any).cells?.length || 0;
+                const suggestedRows = suggestedTable.cells?.length || 0;
+                const addedRows = suggestedRows - currentRows;
+                
+                if (addedRows > 30) {
+                  violatesMicroConstraints = true;
+                  console.warn('[EnhancedProactiveService] REJECTING micro suggestion - violates constraint: adding more than 30 rows at once', {
+                    addedRows,
+                    currentRows,
+                    suggestedRows
+                  });
+                  break;
+                }
+              }
+            }
+          }
+          
           const updateInstance = result.instances.find((inst: any) => inst.action === 'update');
           if (updateInstance && updateInstance.instance?.type === 'table') {
             // Check if this table suggestion is meaningful
@@ -1729,11 +1776,12 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
           category: aiSuggestion.category,
           categoryMatches,
           isRedundantTableSuggestion,
-          isValid: hasValidRuleId && scopeMatches && categoryMatches && !isRedundantTableSuggestion
+          violatesMicroConstraints,
+          isValid: hasValidRuleId && scopeMatches && categoryMatches && !isRedundantTableSuggestion && !violatesMicroConstraints
         });
         
         // Only accept suggestions that follow our triggered rules and aren't redundant
-        if (!hasValidRuleId || !scopeMatches || !categoryMatches || isRedundantTableSuggestion) {
+        if (!hasValidRuleId || !scopeMatches || !categoryMatches || isRedundantTableSuggestion || violatesMicroConstraints) {
           console.warn('[EnhancedProactiveService] REJECTING AI suggestion:', {
             message: aiSuggestion.message?.slice(0, 100),
             expectedScope: scope,
@@ -1741,7 +1789,11 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
             expectedRuleIds: triggeredRuleIds,
             actualRuleIds: suggestedRuleIds,
             category: aiSuggestion.category,
-            reason: !hasValidRuleId ? 'invalid rule ID' : !scopeMatches ? 'wrong scope' : !categoryMatches ? 'wrong category' : 'redundant table suggestion'
+            reason: !hasValidRuleId ? 'invalid rule ID' : 
+                   !scopeMatches ? 'wrong scope' : 
+                   !categoryMatches ? 'wrong category' : 
+                   isRedundantTableSuggestion ? 'redundant table suggestion' :
+                   violatesMicroConstraints ? 'violates micro suggestion constraints' : 'unknown'
           });
           return; // Skip this suggestion
         }

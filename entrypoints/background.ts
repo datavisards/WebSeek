@@ -123,6 +123,24 @@ export default defineBackground(() => {
     if (tabId === selectedTabId) selectedTabId = null;
   });
 
+  // Listen for tab URL changes (navigation)
+  browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    // Only process complete navigation events for the active tab
+    if (changeInfo.status === 'complete' && tab.url && tabId === selectedTabId) {
+      console.log('[Background] Tab navigation detected:', tab.url);
+      
+      try {
+        // Request the content script to create a new snapshot for the navigated page
+        await browser.tabs.sendMessage(tabId, {
+          type: 'CREATE_SNAPSHOT_AND_GET_ID'
+        });
+        console.log('[Background] Requested snapshot creation after navigation');
+      } catch (error) {
+        console.log('[Background] Could not request snapshot after navigation (content script may not be ready):', error);
+      }
+    }
+  });
+
   browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs[0]?.id) selectedTabId = tabs[0].id;
   });

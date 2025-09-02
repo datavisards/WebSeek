@@ -52,6 +52,26 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
     return action;
   };
 
+  const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, url: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Check if this is an instance link (starts with # and contains a valid instance ID)
+    if (url.startsWith('#') && url.length > 1) {
+      const hash = url;
+      const instanceId = hash.startsWith('#instance-') ? 
+        hash.replace('#instance-', '') : 
+        hash.substring(1); // Remove just the # for backward compatibility
+      
+      // Set the hash to trigger the instanceview's hashchange handler
+      window.location.hash = `#instance-${instanceId}`;
+      return;
+    }
+    
+    // For external links, open in new tab
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   const renderActionWithLinks = (action: string) => {
     // Regex to match markdown-style links: [text](url)
     const markdownLinkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
@@ -86,10 +106,8 @@ const HistoryTab: React.FC<HistoryTabProps> = ({
         <a 
           key={`link-${matchStart}`}
           href={url} 
-          target="_blank" 
-          rel="noopener noreferrer"
           className="history-link"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => handleLinkClick(e, url)}
         >
           {linkText}
         </a>

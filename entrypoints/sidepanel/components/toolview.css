@@ -32,6 +32,19 @@
     margin-left: auto;
     display: flex;
     align-items: center;
+    gap: 8px;
+}
+
+.height-mode-indicator {
+    font-size: 11px;
+    color: #666;
+    font-weight: 500;
+    padding: 2px 6px;
+    background: #f8f8f8;
+    border-radius: 3px;
+    border: 1px solid #e0e0e0;
+    min-width: 32px;
+    text-align: center;
 }
 
 .collapse-toggle {
@@ -49,11 +62,11 @@
     background-color: #e0e0e0;
 }
 
-.tool-view.collapsed {
+.tool-view.height-minimum {
     flex: 0 0 auto !important;
 }
 
-.tool-view.collapsed .view-content {
+.tool-view.height-minimum .view-content {
     display: none;
 }
 

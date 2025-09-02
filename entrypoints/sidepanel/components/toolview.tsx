@@ -16,8 +16,8 @@ interface ToolViewProps {
     setAgentLoading: React.Dispatch<React.SetStateAction<boolean>>;
     instances: Instance[];
     setInstances: React.Dispatch<React.SetStateAction<Instance[]>>;
-    isCollapsed?: boolean;
-    onToggleCollapse?: () => void;
+    heightMode?: 'minimum' | 'small' | 'large';
+    onToggleHeightMode?: () => void;
     // New props for suggestions
     suggestions?: ProactiveSuggestion[];
     onAcceptSuggestion?: (suggestionId: string) => void;
@@ -42,8 +42,8 @@ const ToolView: React.FC<ToolViewProps> = ({
     setAgentLoading,
     instances,
     setInstances,
-    isCollapsed = false,
-    onToggleCollapse,
+    heightMode = 'small',
+    onToggleHeightMode,
     suggestions = [],
     onAcceptSuggestion,
     onDismissSuggestion,
@@ -56,39 +56,62 @@ const ToolView: React.FC<ToolViewProps> = ({
 }) => {
     const [activeTab, setActiveTab] = useState<'chat' | 'code' | 'suggestions' | 'history'>('suggestions');
 
+    const isMinimized = heightMode === 'minimum';
+    
+    // Function to get height mode display text
+    const getHeightModeDisplay = () => {
+        switch (heightMode) {
+            case 'minimum': return 'Min';
+            case 'small': return '33%';
+            case 'large': return '66%';
+            default: return '33%';
+        }
+    };
+
+    // Function to get toggle button icon
+    const getToggleIcon = () => {
+        switch (heightMode) {
+            case 'minimum': return '▲';
+            case 'small': return '◐';
+            case 'large': return '▼';
+            default: return '◐';
+        }
+    };
+
     return (
-        <div className={`view-container tool-view ${isCollapsed ? 'collapsed' : ''}`}>
+        <div className={`view-container tool-view height-${heightMode}`}>
             <div className="view-title-container">
                 <h3
-                    className={`tab-button ${activeTab === 'suggestions' ? 'active' : ''} ${isCollapsed ? 'disabled' : ''}`}
-                    onClick={() => !isCollapsed && setActiveTab('suggestions')}
+                    className={`tab-button ${activeTab === 'suggestions' ? 'active' : ''} ${isMinimized ? 'disabled' : ''}`}
+                    onClick={() => !isMinimized && setActiveTab('suggestions')}
                 >
                     AI Suggestions {suggestions.filter(s => s.scope === 'macro').length > 0 && `(${suggestions.filter(s => s.scope === 'macro').length})`}
                 </h3>
                 <h3
-                    className={`tab-button ${activeTab === 'chat' ? 'active' : ''} ${isCollapsed ? 'disabled' : ''}`}
-                    onClick={() => !isCollapsed && setActiveTab('chat')}
+                    className={`tab-button ${activeTab === 'chat' ? 'active' : ''} ${isMinimized ? 'disabled' : ''}`}
+                    onClick={() => !isMinimized && setActiveTab('chat')}
                 >
                     Chat
                 </h3>
                 <h3
-                    className={`tab-button ${activeTab === 'history' ? 'active' : ''} ${isCollapsed ? 'disabled' : ''}`}
-                    onClick={() => !isCollapsed && setActiveTab('history')}
+                    className={`tab-button ${activeTab === 'history' ? 'active' : ''} ${isMinimized ? 'disabled' : ''}`}
+                    onClick={() => !isMinimized && setActiveTab('history')}
                 >
                     History {logs.length > 0 && `(${logs.length})`}
                 </h3>
                 <div className="collapse-toggle-container">
+                    <span className="height-mode-indicator">{getHeightModeDisplay()}</span>
                     <button
                         className="collapse-toggle"
-                        onClick={onToggleCollapse}
-                        title={isCollapsed ? 'Expand tool view' : 'Collapse tool view'}
+                        onClick={onToggleHeightMode}
+                        title={`Switch height mode (current: ${getHeightModeDisplay()})`}
                     >
-                        {isCollapsed ? '▲' : '▼'}
+                        {getToggleIcon()}
                     </button>
                 </div>
             </div>
 
-            {!isCollapsed && (
+            {!isMinimized && (
                 <div className="view-content" style={{
                     display: 'flex',
                     flexDirection: 'column',

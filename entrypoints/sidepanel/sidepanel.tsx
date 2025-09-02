@@ -88,8 +88,8 @@ const SidePanel = () => {
   const [showWorkspaceNameModal, setShowWorkspaceNameModal] = useState(false);
   const [hasShownWorkspaceModal, setHasShownWorkspaceModal] = useState(false);
   
-  // Tool view collapse state
-  const [isToolViewCollapsed, setIsToolViewCollapsed] = useState(false);
+  // Tool view height mode state
+  const [toolViewHeightMode, setToolViewHeightMode] = useState<'minimum' | 'small' | 'large'>('small');
   
   // Debug: Track instances changes
   useEffect(() => {
@@ -454,6 +454,31 @@ const SidePanel = () => {
   // Initialize current page context
   useEffect(() => {
     initializeCurrentPageContext();
+  }, [initializeCurrentPageContext]);
+
+  // Listen for tab navigation to automatically update HTML context
+  useEffect(() => {
+    const handleTabUpdated = (tabId: number, changeInfo: any, tab: any) => {
+      // Only process complete navigation events for the current tab
+      if (changeInfo.status === 'complete' && tab.url) {
+        chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+          if (tabs[0]?.id === tabId) {
+            console.log('[SidePanel] Navigation detected to:', tab.url);
+            console.log('[SidePanel] Current page info before update:', currentPageInfo);
+            // Re-initialize page context for the new URL
+            await initializeCurrentPageContext();
+            console.log('[SidePanel] Re-initialized page context after navigation');
+          }
+        });
+      }
+    };
+
+    // Add listener for tab updates (navigation)
+    chrome.tabs.onUpdated.addListener(handleTabUpdated);
+
+    return () => {
+      chrome.tabs.onUpdated.removeListener(handleTabUpdated);
+    };
   }, [initializeCurrentPageContext]);
 
   // Update proactive service when editor context changes
@@ -1082,9 +1107,16 @@ const SidePanel = () => {
     proactiveService.clearMicroSuggestions();
   }, []);
 
-  // Tool view collapse toggle
-  const handleToggleToolViewCollapse = useCallback(() => {
-    setIsToolViewCollapsed(prev => !prev);
+  // Tool view height mode toggle
+  const handleToggleToolViewHeightMode = useCallback(() => {
+    setToolViewHeightMode(prev => {
+      switch (prev) {
+        case 'minimum': return 'small';
+        case 'small': return 'large';
+        case 'large': return 'minimum';
+        default: return 'small';
+      }
+    });
   }, []);
 
   // Global keyboard event handler for suggestion acceptance and dismissal
@@ -1145,8 +1177,8 @@ const SidePanel = () => {
         setAgentLoading={setAgentLoading} 
         instances={instances} 
         setInstances={recordableSetInstances}
-        isCollapsed={isToolViewCollapsed}
-        onToggleCollapse={handleToggleToolViewCollapse}
+        heightMode={toolViewHeightMode}
+        onToggleHeightMode={handleToggleToolViewHeightMode}
         suggestions={suggestions}
         onAcceptSuggestion={handleAcceptSuggestion}
         onDismissSuggestion={handleDismissSuggestion}
