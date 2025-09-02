@@ -22,6 +22,7 @@ interface ToolViewProps {
     suggestions?: ProactiveSuggestion[];
     onAcceptSuggestion?: (suggestionId: string) => void;
     onDismissSuggestion?: (suggestionId: string) => void;
+    onDismissAllSuggestions?: () => void; // Add dismiss all callback
     onExecuteTool?: (toolCall: { function: string; parameters: any }, suggestionId: string) => void;
     onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => void;
     // History restoration callback
@@ -47,6 +48,7 @@ const ToolView: React.FC<ToolViewProps> = ({
     suggestions = [],
     onAcceptSuggestion,
     onDismissSuggestion,
+    onDismissAllSuggestions,
     onExecuteTool,
     onExecuteToolSequence,
     onRestoreToCheckpoint,
@@ -99,6 +101,15 @@ const ToolView: React.FC<ToolViewProps> = ({
                 >
                     History {logs.length > 0 && `(${logs.length})`}
                 </h3>
+                {activeTab === 'suggestions' && onDismissAllSuggestions && suggestions.filter(s => s.scope === 'macro').length > 0 && (
+                    <button
+                        className="dismiss-all-btn"
+                        onClick={onDismissAllSuggestions}
+                        title="Dismiss all AI suggestions"
+                    >
+                        Dismiss All
+                    </button>
+                )}
                 <div className="collapse-toggle-container">
                     <span className="height-mode-indicator">{getHeightModeDisplay()}</span>
                     <button
@@ -122,6 +133,7 @@ const ToolView: React.FC<ToolViewProps> = ({
                             suggestions={suggestions}
                             onAccept={onAcceptSuggestion || (() => {})}
                             onDismiss={onDismissSuggestion || (() => {})}
+                            onDismissAll={onDismissAllSuggestions}
                             onExecuteTool={onExecuteTool || (() => {})}
                             onExecuteToolSequence={onExecuteToolSequence}
                             className="embedded-suggestions-panel"

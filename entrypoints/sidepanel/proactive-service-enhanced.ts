@@ -537,30 +537,10 @@ class EnhancedProactiveService {
       (newSuggestion as any).batchOrder = now;
       
       if (newSuggestion.scope === 'macro') {
-        // For macro suggestions: accumulate at the top instead of replacing
-        // Check if we already have the exact same suggestion (by type and category)
-        const newSuggestionType = this.getSuggestionType(newSuggestion);
-        const duplicateIndex = this.currentSuggestions.findIndex(existingSuggestion => {
-          const existingType = this.getSuggestionType(existingSuggestion);
-          return existingType === newSuggestionType && 
-                 existingSuggestion.category === newSuggestion.category &&
-                 existingSuggestion.scope === 'macro';
-        });
-        
-        if (duplicateIndex >= 0) {
-          // Update existing macro suggestion with new confidence/data
-          this.currentSuggestions[duplicateIndex] = {
-            ...this.currentSuggestions[duplicateIndex],
-            ...newSuggestion,
-            timestamp: now,
-            batchOrder: now
-          } as any;
-          console.log('[EnhancedProactiveService] Updated existing macro suggestion of type:', newSuggestionType);
-        } else {
-          // Add new macro suggestion (don't remove existing ones)
-          this.currentSuggestions.push(newSuggestion);
-          console.log('[EnhancedProactiveService] Added new macro suggestion of type:', newSuggestionType);
-        }
+        // For macro suggestions: never replace existing ones, always add as new
+        // Add new macro suggestion (don't remove existing ones)
+        this.currentSuggestions.push(newSuggestion);
+        console.log('[EnhancedProactiveService] Added new macro suggestion of type:', this.getSuggestionType(newSuggestion));
       } else {
         // For micro suggestions: replace existing suggestions of the same type (original behavior)
         const newSuggestionType = this.getSuggestionType(newSuggestion);

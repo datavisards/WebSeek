@@ -28,7 +28,8 @@ interface InstanceViewProps {
   setInstances: (
     newStateOrUpdater: React.SetStateAction<Instance[]>,
     description?: string,
-    logMessage?: string
+    logMessage?: string,
+    recordInUndo?: boolean
   ) => void;
   logs: string[];
   htmlContextRef: React.RefObject<Record<string, {pageURL: string, htmlContent: string}>>;
@@ -394,6 +395,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           }
           return inst;
         }),
+        'Resize instance during drag', // description
+        undefined, // logMessage
+        false // recordInUndo - don't record intermediate resize operations
       );
     }
 
@@ -415,6 +419,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           }
           return inst;
         }),
+        'Move instance during drag', // description
+        undefined, // logMessage
+        false // recordInUndo - don't record intermediate position updates during drag
       );
     }
   };
@@ -447,7 +454,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
             return { ...sketchInst, content: updatedContent };
           }
           return sketchInst;
-        })
+        }),
+        'Move embedded instance during drag', // description
+        undefined, // logMessage
+        false // recordInUndo - don't record intermediate embedded instance movements
       );
     }
 
@@ -532,16 +542,31 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   const handleMouseUp = () => {
     setIsPanning(false);
     panStart.current = null;
+    
+    // Record final position for dragging operations
+    if (draggingInstanceId) {
+      setInstances(prev => prev, 'Moved instance', undefined, true); // Record final drag position
+    }
+    
     if (isResizing) {
       setIsResizing(false);
       setResizeDirection(null);
       resizerStart.current = null;
+      if (selectedInstanceId) {
+        setInstances(prev => prev, 'Resized instance', undefined, true); // Record final resize
+      }
     }
+    
     setDraggingInstanceId(null);
     dragStartPos.current = null;
   };
 
   const handleEmbeddedMouseUp = (_event: React.MouseEvent<HTMLDivElement>) => {
+    // Record final position for embedded instance dragging
+    if (draggingEmbeddedId) {
+      setInstances(prev => prev, 'Moved embedded instance', undefined, true); // Record final drag position
+    }
+    
     setDraggingEmbeddedId(null);
     dragEmbeddedStart.current = null;
     setSketchResizingItemId(null);

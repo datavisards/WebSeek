@@ -62,6 +62,21 @@
     background-color: #e0e0e0;
 }
 
+/* Dismiss All button in toolview header */
+.view-title-container .dismiss-all-btn {
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 3px 8px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+    margin-left: 8px;
+    margin-right: 8px;
+    font-size: 12px;
+}
+
 .tool-view.height-minimum {
     flex: 0 0 auto !important;
 }

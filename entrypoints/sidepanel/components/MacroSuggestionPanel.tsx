@@ -13,6 +13,7 @@ interface MacroSuggestionPanelProps {
   suggestions: ProactiveSuggestion[];
   onAccept: (suggestionId: string) => void;
   onDismiss: (suggestionId: string) => void;
+  onDismissAll?: () => void; // Add dismiss all callback
   onExecuteTool: (toolCall: { function: string; parameters: any }, suggestionId: string) => void;
   onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => void;
   className?: string;
@@ -24,6 +25,7 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
   suggestions,
   onAccept,
   onDismiss,
+  onDismissAll,
   onExecuteTool,
   onExecuteToolSequence,
   className = '',
@@ -137,24 +139,6 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
 
   return (
     <div className={`macro-suggestion-panel ${isCollapsed ? 'collapsed' : ''} ${className}`}>
-      <div className="panel-header">
-        <h3>AI Suggestions</h3>
-        <div className="header-controls">
-          <span className="suggestion-count">{macroSuggestions.length}</span>
-          {onToggleCollapse && (
-            <div className="collapse-toggle-container">
-              <button
-                className="collapse-toggle"
-                onClick={onToggleCollapse}
-                title={isCollapsed ? 'Expand AI suggestions' : 'Collapse AI suggestions'}
-              >
-                {isCollapsed ? '▲' : '▼'}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-      
       {!isCollapsed && (
         <div className="suggestions-list">
         {macroSuggestions.length === 0 ? (

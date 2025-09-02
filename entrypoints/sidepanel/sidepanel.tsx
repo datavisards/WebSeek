@@ -707,7 +707,8 @@ const SidePanel = () => {
   const recordableSetInstances = useCallback((
     newStateOrUpdater: React.SetStateAction<Instance[]>,
     description: string = 'State change',
-    logMessage?: string
+    logMessage?: string,
+    recordInUndo: boolean = true // Add parameter to control undo recording
   ) => {
     const callId = Math.random().toString(36).substr(2, 9);
     console.log(`[SidePanel] recordableSetInstances called [${callId}]:`, {
@@ -755,19 +756,23 @@ const SidePanel = () => {
         finalLogsCount: finalLogs.length
       });
 
-      // Record the state change for global undo/redo (including any log change)
-      try {
-        globalUndoManager.recordStateChange({
-          previousState: prevInstances,
-          newState: newInstances,
-          previousLogs: previousLogs, // Use the logs before modification
-          newLogs: finalLogs,
-          description: logMessage || description, // Use log message as description if provided
-          undoable: true
-        });
-        console.log('[SidePanel] Successfully recorded state change in undo manager');
-      } catch (error) {
-        console.error('[SidePanel] Error recording state change:', error);
+      // Record the state change for global undo/redo (including any log change) only if recordInUndo is true
+      if (recordInUndo) {
+        try {
+          globalUndoManager.recordStateChange({
+            previousState: prevInstances,
+            newState: newInstances,
+            previousLogs: previousLogs, // Use the logs before modification
+            newLogs: finalLogs,
+            description: logMessage || description, // Use log message as description if provided
+            undoable: true
+          });
+          console.log('[SidePanel] Successfully recorded state change in undo manager');
+        } catch (error) {
+          console.error('[SidePanel] Error recording state change:', error);
+        }
+      } else {
+        console.log('[SidePanel] Skipping undo recording for trivial interaction');
       }
 
       return newInstances;
@@ -1236,6 +1241,7 @@ const SidePanel = () => {
         suggestions={suggestions}
         onAcceptSuggestion={handleAcceptSuggestion}
         onDismissSuggestion={handleDismissSuggestion}
+        onDismissAllSuggestions={handleDismissAllSuggestions}
         onExecuteTool={handleToolExecutionWithConfirmation}
         onExecuteToolSequence={handleExecuteToolSequence}
         onRestoreToCheckpoint={handleRestoreToCheckpoint}
