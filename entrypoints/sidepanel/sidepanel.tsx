@@ -127,6 +127,13 @@ const SidePanel = () => {
   // Current page info for HTML context fetching
   const [currentPageInfo, setCurrentPageInfo] = useState<{pageId: string, url: string} | null>(null);
 
+  // Callbacks from InstanceView for programmatic control
+  const instanceViewCallbacks = useRef<{
+    saveTable: () => void;
+    closeTableEditor: () => void;
+    openVisualizationEditor: (spec: any) => void;
+  } | null>(null);
+
   // Handle HTML loading state changes from InstanceView
   const handleHTMLLoadingStatesChange = useCallback((loadingStates: Record<string, boolean>) => {
     setHtmlLoadingStates(loadingStates);
@@ -989,6 +996,50 @@ const SidePanel = () => {
         // Small delay to ensure suggestion dismissal is processed before log triggers new generation
         await new Promise(resolve => setTimeout(resolve, 100));
         
+        // Special handling for createVisualization: auto-save table and switch to visualization editor
+        if (toolCall.function === 'createVisualization' && editingTableId && result.result?.newInstanceId) {
+          console.log('[SidePanel] createVisualization succeeded, auto-switching to visualization editor');
+          console.log('[SidePanel] New visualization ID:', result.result.newInstanceId);
+          console.log('[SidePanel] instanceViewCallbacks available:', !!instanceViewCallbacks.current);
+          
+          // Auto-save the table first
+          if (instanceViewCallbacks.current?.saveTable) {
+            console.log('[SidePanel] Auto-saving table:', editingTableId);
+            instanceViewCallbacks.current.saveTable();
+          } else {
+            console.log('[SidePanel] saveTable callback not available');
+          }
+          
+          // Close the table editor
+          if (instanceViewCallbacks.current?.closeTableEditor) {
+            console.log('[SidePanel] Auto-closing table editor');
+            instanceViewCallbacks.current.closeTableEditor();
+          } else {
+            console.log('[SidePanel] closeTableEditor callback not available');
+          }
+          
+          // Open the visualization editor with the new visualization
+          if (instanceViewCallbacks.current?.openVisualizationEditor && result.result?.newVisualizationSpec) {
+            console.log('[SidePanel] Auto-opening visualization editor with spec from result');
+            // Small delay to ensure table editor is closed first
+            setTimeout(() => {
+              instanceViewCallbacks.current?.openVisualizationEditor(result.result.newVisualizationSpec);
+            }, 150);
+          } else {
+            console.log('[SidePanel] openVisualizationEditor callback not available or no spec in result');
+            // Fallback: try to find the visualization in updated instances after a delay
+            setTimeout(() => {
+              const newVisualization = instances.find(inst => inst.id === result.result.newInstanceId);
+              if (newVisualization && newVisualization.type === 'visualization' && instanceViewCallbacks.current?.openVisualizationEditor) {
+                console.log('[SidePanel] Found new visualization instance, opening editor');
+                instanceViewCallbacks.current.openVisualizationEditor(newVisualization.spec);
+              } else {
+                console.log('[SidePanel] Could not find new visualization instance or callback not available');
+              }
+            }, 200);
+          }
+        }
+        
         // Log already added by wrappedUpdateInstances - no need to add another log here
         
         console.log('[SidePanel] Successfully executed tool and removed suggestion:', suggestionId);
@@ -1218,6 +1269,7 @@ const SidePanel = () => {
             .find(s => s.instances && s.instances.length > 0) || 
           (suggestions.length > 0 ? suggestions.sort((a, b) => b.confidence - a.confidence)[0] : undefined)
         }
+        callbackRef={instanceViewCallbacks}
       />
       
       <SuggestionIndicator

@@ -49,9 +49,14 @@ interface InstanceViewProps {
   setIsInCaptureMode?: React.Dispatch<React.SetStateAction<boolean>>; // For tracking capture mode state
   onEditingTableIdChange?: (editingTableId: string | null) => void; // For tracking currently editing table
   onHTMLLoadingStatesChange?: (loadingStates: Record<string, boolean>) => void; // For tracking HTML loading states
+  callbackRef?: React.MutableRefObject<{
+    saveTable: () => void;
+    closeTableEditor: () => void;
+    openVisualizationEditor: (spec: any) => void;
+  } | null>; // For programmatic control from parent component
 }
 
-const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages, workspaceName, onWorkspaceNameChange, onOperation, updateHTMLContext, addMessage, setAgentLoading, currentSuggestion, setIsInEditor, setIsInCaptureMode, onEditingTableIdChange, onHTMLLoadingStatesChange }: InstanceViewProps) => {
+const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages, workspaceName, onWorkspaceNameChange, onOperation, updateHTMLContext, addMessage, setAgentLoading, currentSuggestion, setIsInEditor, setIsInCaptureMode, onEditingTableIdChange, onHTMLLoadingStatesChange, callbackRef }: InstanceViewProps) => {
   console.log('[InstanceView] Component loaded with setIsInEditor:', !!setIsInEditor);
   // Custom hooks
   const { fetchHTMLContent, htmlLoadingStates } = useHTMLContent(updateHTMLContext);
@@ -1585,6 +1590,55 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       return table.id;
     }
   };
+
+  // Populate callback ref for parent component access
+  useEffect(() => {
+    console.log('[InstanceView] Populating callback ref, callbackRef:', !!callbackRef);
+    if (callbackRef) {
+      callbackRef.current = {
+        saveTable: () => {
+          console.log('[InstanceView] saveTable callback called, editingTableId:', editingTableId);
+          if (editingTableId) {
+            saveTable(editingTableId, true); // Force save as dirty
+          } else {
+            console.log('[InstanceView] No editingTableId, cannot save table');
+          }
+        },
+        closeTableEditor: () => {
+          console.log('[InstanceView] closeTableEditor callback called');
+          setEditingTableId(null);
+          setAvailableInstances([]);
+          setOriginalInstanceId(null);
+        },
+        openVisualizationEditor: (spec: any) => {
+          console.log('[InstanceView] openVisualizationEditor callback called with spec:', spec);
+          console.log('[InstanceView] Current states before opening viz editor:', {
+            editingTableId,
+            editingVisualizationSpec: !!editingVisualizationSpec,
+            editingTextId
+          });
+          setEditingVisualizationSpec(spec);
+          // Set available instances to exclude visualizations, same as double-click behavior
+          setAvailableInstances(instances.filter(inst => inst.type !== 'visualization'));
+          console.log('[InstanceView] setEditingVisualizationSpec called with:', spec);
+          console.log('[InstanceView] setAvailableInstances called with filtered instances count:', instances.filter(inst => inst.type !== 'visualization').length);
+        }
+      };
+      console.log('[InstanceView] Callback ref populated successfully');
+    } else {
+      console.log('[InstanceView] callbackRef is null, skipping population');
+    }
+  }, [callbackRef, editingTableId, instances]);
+
+  // Debug tracking for visualization editor state
+  useEffect(() => {
+    console.log('[InstanceView] editingVisualizationSpec changed:', {
+      hasSpec: !!editingVisualizationSpec,
+      spec: editingVisualizationSpec,
+      editingTableId,
+      editingTextId
+    });
+  }, [editingVisualizationSpec, editingTableId, editingTextId]);
 
   const cancelTableEdit = () => {
     if (!editingTableId) return;

@@ -796,7 +796,8 @@ export class MacroToolExecutor {
           sourceInstanceId: params.sourceInstanceId,
           newInstanceId: vizId,
           chartType: params.chartType,
-          title: params.title
+          title: params.title,
+          newVisualizationSpec: vegaSpec
         }
       };
     } catch (error) {

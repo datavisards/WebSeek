@@ -69,11 +69,28 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
         let hasContent = false;
         for (let j = 0; j < instance.cols; j++) {
           const cell = instance.cells[i][j];
-          const value = cell && cell.type === 'text' ? cell.content : null;
-          row[`col${j + 1}`] = value;
-          if (value !== null && value !== undefined && value !== '') {
+          const rawValue = cell && cell.type === 'text' ? cell.content : null;
+          
+          // Convert value based on column type
+          let convertedValue: string | number | null = rawValue;
+          if (rawValue !== null && rawValue !== undefined && rawValue !== '') {
+            const columnType = instance.columnTypes?.[j];
+            if (columnType === 'numeral') {
+              // Try to convert to number for numerical columns
+              // Handle various number formats: currencies, percentages, commas, etc.
+              const cleanedValue = String(rawValue)
+                .replace(/[$,]/g, '') // Remove $ and commas
+                .replace(/%$/, ''); // Remove % at the end (but keep the number)
+              
+              const numValue = parseFloat(cleanedValue);
+              if (!isNaN(numValue)) {
+                convertedValue = numValue;
+              }
+            }
             hasContent = true;
           }
+          
+          row[`col${j + 1}`] = convertedValue;
         }
         // Only add row if it has at least one non-empty cell
         if (hasContent) {

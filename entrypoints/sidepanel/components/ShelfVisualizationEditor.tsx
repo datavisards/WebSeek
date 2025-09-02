@@ -32,6 +32,14 @@ interface Shelf {
   color?: Column[];
 }
 
+// Utility function to sanitize field names for Vega-Lite
+const sanitizeFieldName = (name: string): string => {
+  return name
+    .replace(/[^a-zA-Z0-9_]/g, '_') // Replace non-alphanumeric characters with underscore
+    .replace(/_+/g, '_') // Replace multiple underscores with single underscore
+    .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+};
+
 // Default interaction configurations for different chart types
 const DEFAULT_INTERACTIONS: Record<string, InteractionConfig> = {
   point: {
@@ -111,6 +119,10 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
   availableInstances,
   initialSpec,
 }) => {
+  console.log('[ShelfVisualizationEditor] Component initialized with initialSpec:', initialSpec);
+  console.log('[ShelfVisualizationEditor] initialSpec type:', typeof initialSpec);
+  console.log('[ShelfVisualizationEditor] initialSpec stringified:', JSON.stringify(initialSpec, null, 2));
+  
   const [shelves, setShelves] = useState<Shelf>({
     x: [],
     y: [],
@@ -151,7 +163,23 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           const columnValues: (string | number | null)[] = [];
           for (let row = 0; row < tableInstance.rows; row++) {
             const cell = tableInstance.cells[row][i];
-            columnValues.push(cell && cell.type === 'text' ? cell.content : null);
+            const rawValue = cell && cell.type === 'text' ? cell.content : null;
+            
+            // Convert value based on column type for profiling
+            let convertedValue: string | number | null = rawValue;
+            if (rawValue !== null && rawValue !== undefined && rawValue !== '' && columnType === 'numeral') {
+              // Handle various number formats: currencies, percentages, commas, etc.
+              const cleanedValue = String(rawValue)
+                .replace(/[$,]/g, '') // Remove $ and commas
+                .replace(/%$/, ''); // Remove % at the end
+              
+              const numValue = parseFloat(cleanedValue);
+              if (!isNaN(numValue)) {
+                convertedValue = numValue;
+              }
+            }
+            
+            columnValues.push(convertedValue);
           }
 
           const profile = profileColumn(columnValues, columnType);
@@ -182,10 +210,20 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
 
   // Parse initial spec to populate shelves
   useEffect(() => {
-    if (!initialSpec || !availableColumns.length) return;
+    console.log('[ShelfVisualizationEditor] useEffect triggered with:', {
+      hasInitialSpec: !!initialSpec,
+      availableColumnsLength: availableColumns.length,
+      availableColumns: availableColumns.map(col => ({ id: col.id, name: col.name }))
+    });
+    
+    if (!initialSpec || !availableColumns.length) {
+      console.log('[ShelfVisualizationEditor] Skipping spec parsing - no initialSpec or no available columns');
+      return;
+    }
 
     try {
       const spec = typeof initialSpec === 'string' ? JSON.parse(initialSpec) : initialSpec;
+      console.log('[ShelfVisualizationEditor] Parsing spec:', spec);
 
       // Extract chart type from mark and encoding
       if (spec.mark) {
@@ -209,37 +247,105 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
 
         // Map x-axis encoding
         if (spec.encoding.x && spec.encoding.x.field) {
-          const matchingColumn = availableColumns.find(col =>
-            col.id === spec.encoding.x.field ||
-            col.name.split(': ')[1] === spec.encoding.x.title ||
-            col.name.split(': ')[1] === spec.encoding.x.field
-          );
+          const fieldName = spec.encoding.x.field;
+          console.log('[ShelfVisualizationEditor] Looking for x-axis field:', fieldName);
+          
+          const matchingColumn = availableColumns.find(col => {
+            // Try multiple matching strategies:
+            // 1. Direct field name match with column ID
+            const idMatch = col.id === fieldName;
+            // 2. Column name after colon matches field
+            const nameMatch = col.name.split(': ')[1] === fieldName;
+            // 3. Field is a column letter (A, B, C) and matches the column position
+            const letterMatch = /^[A-Z]+$/.test(fieldName) && col.name.split(': ')[1] === fieldName;
+            // 4. Extract column index from col.id and convert to letter to match field
+            const colIdParts = col.id.split('_col_');
+            const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
+            
+            console.log('[ShelfVisualizationEditor] Checking column:', {
+              colId: col.id,
+              colName: col.name,
+              fieldName,
+              idMatch,
+              nameMatch,
+              letterMatch,
+              letterFromIndex
+            });
+            
+            return idMatch || nameMatch || letterMatch || letterFromIndex;
+          });
+          
           if (matchingColumn) {
             newShelves.x = [matchingColumn];
+            console.log('[ShelfVisualizationEditor] Found x-axis column:', matchingColumn);
+          } else {
+            console.log('[ShelfVisualizationEditor] No matching column found for x-axis field:', fieldName);
           }
         }
 
         // Map y-axis encoding
         if (spec.encoding.y && spec.encoding.y.field) {
-          const matchingColumn = availableColumns.find(col =>
-            col.id === spec.encoding.y.field ||
-            col.name.split(': ')[1] === spec.encoding.y.title ||
-            col.name.split(': ')[1] === spec.encoding.y.field
-          );
+          const fieldName = spec.encoding.y.field;
+          console.log('[ShelfVisualizationEditor] Looking for y-axis field:', fieldName);
+          
+          const matchingColumn = availableColumns.find(col => {
+            // Try multiple matching strategies:
+            // 1. Direct field name match with column ID
+            const idMatch = col.id === fieldName;
+            // 2. Column name after colon matches field
+            const nameMatch = col.name.split(': ')[1] === fieldName;
+            // 3. Field is a column letter (A, B, C) and matches the column position
+            const letterMatch = /^[A-Z]+$/.test(fieldName) && col.name.split(': ')[1] === fieldName;
+            // 4. Extract column index from col.id and convert to letter to match field
+            const colIdParts = col.id.split('_col_');
+            const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
+            
+            console.log('[ShelfVisualizationEditor] Checking column:', {
+              colId: col.id,
+              colName: col.name,
+              fieldName,
+              idMatch,
+              nameMatch,
+              letterMatch,
+              letterFromIndex
+            });
+            
+            return idMatch || nameMatch || letterMatch || letterFromIndex;
+          });
+          
           if (matchingColumn) {
             newShelves.y = [matchingColumn];
+            console.log('[ShelfVisualizationEditor] Found y-axis column:', matchingColumn);
+          } else {
+            console.log('[ShelfVisualizationEditor] No matching column found for y-axis field:', fieldName);
           }
         }
 
         // Map color encoding
         if (spec.encoding.color && spec.encoding.color.field) {
-          const matchingColumn = availableColumns.find(col =>
-            col.id === spec.encoding.color.field ||
-            col.name.split(': ')[1] === spec.encoding.color.title ||
-            col.name.split(': ')[1] === spec.encoding.color.field
-          );
+          const fieldName = spec.encoding.color.field;
+          console.log('[ShelfVisualizationEditor] Looking for color field:', fieldName);
+          
+          const matchingColumn = availableColumns.find(col => {
+            // Try multiple matching strategies:
+            // 1. Direct field name match with column ID
+            const idMatch = col.id === fieldName;
+            // 2. Column name after colon matches field
+            const nameMatch = col.name.split(': ')[1] === fieldName;
+            // 3. Field is a column letter (A, B, C) and matches the column position
+            const letterMatch = /^[A-Z]+$/.test(fieldName) && col.name.split(': ')[1] === fieldName;
+            // 4. Extract column index from col.id and convert to letter to match field
+            const colIdParts = col.id.split('_col_');
+            const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
+            
+            return idMatch || nameMatch || letterMatch || letterFromIndex;
+          });
+          
           if (matchingColumn) {
             newShelves.color = [matchingColumn];
+            console.log('[ShelfVisualizationEditor] Found color column:', matchingColumn);
+          } else {
+            console.log('[ShelfVisualizationEditor] No matching column found for color field:', fieldName);
           }
         }
 
@@ -248,14 +354,16 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           (newShelves.y && newShelves.y.length) ||
           (newShelves.color && newShelves.color.length)) {
           setShelves(newShelves);
-          console.log('Populated shelves from initial spec:', newShelves);
+          console.log('[ShelfVisualizationEditor] Populated shelves from initial spec:', newShelves);
+        } else {
+          console.log('[ShelfVisualizationEditor] No matching columns found for shelves');
         }
       }
 
-      console.log('Loaded initial spec:', spec);
+      console.log('[ShelfVisualizationEditor] Loaded initial spec:', spec);
 
     } catch (error) {
-      console.warn('Could not parse initial spec:', error);
+      console.warn('[ShelfVisualizationEditor] Could not parse initial spec:', error);
     }
   }, [initialSpec, availableColumns]);
 
@@ -331,7 +439,26 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             const row: any = {};
             for (let j = 0; j < tableInstance.cols; j++) {
               const cell = tableInstance.cells[i][j];
-              row[`${instance.id}_col_${j}`] = cell && cell.type === 'text' ? cell.content : null;
+              const rawValue = cell && cell.type === 'text' ? cell.content : null;
+              
+              // Convert value based on column type
+              let convertedValue: string | number | null = rawValue;
+              if (rawValue !== null && rawValue !== undefined && rawValue !== '') {
+                const columnType = tableInstance.columnTypes?.[j];
+                if (columnType === 'numeral') {
+                  // Handle various number formats: currencies, percentages, commas, etc.
+                  const cleanedValue = String(rawValue)
+                    .replace(/[$,]/g, '') // Remove $ and commas
+                    .replace(/%$/, ''); // Remove % at the end
+                  
+                  const numValue = parseFloat(cleanedValue);
+                  if (!isNaN(numValue)) {
+                    convertedValue = numValue;
+                  }
+                }
+              }
+              
+              row[`${instance.id}_col_${j}`] = convertedValue;
             }
             data.push(row);
           }
