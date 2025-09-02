@@ -55,6 +55,9 @@ export class MacroToolExecutor {
         case 'convertColumnType':
           return await this.executeConvertColumnType(toolCall.parameters, currentInstances, updateInstances);
         
+        case 'renameColumn':
+          return await this.executeRenameColumn(toolCall.parameters, currentInstances, updateInstances);
+        
         default:
           return {
             success: false,
@@ -472,6 +475,95 @@ export class MacroToolExecutor {
       return {
         success: false,
         message: `Failed to convert column type: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+  }
+
+  /**
+   * Rename a column in a table instance
+   */
+  private static async executeRenameColumn(
+    params: { instanceId: string; oldColumnName: string; newColumnName: string },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string; result?: any }> {
+    console.log(`🏷️ Renaming column:`, params);
+    
+    try {
+      // Find the table instance
+      const tableInstance = currentInstances.find(
+        inst => inst.id === params.instanceId && inst.type === 'table'
+      ) as TableInstance | undefined;
+
+      if (!tableInstance) {
+        console.error(`❌ Table instance '${params.instanceId}' not found`);
+        return {
+          success: false,
+          message: `Table instance '${params.instanceId}' not found`
+        };
+      }
+
+      console.log(`📋 Found table with ${tableInstance.rows} rows, ${tableInstance.cols} columns`);
+      console.log(`🔍 Current column names:`, tableInstance.columnNames);
+
+      // Find the column index
+      const columnIndex = tableInstance.columnNames.indexOf(params.oldColumnName);
+      if (columnIndex === -1) {
+        console.error(`❌ Column '${params.oldColumnName}' not found`);
+        return {
+          success: false,
+          message: `Column '${params.oldColumnName}' not found in table '${params.instanceId}'. Available columns: ${tableInstance.columnNames.join(', ')}`
+        };
+      }
+
+      // Check if new column name already exists
+      if (tableInstance.columnNames.includes(params.newColumnName)) {
+        console.error(`❌ Column name '${params.newColumnName}' already exists`);
+        return {
+          success: false,
+          message: `Column name '${params.newColumnName}' already exists in table '${params.instanceId}'`
+        };
+      }
+
+      console.log(`📍 Column '${params.oldColumnName}' found at index ${columnIndex}, renaming to '${params.newColumnName}'`);
+
+      // Update column names
+      const updatedColumnNames = [...tableInstance.columnNames];
+      updatedColumnNames[columnIndex] = params.newColumnName;
+
+      console.log(`🏷️ Updated column names:`, updatedColumnNames);
+
+      // Create updated table instance
+      const updatedTable: TableInstance = {
+        ...tableInstance,
+        columnNames: updatedColumnNames
+      };
+
+      console.log(`✅ Table updated successfully`);
+
+      // Update instances
+      const updatedInstances = currentInstances.map(inst => 
+        inst.id === params.instanceId ? updatedTable : inst
+      );
+      updateInstances(updatedInstances);
+
+      console.log(`🎉 Column rename completed successfully`);
+
+      return {
+        success: true,
+        message: `Renamed column '${params.oldColumnName}' to '${params.newColumnName}' in table '${params.instanceId}'`,
+        result: {
+          action: 'renameColumn',
+          instanceId: params.instanceId,
+          oldColumnName: params.oldColumnName,
+          newColumnName: params.newColumnName
+        }
+      };
+    } catch (error) {
+      console.error(`💥 Column rename error:`, error);
+      return {
+        success: false,
+        message: `Failed to rename column: ${error instanceof Error ? error.message : String(error)}`
       };
     }
   }
@@ -1010,32 +1102,53 @@ export class MacroToolExecutor {
    * Merge multiple instances using table join functionality
    */
   private static async executeMergeInstances(
-    params: { sourceInstanceIds: string[]; mergeStrategy: string; joinColumn?: string; newInstanceName?: string }, 
+    params: { 
+      sourceInstanceIds: string[]; 
+      mergeStrategy: string; 
+      joinColumns?: { leftColumn: string; rightColumn: string }; 
+      newInstanceName?: string 
+    }, 
     currentInstances: Instance[], 
     updateInstances: (newInstances: Instance[]) => void
   ): Promise<{ success: boolean; message: string; result?: any }> {
+    console.log(`🔗 Merging instances:`, params);
+    
     try {
-      const sourceInstances = params.sourceInstanceIds.map(id => 
-        currentInstances.find(inst => inst.id === id && inst.type === 'table')
-      ).filter(inst => inst !== undefined) as TableInstance[];
-      
-      if (sourceInstances.length < 2) {
+      if (params.sourceInstanceIds.length !== 2) {
         return {
           success: false,
-          message: `Need at least 2 table instances for merging. Found ${sourceInstances.length} valid tables.`
+          message: `Exactly 2 table instances required for merging. Received ${params.sourceInstanceIds.length} instances.`
         };
       }
 
-      const leftTable = sourceInstances[0];
-      const rightTable = sourceInstances[1];
+      const leftTable = currentInstances.find(inst => 
+        inst.id === params.sourceInstanceIds[0] && inst.type === 'table'
+      ) as TableInstance | undefined;
       
+      const rightTable = currentInstances.find(inst => 
+        inst.id === params.sourceInstanceIds[1] && inst.type === 'table'
+      ) as TableInstance | undefined;
+      
+      if (!leftTable || !rightTable) {
+        return {
+          success: false,
+          message: `Could not find both source tables. Left: ${leftTable ? 'found' : 'missing'}, Right: ${rightTable ? 'found' : 'missing'}`
+        };
+      }
+
+      console.log(`📊 Left table: ${leftTable.rows} rows, ${leftTable.cols} columns`);
+      console.log(`📊 Right table: ${rightTable.rows} rows, ${rightTable.cols} columns`);
+      console.log(`🏷️ Left columns: ${leftTable.columnNames?.join(', ')}`);
+      console.log(`🏷️ Right columns: ${rightTable.columnNames?.join(', ')}`);
+
       let mergedTable: TableInstance;
       const mergedTableId = params.newInstanceName || `merged_${Date.now()}`;
 
       if (params.mergeStrategy === 'append' || params.mergeStrategy === 'union') {
         // Union: combine all rows (assuming compatible structure)
+        console.log(`🔄 Performing ${params.mergeStrategy} operation`);
+        
         const leftNames = leftTable.columnNames || Array.from({ length: leftTable.cols }, (_, i) => `L${i + 1}`);
-        const rightNames = rightTable.columnNames || Array.from({ length: rightTable.cols }, (_, i) => `R${i + 1}`);
         
         // For union, use left table column structure
         const mergedCells = [...leftTable.cells, ...rightTable.cells];
@@ -1055,68 +1168,125 @@ export class MacroToolExecutor {
           height: Math.max((leftTable.height || 300), 300)
         };
         
-      } else if (params.mergeStrategy === 'join') {
-        // Inner join using specified column
-        if (!params.joinColumn) {
+        console.log(`✅ ${params.mergeStrategy} completed: ${mergedTable.rows} total rows`);
+        
+      } else if (params.mergeStrategy.includes('join')) {
+        // Join operations
+        if (!params.joinColumns) {
           return {
             success: false,
-            message: `Join column is required for 'join' merge strategy`
+            message: `Join columns are required for '${params.mergeStrategy}' strategy. Specify both leftColumn and rightColumn.`
           };
         }
 
-        const leftColIndex = leftTable.columnNames?.indexOf(params.joinColumn);
-        const rightColIndex = rightTable.columnNames?.indexOf(params.joinColumn);
+        const { leftColumn, rightColumn } = params.joinColumns;
+        
+        console.log(`🔄 Performing ${params.mergeStrategy} on ${leftColumn} = ${rightColumn}`);
+
+        const leftColIndex = leftTable.columnNames?.indexOf(leftColumn);
+        const rightColIndex = rightTable.columnNames?.indexOf(rightColumn);
         
         if (leftColIndex === undefined || leftColIndex === -1) {
           return {
             success: false,
-            message: `Join column '${params.joinColumn}' not found in left table`
+            message: `Join column '${leftColumn}' not found in left table '${params.sourceInstanceIds[0]}'. Available columns: ${leftTable.columnNames?.join(', ')}`
           };
         }
         
         if (rightColIndex === undefined || rightColIndex === -1) {
           return {
             success: false,
-            message: `Join column '${params.joinColumn}' not found in right table`
+            message: `Join column '${rightColumn}' not found in right table '${params.sourceInstanceIds[1]}'. Available columns: ${rightTable.columnNames?.join(', ')}`
           };
         }
 
-        // Perform inner join
+        // Perform join based on strategy
         const joinedRows: any[][] = [];
         const leftNames = leftTable.columnNames || Array.from({ length: leftTable.cols }, (_, i) => `L${i + 1}`);
         const rightNames = rightTable.columnNames || Array.from({ length: rightTable.cols }, (_, i) => `R${i + 1}`);
         
-        // Combined column names (exclude right join column to avoid duplication)
-        const rightNamesExcludingJoinCol = rightNames.filter((_, index) => index !== rightColIndex);
-        const mergedColumnNames = [...leftNames, ...rightNamesExcludingJoinCol];
+        // Combined column names (rename right join column to avoid conflict)
+        const rightNamesAdjusted = rightNames.map((name, index) => 
+          index === rightColIndex ? `${rightTable.id}_${name}` : name
+        );
+        const mergedColumnNames = [...leftNames, ...rightNamesAdjusted];
+        
+        // Build lookup map for right table for efficient joining
+        const rightTableLookup = new Map<string, any[][]>();
+        for (let rightRow = 0; rightRow < rightTable.rows; rightRow++) {
+          const rightRowData = rightTable.cells[rightRow] || [];
+          const rightKeyCell = rightRowData[rightColIndex];
+          const rightKey = rightKeyCell && rightKeyCell.type === 'text' ? String(rightKeyCell.content).trim() : '';
+          
+          if (rightKey) {
+            if (!rightTableLookup.has(rightKey)) {
+              rightTableLookup.set(rightKey, []);
+            }
+            rightTableLookup.get(rightKey)!.push(rightRowData);
+          }
+        }
+        
+        console.log(`🔍 Built lookup table with ${rightTableLookup.size} unique keys`);
+        
+        let matchedRows = 0;
         
         for (let leftRow = 0; leftRow < leftTable.rows; leftRow++) {
           const leftRowData = leftTable.cells[leftRow] || [];
           const leftKeyCell = leftRowData[leftColIndex];
-          const leftKey = leftKeyCell && leftKeyCell.type === 'text' ? leftKeyCell.content : '';
+          const leftKey = leftKeyCell && leftKeyCell.type === 'text' ? String(leftKeyCell.content).trim() : '';
           
-          if (!leftKey) continue;
+          const rightMatches = rightTableLookup.get(leftKey) || [];
           
-          for (let rightRow = 0; rightRow < rightTable.rows; rightRow++) {
-            const rightRowData = rightTable.cells[rightRow] || [];
-            const rightKeyCell = rightRowData[rightColIndex];
-            const rightKey = rightKeyCell && rightKeyCell.type === 'text' ? rightKeyCell.content : '';
-            
-            if (leftKey === rightKey) {
-              // Match found - combine rows (exclude right join column)
-              const rightRowExcludingJoinCol = rightRowData.filter((_, index) => index !== rightColIndex);
-              const combinedRow = [...leftRowData, ...rightRowExcludingJoinCol];
+          if (rightMatches.length > 0) {
+            // Found matches
+            matchedRows++;
+            for (const rightRowData of rightMatches) {
+              const combinedRow = [...leftRowData, ...rightRowData];
               joinedRows.push(combinedRow);
+            }
+          } else if (params.mergeStrategy === 'left_join') {
+            // Left join: include left row even without match, pad with nulls
+            const paddedRightRow = new Array(rightTable.cols).fill({ type: 'text', content: '' });
+            const combinedRow = [...leftRowData, ...paddedRightRow];
+            joinedRows.push(combinedRow);
+          }
+          // For inner_join, we skip unmatched left rows
+        }
+        
+        // For right_join, add unmatched right rows
+        if (params.mergeStrategy === 'right_join') {
+          const usedRightKeys = new Set<string>();
+          
+          // Mark all right keys that were matched
+          for (let leftRow = 0; leftRow < leftTable.rows; leftRow++) {
+            const leftRowData = leftTable.cells[leftRow] || [];
+            const leftKeyCell = leftRowData[leftColIndex];
+            const leftKey = leftKeyCell && leftKeyCell.type === 'text' ? String(leftKeyCell.content).trim() : '';
+            if (rightTableLookup.has(leftKey)) {
+              usedRightKeys.add(leftKey);
+            }
+          }
+          
+          // Add unmatched right rows
+          for (const [rightKey, rightRows] of rightTableLookup.entries()) {
+            if (!usedRightKeys.has(rightKey)) {
+              for (const rightRowData of rightRows) {
+                const paddedLeftRow = new Array(leftTable.cols).fill({ type: 'text', content: '' });
+                const combinedRow = [...paddedLeftRow, ...rightRowData];
+                joinedRows.push(combinedRow);
+              }
             }
           }
         }
         
-        if (joinedRows.length === 0) {
+        if (joinedRows.length === 0 && params.mergeStrategy === 'inner_join') {
           return {
             success: false,
-            message: `No matching rows found for join on column '${params.joinColumn}'`
+            message: `No matching rows found for ${params.mergeStrategy} on '${leftColumn}' = '${rightColumn}'`
           };
         }
+        
+        console.log(`✅ ${params.mergeStrategy} completed: ${matchedRows} left rows matched, ${joinedRows.length} result rows`);
         
         mergedTable = {
           id: mergedTableId,
@@ -1126,36 +1296,40 @@ export class MacroToolExecutor {
           cols: mergedColumnNames.length,
           cells: joinedRows,
           columnNames: mergedColumnNames,
-          columnTypes: [...(leftTable.columnTypes || []), ...(rightTable.columnTypes || []).filter((_, index) => index !== rightColIndex)],
+          columnTypes: [...(leftTable.columnTypes || []), ...(rightTable.columnTypes || [])],
           x: Math.max((leftTable.x || 0), (rightTable.x || 0)) + 50,
           y: Math.max((leftTable.y || 0), (rightTable.y || 0)) + 50,
-          width: Math.max((leftTable.width || 400), 400),
-          height: Math.max((leftTable.height || 300), 300)
+          width: Math.max((leftTable.width || 400), 500),
+          height: Math.max((leftTable.height || 300), 400)
         };
         
       } else {
         return {
           success: false,
-          message: `Unsupported merge strategy: ${params.mergeStrategy}. Supported strategies: append, union, join`
+          message: `Unsupported merge strategy: ${params.mergeStrategy}. Supported strategies: append, union, inner_join, left_join, right_join`
         };
       }
 
       // Add merged table to context
       updateInstances([...currentInstances, mergedTable]);
 
+      console.log(`🎉 Merge operation completed successfully`);
+
       return {
         success: true,
-        message: `Merged ${sourceInstances.length} tables using '${params.mergeStrategy}' strategy. Created table '${mergedTableId}' with ${mergedTable.rows} rows.`,
+        message: `Merged tables '${params.sourceInstanceIds[0]}' and '${params.sourceInstanceIds[1]}' using '${params.mergeStrategy}' strategy. Created table '${mergedTableId}' with ${mergedTable.rows} rows and ${mergedTable.cols} columns.`,
         result: {
           action: 'mergeInstances',
           sourceInstanceIds: params.sourceInstanceIds,
           newInstanceId: mergedTableId,
           mergeStrategy: params.mergeStrategy,
+          joinColumns: params.joinColumns,
           resultRows: mergedTable.rows,
           resultCols: mergedTable.cols
         }
       };
     } catch (error) {
+      console.error(`💥 Merge instances error:`, error);
       return {
         success: false,
         message: `Failed to merge instances: ${error instanceof Error ? error.message : String(error)}`

@@ -308,12 +308,12 @@ export const MACRO_TOOLS: MacroTool[] = [
   },
   {
     name: "mergeInstances",
-    description: "Combines multiple table instances into one. Supports union (append rows) and join operations with specified join columns.",
+    description: "Combines multiple table instances into one. Supports union (append rows) and various join operations with flexible column mapping.",
     parameters: [
       {
         name: "sourceInstanceIds",
         type: "array",
-        description: "Array of table instance IDs to merge (at least 2 required)",
+        description: "Array of exactly 2 table instance IDs to merge. First table is the 'left' table, second is the 'right' table.",
         required: true
       },
       {
@@ -321,12 +321,12 @@ export const MACRO_TOOLS: MacroTool[] = [
         type: "string",
         description: "How to combine the tables",
         required: true,
-        options: ["append", "union", "join"]
+        options: ["append", "union", "inner_join", "left_join", "right_join"]
       },
       {
-        name: "joinColumn",
-        type: "string",
-        description: "Column name to join on (required for 'join' strategy, must exist in both tables)",
+        name: "joinColumns",
+        type: "object",
+        description: "For join operations: specify which columns to join on. Format: {\"leftColumn\": \"actual_column_name_in_left_table\", \"rightColumn\": \"actual_column_name_in_right_table\"}",
         required: false
       },
       {
@@ -337,15 +337,52 @@ export const MACRO_TOOLS: MacroTool[] = [
       }
     ],
     examples: [
-      'mergeInstances(["Table1", "Table2"], "join", "A", "Combined Table")',
-      'mergeInstances(["Table3", "Table4"], "union", null, "Full Dataset")',
-      'mergeInstances(["Table1", "Table2"], "join", "B", "Merged Analysis")'
+      'mergeInstances(["Table1", "Table2"], "inner_join", {"leftColumn": "Customer ID", "rightColumn": "ID"}, "Customer Orders")',
+      'mergeInstances(["Sales_Data", "Product_Info"], "left_join", {"leftColumn": "ProductCode", "rightColumn": "Code"}, "Sales with Products")',
+      'mergeInstances(["Table3", "Table4"], "union", null, "Combined Dataset")',
+      'mergeInstances(["Q1_Sales", "Q2_Sales"], "append", null, "H1_Sales")'
     ],
     constraints: [
+      "Exactly 2 source instances required",
       "All source instances must exist and be table type",
-      "For 'join' strategy: joinColumn must exist in all source tables",
-      "For 'union'/'append' strategy: tables should have compatible column structures",
-      "At least 2 source instances required for merging"
+      "For join strategies: joinColumns must specify both leftColumn and rightColumn with actual column names from the respective tables",
+      "For union/append strategies: tables should have compatible column structures",
+      "Column names in joinColumns must exist in their respective tables"
+    ]
+  },
+  {
+    name: "renameColumn",
+    description: "Renames a column in a table instance. Useful for standardizing column names before merging or improving data readability.",
+    parameters: [
+      {
+        name: "instanceId",
+        type: "string",
+        description: "The ID of the table instance containing the column to rename",
+        required: true
+      },
+      {
+        name: "oldColumnName",
+        type: "string",
+        description: "The current name of the column to rename (must be exact column name like 'A', 'B', 'C')",
+        required: true
+      },
+      {
+        name: "newColumnName",
+        type: "string",
+        description: "The new name for the column",
+        required: true
+      }
+    ],
+    examples: [
+      'renameColumn("Table1", "A", "Product Name")',
+      'renameColumn("Table2", "B", "Price")',
+      'renameColumn("Table1", "C", "Date")'
+    ],
+    constraints: [
+      "Instance must exist and be a table type",
+      "Old column name must exist in the specified table",
+      "New column name should be descriptive and unique within the table",
+      "Cannot rename to an existing column name"
     ]
   },
   {
@@ -451,7 +488,9 @@ When suggesting a macro action, include a "toolCall" field in your suggestion:
 - Use "exportData" for suggesting data sharing or backup workflows
 - Use "duplicateInstance" for suggesting experimentation or version control
 - Use "searchAndReplace" for suggesting data cleaning operations
-- Use "mergeInstances" for suggesting data consolidation workflows
+- Use "mergeInstances" for suggesting data consolidation workflows (supports different join column names and multiple join types)
+- Use "convertColumnType" for suggesting data type conversions (text to numbers, etc.)
+- Use "renameColumn" for suggesting column header standardization and clarity improvements
 
 **IMPORTANT:** Always ensure the tool call parameters match the exact specifications above and that the suggested action provides genuine value to the user's workflow.
 `;

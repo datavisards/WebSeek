@@ -78,6 +78,7 @@
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
 }
 
@@ -131,8 +132,7 @@
   justify-content: center;
   position: relative;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-height: 32px; /* Minimum height for normal headers */
 }
 
 .grid-header:hover {
@@ -142,8 +142,10 @@
 .column-header {
   width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .column-header span {
@@ -151,6 +153,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: inline-block;
 }
 
 .grid-header::after {

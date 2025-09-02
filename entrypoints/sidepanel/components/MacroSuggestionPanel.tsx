@@ -82,9 +82,11 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
     });
     
     if (suggestion.toolSequence && onExecuteToolSequence) {
-      console.log('[MacroSuggestionPanel] Executing tool sequence:', suggestion.toolSequence);
-      console.log('[MacroSuggestionPanel] First step parameters:', suggestion.toolSequence.steps?.[0]?.toolCall?.parameters);
+      console.log('[MacroSuggestionPanel] ⚡ TRIGGERING TOOL SEQUENCE EXECUTION:', suggestion.toolSequence);
+      console.log('[MacroSuggestionPanel] ⚡ Suggestion ID:', suggestion.id);
+      console.log('[MacroSuggestionPanel] ⚡ First step parameters:', suggestion.toolSequence.steps?.[0]?.toolCall?.parameters);
       onExecuteToolSequence(suggestion.toolSequence, suggestion.id);
+      console.log('[MacroSuggestionPanel] ⚡ TOOL SEQUENCE EXECUTION TRIGGERED');
     } else if (suggestion.toolCall) {
       console.log('[MacroSuggestionPanel] Executing single tool call:', suggestion.toolCall);
       onExecuteTool(suggestion.toolCall, suggestion.id);

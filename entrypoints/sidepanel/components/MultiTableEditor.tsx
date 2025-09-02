@@ -2048,7 +2048,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
                     </div>
                     
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <button 
+                      {/* <button 
                         onClick={() => {
                           console.log(`[MultiTableEditor] Saving individual table: ${table.id} (${table.originalName})`);
                           const newTableId = onSaveTable(table.id, table.originalName, table.isDirty);
@@ -2083,7 +2083,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
                         }}
                       >
                         Save
-                      </button>
+                      </button> */}
                       
                       {table.isNew && (
                         <button 

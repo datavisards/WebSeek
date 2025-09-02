@@ -1036,7 +1036,10 @@ const SidePanel = () => {
   const handleToolExecutionWithConfirmation = handleExecuteTool;
 
   const handleExecuteToolSequence = useCallback(async (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => {
-    console.log('[SidePanel] Executing tool sequence:', toolSequence, 'for suggestion:', suggestionId);
+    console.log('[SidePanel] ⚡ TOOL SEQUENCE EXECUTION STARTED:', toolSequence, 'for suggestion:', suggestionId);
+    console.log('[SidePanel] ⚡ Current instances count:', instances.length);
+    console.log('[SidePanel] ⚡ Tool sequence goal:', toolSequence.goal);
+    console.log('[SidePanel] ⚡ Number of steps:', toolSequence.steps.length);
     
     try {
       const { executeCompositeSuggestion } = await import('./macro-tool-executor');

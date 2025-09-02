@@ -1469,13 +1469,25 @@ const TableGrid: React.FC<TableGridProps> = ({
     }
   }, [openFilterDropdown, transformPanelColumn]);
 
+  // Calculate dynamic header height based on column names
+  const headerHeight = useMemo(() => {
+    const maxColumnNameLength = Math.max(
+      ...Array.from({ length: effectiveTable.cols }, (_, i) => getColumnName(i).length)
+    );
+    // Base height: 32px, add extra height for very long column names
+    if (maxColumnNameLength > 20) return 50;
+    if (maxColumnNameLength > 15) return 42;
+    if (maxColumnNameLength > 10) return 36;
+    return 32;
+  }, [effectiveTable.cols, table.columnNames]);
+
   return (
     <div
       className="table-grid"
       style={{
         display: 'grid',
         gridTemplateColumns: `50px repeat(${effectiveTable.cols}, ${effectiveCellWidth}px)`,
-        gridTemplateRows: `30px repeat(${effectiveTable.rows}, ${effectiveCellHeight}px)`,
+        gridTemplateRows: `${headerHeight}px repeat(${effectiveTable.rows}, ${effectiveCellHeight}px)`,
         border: '1px solid #ccc',
         width: 'fit-content',
         flex: '1 1 auto',
@@ -1540,6 +1552,7 @@ const TableGrid: React.FC<TableGridProps> = ({
           className={`grid-header column-header ${selectedColumns.has(colIndex) ? 'selected-header' : ''}`}
           onClick={(e) => handleColumnHeaderClick(colIndex, e)}
           onContextMenu={(e) => handleColumnContextMenu(e, colIndex)}
+          title={getColumnName(colIndex)} // Add title for CSS tooltip
           style={{
             gridRow: 1,
             gridColumn: colIndex + 2,
@@ -1554,8 +1567,27 @@ const TableGrid: React.FC<TableGridProps> = ({
             position: 'relative',
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            gap: '2px',
+            width: '100%',
+            height: '100%',
+            justifyContent: 'space-between',
+            minHeight: '28px' // Ensure minimum height for icons
+          }}>
+            {/* Column name section - takes available space */}
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '4px',
+              width: '100%',
+              justifyContent: 'center',
+              flex: '1',
+              minHeight: '16px',
+              overflow: 'hidden'
+            }}>
               {editingColumnName === colIndex ? (
                 <div
                   contentEditable
@@ -1565,13 +1597,14 @@ const TableGrid: React.FC<TableGridProps> = ({
                   onKeyDown={(e) => handleColumnNameKeyDown(e, colIndex)}
                   onClick={(e) => e.stopPropagation()}
                   style={{
-                    minWidth: '20px',
-                    maxWidth: '80px',  // Match the display span's maxWidth
+                    minWidth: '60px',
+                    maxWidth: '180px',  // Increased from 80px to allow longer names
+                    width: 'auto', // Allow dynamic width based on content
                     textAlign: 'center',
                     outline: 'none',
                     border: '1px solid #007acc',
                     borderRadius: '2px',
-                    padding: '1px 2px',
+                    padding: '1px 4px', // Slightly more padding
                     backgroundColor: 'white',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -1586,32 +1619,32 @@ const TableGrid: React.FC<TableGridProps> = ({
                   style={{ 
                     cursor: isReadOnly ? 'default' : 'pointer',
                     display: 'inline-block',
-                    fontSize: (() => {
-                      const columnName = getColumnName(colIndex);
-                      // More aggressive font sizing based on column name length
-                      if (columnName.length > 15) return '9px';
-                      if (columnName.length > 12) return '10px';
-                      if (columnName.length > 8) return '11px';
-                      return '12px'; // Default size, reduced from 13px
-                    })(),
-                    lineHeight: '1.0' // Tighter line height
+                    fontSize: '11px', // Slightly smaller to fit better
+                    lineHeight: '1.1',
+                    maxWidth: '100%',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    textAlign: 'center'
                   }}
                   title={(isReadOnly ? '' : 'Double-click to edit column name. ') + `Full name: ${getColumnName(colIndex)}`}
                 >
-                  {(() => {
-                    const columnName = getColumnName(colIndex);
-                    // More aggressive truncation for very long column names
-                    if (columnName.length > 18) {
-                      return columnName.substring(0, 15) + '...';
-                    } else if (columnName.length > 12) {
-                      return columnName.substring(0, 12) + '..';
-                    }
-                    return columnName;
-                  })()}
+                  {getColumnName(colIndex)} {/* Show full column name, let CSS handle truncation */}
                 </span>
               )}
+            </div>
+            
+            {/* Icons section - always visible at bottom */}
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '3px',
+              justifyContent: 'center',
+              flexShrink: 0,
+              height: '14px' // Fixed height for icons
+            }}>
               <span
-                style={{ cursor: 'pointer', fontSize: '12px', userSelect: 'none' }}
+                style={{ cursor: 'pointer', fontSize: '10px', userSelect: 'none' }}
                 onClick={e => {
                   e.stopPropagation();
                   handleSortClick(colIndex);
@@ -1643,8 +1676,8 @@ const TableGrid: React.FC<TableGridProps> = ({
                     }
                   }}
                   style={{
-                    width: '12px',
-                    height: '12px',
+                    width: '10px',
+                    height: '10px',
                     cursor: isReadOnly ? 'default' : 'pointer',
                     opacity: isReadOnly ? 0.6 : 1,
                     userSelect: 'none'
@@ -1662,8 +1695,8 @@ const TableGrid: React.FC<TableGridProps> = ({
                   }
                 }}
                 style={{
-                  width: '12px',
-                  height: '12px',
+                  width: '10px',
+                  height: '10px',
                   cursor: isReadOnly ? 'default' : 'pointer',
                   opacity: columnFilters.has(colIndex) ? 1 : 0.6,
                   userSelect: 'none'
@@ -1681,8 +1714,8 @@ const TableGrid: React.FC<TableGridProps> = ({
                   }
                 }}
                 style={{
-                  width: '12px',
-                  height: '12px',
+                  width: '10px',
+                  height: '10px',
                   cursor: isReadOnly ? 'default' : 'pointer',
                   opacity: transformPanelColumn === colIndex ? 1 : (isReadOnly ? 0.6 : 0.8),
                   userSelect: 'none',
