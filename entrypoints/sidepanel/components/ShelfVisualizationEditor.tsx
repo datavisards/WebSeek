@@ -541,11 +541,20 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
     if (isInteractive && stableInteractionConfig) {
       // Add tooltip for hover
       if (stableInteractionConfig.hover?.enabled) {
-        // Add tooltip to encoding
+        // Add tooltip to encoding - include ALL fields from the data, not just the ones used in the chart
         const tooltipFields = [];
-        if (shelves.x?.length) tooltipFields.push(shelves.x[0].id);
-        if (shelves.y?.length) tooltipFields.push(shelves.y[0].id);
-        if (shelves.color?.length) tooltipFields.push(shelves.color[0].id);
+        
+        // Get all field names from the first data source
+        if (firstDataSource && firstDataSource.length > 0) {
+          // Get all keys from the first row of data to include all attributes
+          const allFields = Object.keys(firstDataSource[0]);
+          tooltipFields.push(...allFields);
+        } else {
+          // Fallback to only chart fields if no data available
+          if (shelves.x?.length) tooltipFields.push(shelves.x[0].id);
+          if (shelves.y?.length) tooltipFields.push(shelves.y[0].id);
+          if (shelves.color?.length) tooltipFields.push(shelves.color[0].id);
+        }
 
         encoding.tooltip = tooltipFields.map(field => ({ field }));
       }

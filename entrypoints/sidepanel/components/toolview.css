@@ -28,6 +28,27 @@
   border-bottom: 2px solid #4a90e2;
 }
 
+.system-logs-btn {
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+.system-logs-btn:hover:not(.disabled) {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.system-logs-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .collapse-toggle-container {
     margin-left: auto;
     display: flex;

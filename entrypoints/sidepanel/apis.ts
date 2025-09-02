@@ -122,7 +122,7 @@ export async function chatWithAgent(
                     content: [{
                         type: "text",
                         text: userMessage
-                    }, ...imageContext]
+                    }]
                 },
             ],
             response_format: { type: 'json_object' },

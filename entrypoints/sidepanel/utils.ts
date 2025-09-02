@@ -669,13 +669,13 @@ export const generateInstanceContext = async (instances: Instance[]): Promise<an
     })
 
     // Add paragraph linking image IDs to imageContext indices
-    if (imageMap.size > 0) {
-        textContext += "Image Context Reference:\n";
-        Array.from(imageMap.entries()).forEach(([imageId, index]) => {
-            textContext += `Image ID "${imageId}" corresponds to image ${index} in the images you received.\n`;
-        });
-        textContext += "\n";
-    }
+    // if (imageMap.size > 0) {
+    //     textContext += "Image Context Reference:\n";
+    //     Array.from(imageMap.entries()).forEach(([imageId, index]) => {
+    //         textContext += `Image ID "${imageId}" corresponds to image ${index} in the images you received.\n`;
+    //     });
+    //     textContext += "\n";
+    // }
 
     return { imageContext, textContext };
 }

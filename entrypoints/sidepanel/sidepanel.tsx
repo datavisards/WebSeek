@@ -16,9 +16,24 @@ import { requestSuggestionRefinement as refinementAPI } from './refinement-api';
 import WorkspaceNameModal from './components/WorkspaceNameModal.tsx';
 import { updateInstances } from './utils';
 import { globalUndoManager } from './global-undo-manager';
+import { systemLogger } from './system-logger';
 
 const SidePanel = () => {
   console.log('[SidePanel] Component mounting/re-mounting');
+  
+  // Initialize system logging for this workspace session
+  useEffect(() => {
+    systemLogger.setContext(undefined, 'webseek_workspace');
+    systemLogger.logUserAction('component_mount', 'sidepanel', {
+      timestamp: new Date().toISOString()
+    });
+    
+    return () => {
+      systemLogger.logUserAction('component_unmount', 'sidepanel', {
+        timestamp: new Date().toISOString()
+      });
+    };
+  }, []);
   
   const [logs, setLogsInternal] = useState<string[]>([]);
   const logsRef = useRef<string[]>([]);
@@ -126,6 +141,7 @@ const SidePanel = () => {
 
   // Current page info for HTML context fetching
   const [currentPageInfo, setCurrentPageInfo] = useState<{pageId: string, url: string} | null>(null);
+  const currentPageInfoRef = useRef<{pageId: string, url: string} | null>(null);
 
   // Callbacks from InstanceView for programmatic control
   const instanceViewCallbacks = useRef<{
@@ -138,6 +154,31 @@ const SidePanel = () => {
   const multiTableEditorCallbacks = useRef<{
     markTableDirty: (tableId: string) => void;
   } | null>(null);
+
+  // Helper function to update currentPageInfo both in state and ref
+  const updateCurrentPageInfo = useCallback((newPageInfo: {pageId: string, url: string} | null) => {
+    console.log('[SidePanel] updateCurrentPageInfo called:', { 
+      from: currentPageInfoRef.current, 
+      to: newPageInfo,
+      caller: new Error().stack?.split('\n')[2]?.trim() // Add caller info for debugging
+    });
+    setCurrentPageInfo(newPageInfo);
+    currentPageInfoRef.current = newPageInfo;
+    
+    // Update proactive service with current page info
+    proactiveService.updateContext({
+      currentPageInfo: newPageInfo
+    });
+    
+    // Log the page change for system logging
+    if (newPageInfo) {
+      systemLogger.logUserAction('page_activated', 'SidePanel', {
+        pageId: newPageInfo.pageId,
+        url: newPageInfo.url,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, []);
 
   // Handle external table modifications (e.g., from chat)
   const handleTableModified = useCallback((tableId: string) => {
@@ -170,6 +211,18 @@ const SidePanel = () => {
       previousLogs,
       updatedLogs,
       recordInUndo
+    });
+    
+    // System logging for data analysis
+    systemLogger.logUserAction('add_log', 'history', {
+      message,
+      actionDetails,
+      recordInUndo,
+      logCount: updatedLogs.length
+    }, {
+      instanceCount: instances.length,
+      tableCount: instances.filter(i => i.type === 'table').length,
+      visualizationCount: instances.filter(i => i.type === 'visualization').length
     });
     
     setLogsInternal(updatedLogs);
@@ -315,6 +368,13 @@ const SidePanel = () => {
       { workspaceName: name }
     );
     
+    // System logging
+    systemLogger.logUserAction('workspace_named', 'workspace', {
+      workspaceName: name,
+      nameLength: name.length
+    });
+    systemLogger.setContext(undefined, name);
+    
     addLog(`Named workspace "${name}"`, {
       type: 'workspace-titled',
       context: { name },
@@ -398,12 +458,7 @@ const SidePanel = () => {
         if (response?.pageId) {
           console.log('[SidePanel] Got pageId from content script:', response.pageId);
           const newPageInfo = { pageId: response.pageId, url: tab.url };
-          setCurrentPageInfo(newPageInfo);
-          
-          // Update proactive service with current page info
-          proactiveService.updateContext({
-            currentPageInfo: newPageInfo
-          });
+          updateCurrentPageInfo(newPageInfo);
           
           // Now fetch the HTML content using the pageId
           const fetchHtmlContent = async (retryCount = 0) => {
@@ -479,7 +534,7 @@ const SidePanel = () => {
     initializeCurrentPageContext();
   }, [initializeCurrentPageContext]);
 
-  // Listen for tab navigation to automatically update HTML context
+  // Listen for tab navigation and activation to automatically update HTML context
   useEffect(() => {
     const handleTabUpdated = (tabId: number, changeInfo: any, tab: any) => {
       // Only process complete navigation events for the current tab
@@ -487,7 +542,7 @@ const SidePanel = () => {
         chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
           if (tabs[0]?.id === tabId) {
             console.log('[SidePanel] Navigation detected to:', tab.url);
-            console.log('[SidePanel] Current page info before update:', currentPageInfo);
+            console.log('[SidePanel] Current page info before update:', currentPageInfoRef.current);
             // Re-initialize page context for the new URL
             await initializeCurrentPageContext();
             console.log('[SidePanel] Re-initialized page context after navigation');
@@ -496,11 +551,38 @@ const SidePanel = () => {
       }
     };
 
-    // Add listener for tab updates (navigation)
+    const handleTabActivated = (activeInfo: { tabId: number; windowId: number }) => {
+      // When user switches to a different tab, update the page context
+      chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+        if (tabs[0]) {
+          const currentTab = tabs[0];
+          console.log('[SidePanel] Tab activation detected:', { 
+            tabId: activeInfo.tabId, 
+            url: currentTab.url,
+            currentPageInfo: currentPageInfoRef.current 
+          });
+          
+          // Check if we're switching to a different page
+          const currentPageUrl = currentPageInfoRef.current?.url;
+          if (currentTab.url && currentTab.url !== currentPageUrl) {
+            console.log('[SidePanel] Switching to different page, re-initializing context');
+            await initializeCurrentPageContext();
+          } else if (currentTab.url === currentPageUrl) {
+            console.log('[SidePanel] Same page detected, no context re-initialization needed');
+          } else {
+            console.log('[SidePanel] Tab has no URL or invalid state, skipping');
+          }
+        }
+      });
+    };
+
+    // Add listeners for both tab updates (navigation) and activation (switching)
     chrome.tabs.onUpdated.addListener(handleTabUpdated);
+    chrome.tabs.onActivated.addListener(handleTabActivated);
 
     return () => {
       chrome.tabs.onUpdated.removeListener(handleTabUpdated);
+      chrome.tabs.onActivated.removeListener(handleTabActivated);
     };
   }, [initializeCurrentPageContext]);
 
@@ -556,6 +638,32 @@ const SidePanel = () => {
         return updatedInstances;
       });
       
+      // Check if any tables were modified and mark them as dirty in the editor
+      if (suggestion.instances) {
+        const modifiedTableIds = new Set<string>();
+        
+        suggestion.instances.forEach(instanceEvent => {
+          if (instanceEvent.action === 'update' && instanceEvent.targetId) {
+            // Find the instance being updated to check if it's a table
+            const targetInstance = instances.find(inst => inst.id === instanceEvent.targetId);
+            if (targetInstance && targetInstance.type === 'table') {
+              modifiedTableIds.add(instanceEvent.targetId);
+            }
+          } else if (instanceEvent.action === 'add' && instanceEvent.instance?.type === 'table') {
+            // New table created
+            if (instanceEvent.instance.id) {
+              modifiedTableIds.add(instanceEvent.instance.id);
+            }
+          }
+        });
+        
+        // Mark all modified tables as dirty
+        modifiedTableIds.forEach(tableId => {
+          console.log(`[SidePanel] Suggestion modified table ${tableId}, marking as dirty`);
+          handleTableModified(tableId);
+        });
+      }
+      
       // Only log for suggestions that don't have tool sequences (to avoid duplicate logs)
       // Tool sequence suggestions will be logged when the sequence executes successfully
       if (!suggestion.toolSequence) {
@@ -579,6 +687,22 @@ const SidePanel = () => {
           .flat();
         
         addLog(`Applied suggestion${updatedCells.length > 0 ? ` - Updated cells: ${updatedCells.join(', ')}` : ''}`);
+        
+        // System logging for suggestion acceptance
+        systemLogger.logUserAction('suggestion_accepted', 'proactive_suggestions', {
+          suggestionId: suggestion.id,
+          suggestionScope: suggestion.scope,
+          suggestionModality: suggestion.modality,
+          suggestionCategory: suggestion.category,
+          confidence: suggestion.confidence,
+          updatedCellsCount: updatedCells.length,
+          hasToolSequence: !!suggestion.toolSequence,
+          hasToolCall: !!suggestion.toolCall,
+          instancesAffected: suggestion.instances?.length || 0
+        }, {
+          instanceCount: instances.length,
+          tableCount: instances.filter(i => i.type === 'table').length
+        });
       }
     });
 
@@ -701,12 +825,60 @@ const SidePanel = () => {
     };    // Listen for instance operations from undo/redo system
     const handleInstanceOperations = (event: CustomEvent) => {
       console.log('[SidePanel] Applying instance operations from undo/redo:', event.detail.operations);
-      // Apply operations by updating instances state directly
-      // For now, we'll implement basic operations - this can be extended
-      event.detail.operations.forEach((operation: any) => {
-        console.log('[SidePanel] Processing operation:', operation);
-        // Operations will be applied through the existing state management
-      });
+      const operations = event.detail.operations;
+      
+      if (operations && operations.length > 0) {
+        // Apply operations by updating instances state directly (don't record this as it's from undo/redo)
+        setInstancesInternal(currentInstances => {
+          const newInstances = [...currentInstances];
+          const modifiedTableIds = new Set<string>();
+          
+          operations.forEach((operation: any) => {
+            console.log('[SidePanel] Processing operation:', operation);
+            
+            // Handle different operation types
+            if (operation.type === 'create' && operation.instance) {
+              // Add new instance
+              newInstances.push(operation.instance);
+              if (operation.instance.type === 'table') {
+                modifiedTableIds.add(operation.instance.id);
+              }
+            } else if (operation.type === 'update' && operation.instanceId) {
+              // Update existing instance
+              const index = newInstances.findIndex(inst => inst.id === operation.instanceId);
+              if (index !== -1) {
+                if (operation.instance) {
+                  newInstances[index] = operation.instance;
+                } else if (operation.updates) {
+                  newInstances[index] = { ...newInstances[index], ...operation.updates };
+                }
+                if (newInstances[index].type === 'table') {
+                  modifiedTableIds.add(operation.instanceId);
+                }
+              }
+            } else if (operation.type === 'delete' && operation.instanceId) {
+              // Remove instance
+              const index = newInstances.findIndex(inst => inst.id === operation.instanceId);
+              if (index !== -1) {
+                if (newInstances[index].type === 'table') {
+                  modifiedTableIds.add(operation.instanceId);
+                }
+                newInstances.splice(index, 1);
+              }
+            }
+          });
+          
+          // Mark affected tables as dirty
+          if (modifiedTableIds.size > 0) {
+            console.log('[SidePanel] Instance operations modified tables:', Array.from(modifiedTableIds));
+            modifiedTableIds.forEach(tableId => {
+              handleTableModified(tableId);
+            });
+          }
+          
+          return newInstances;
+        });
+      }
     };
 
     document.addEventListener('applyGlobalState', handleGlobalStateChange as EventListener);
@@ -1185,6 +1357,18 @@ const SidePanel = () => {
           type: 'tool-sequence-executed',
           context: { toolSequence, result },
           metadata: { goal: toolSequence.goal, steps: toolSequence.steps.length }
+        });
+        
+        // System logging for macro tool execution
+        systemLogger.logAIInteraction('macro_execution', {
+          toolSequenceGoal: toolSequence.goal,
+          stepsCount: toolSequence.steps.length,
+          success: result.success,
+          suggestionId,
+          executionResult: result.message
+        }, {
+          startTime: Date.now(), // This would ideally be captured at the start
+          endTime: Date.now()
         });
         
         console.log('[SidePanel] Successfully executed tool sequence and removed suggestion:', suggestionId);

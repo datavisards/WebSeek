@@ -4,6 +4,7 @@ import { browser } from 'wxt/browser';
 import TableGrid from './tablegrid';
 import { TableInstance, Instance, ProactiveSuggestion, ColumnType } from '../types';
 import { indexToLetters, normalizeTableInstance } from '../utils';
+import { systemLogger } from '../system-logger';
 import './MultiTableEditor.css';
 
 // Types for multi-table operations
@@ -265,6 +266,13 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     
     if (!table) return;
     
+    // Log table opening action
+    systemLogger.logUserAction('table_open', 'MultiTableEditor', {
+      tableId,
+      tableSize: `${table.rows}x${table.cols}`,
+      timestamp: new Date().toISOString()
+    });
+    
     const newOpenTable: OpenTable = {
       id: tableId,
       instance: normalizeTableInstance(table),
@@ -283,9 +291,24 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     if (table && table.isDirty) {
       // Show confirmation dialog for unsaved changes
       if (!confirm(`Table "${table.originalName}" has unsaved changes. Close anyway?`)) {
+        // Log cancelled close action
+        systemLogger.logUserAction('table_close_cancelled', 'MultiTableEditor', {
+          tableId,
+          tableName: table.originalName,
+          reason: 'unsaved_changes',
+          timestamp: new Date().toISOString()
+        });
         return;
       }
     }
+    
+    // Log table closing action
+    systemLogger.logUserAction('table_close', 'MultiTableEditor', {
+      tableId,
+      tableName: table?.originalName || 'Unknown',
+      hadUnsavedChanges: table?.isDirty || false,
+      timestamp: new Date().toISOString()
+    });
     
     setOpenTables(prev => prev.filter(t => t.id !== tableId));
     
@@ -319,6 +342,16 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       console.log(`[MultiTableEditor] No activeTabId, returning`);
       return;
     }
+    
+    // Log instance addition to table
+    systemLogger.logUserAction('table_add_instance', 'MultiTableEditor', {
+      tableId: activeTabId,
+      instanceType: instance.type,
+      instanceId: instance.id,
+      targetCell: { row, col },
+      timestamp: new Date().toISOString()
+    });
+    
     console.log(`[MultiTableEditor] Calling onAddToTable for ${activeTabId}`);
     onAddToTable(activeTabId, instance, row, col);
     console.log(`[MultiTableEditor] Calling markTableDirty for ${activeTabId}`);
@@ -331,6 +364,14 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       console.log(`[MultiTableEditor] No activeTabId, returning`);
       return;
     }
+    
+    // Log cell content removal
+    systemLogger.logUserAction('table_remove_cell', 'MultiTableEditor', {
+      tableId: activeTabId,
+      targetCell: { row, col },
+      timestamp: new Date().toISOString()
+    });
+    
     console.log(`[MultiTableEditor] Calling onRemoveCellContent for ${activeTabId}`);
     onRemoveCellContent(activeTabId, row, col);
     console.log(`[MultiTableEditor] Calling markTableDirty for ${activeTabId}`);
@@ -343,6 +384,16 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       console.log(`[MultiTableEditor] No activeTabId, returning`);
       return;
     }
+    
+    // Log cell content editing
+    systemLogger.logUserAction('table_edit_cell', 'MultiTableEditor', {
+      tableId: activeTabId,
+      targetCell: { row, col },
+      newValue: newValue.length > 50 ? newValue.substring(0, 50) + '...' : newValue,
+      valueLength: newValue.length,
+      timestamp: new Date().toISOString()
+    });
+    
     console.log(`[MultiTableEditor] Calling onEditCellContent for ${activeTabId}`);
     onEditCellContent(activeTabId, row, col, newValue);
     console.log(`[MultiTableEditor] Calling markTableDirty for ${activeTabId}`);
@@ -471,6 +522,15 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       tableMetadata: copiedDataToSet.tableMetadata
     });
     
+    // Log copy operation
+    systemLogger.logUserAction('table_copy', 'MultiTableEditor', {
+      tableId: activeTabId,
+      copyType: copiedDataToSet.type,
+      dataSize: copiedDataToSet.data ? `${copiedDataToSet.data.length}x${copiedDataToSet.data[0]?.length || 0}` : '0x0',
+      sourceRange: copiedDataToSet.sourceRange,
+      timestamp: new Date().toISOString()
+    });
+    
     setCopiedData(copiedDataToSet);
     
     console.log('=== COPY OPERATION END ===');
@@ -492,6 +552,15 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     
     const table = openTables.find(t => t.id === currentActiveTabId)?.instance;
     if (!table) return;
+    
+    // Log paste operation
+    systemLogger.logUserAction('table_paste', 'MultiTableEditor', {
+      tableId: currentActiveTabId,
+      isInternalCopy,
+      dataSize: `${dataToPaste.length}x${dataToPaste[0]?.length || 0}`,
+      targetCell: pasteTarget,
+      timestamp: new Date().toISOString()
+    });
     
     // Calculate required table dimensions
     const maxTargetRow = pasteTarget.startRow + dataToPaste.length - 1;
@@ -1206,24 +1275,58 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
   // Wrapped handlers for row/column operations that mark table as dirty
   const handleAddRowWrapped = useCallback((position: 'before' | 'after', rowIndex: number) => {
     if (!activeTabId || !onAddRow) return;
+    
+    // Log row addition
+    systemLogger.logUserAction('table_add_row', 'MultiTableEditor', {
+      tableId: activeTabId,
+      position,
+      rowIndex,
+      timestamp: new Date().toISOString()
+    });
+    
     onAddRow(activeTabId, position, rowIndex);
     markTableDirty(activeTabId);
   }, [activeTabId, onAddRow, markTableDirty]);
 
   const handleRemoveRowWrapped = useCallback((rowIndex: number) => {
     if (!activeTabId || !onRemoveRow) return;
+    
+    // Log row removal
+    systemLogger.logUserAction('table_remove_row', 'MultiTableEditor', {
+      tableId: activeTabId,
+      rowIndex,
+      timestamp: new Date().toISOString()
+    });
+    
     onRemoveRow(activeTabId, rowIndex);
     markTableDirty(activeTabId);
   }, [activeTabId, onRemoveRow, markTableDirty]);
 
   const handleAddColumnWrapped = useCallback((position: 'before' | 'after', colIndex: number) => {
     if (!activeTabId || !onAddColumn) return;
+    
+    // Log column addition
+    systemLogger.logUserAction('table_add_column', 'MultiTableEditor', {
+      tableId: activeTabId,
+      position,
+      colIndex,
+      timestamp: new Date().toISOString()
+    });
+    
     onAddColumn(activeTabId, position, colIndex);
     markTableDirty(activeTabId);
   }, [activeTabId, onAddColumn, markTableDirty]);
 
   const handleRemoveColumnWrapped = useCallback((colIndex: number) => {
     if (!activeTabId || !onRemoveColumn) return;
+    
+    // Log column removal
+    systemLogger.logUserAction('table_remove_column', 'MultiTableEditor', {
+      tableId: activeTabId,
+      colIndex,
+      timestamp: new Date().toISOString()
+    });
+    
     onRemoveColumn(activeTabId, colIndex);
     markTableDirty(activeTabId);
   }, [activeTabId, onRemoveColumn, markTableDirty]);
@@ -1351,11 +1454,31 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     
     if (!leftTable || !rightTable) return;
     
+    // Log join operation start
+    systemLogger.logUserAction('table_join_start', 'MultiTableEditor', {
+      leftTableId: suggestion.leftTableId,
+      rightTableId: suggestion.rightTableId,
+      joinType: suggestion.joinType,
+      leftColumn: suggestion.leftColumn,
+      rightColumn: suggestion.rightColumn,
+      confidence: suggestion.confidence,
+      timestamp: new Date().toISOString()
+    });
+    
     // Use column indices from suggestion
     const leftColIndex = suggestion.leftColumnIndex;
     const rightColIndex = suggestion.rightColumnIndex;
     
     if (leftColIndex < 0 || leftColIndex >= leftTable.cols || rightColIndex < 0 || rightColIndex >= rightTable.cols) {
+      // Log join failure
+      systemLogger.logUserAction('table_join_failed', 'MultiTableEditor', {
+        leftTableId: suggestion.leftTableId,
+        rightTableId: suggestion.rightTableId,
+        reason: 'invalid_column_indices',
+        leftColIndex,
+        rightColIndex,
+        timestamp: new Date().toISOString()
+      });
       alert('Invalid column indices for join');
       return;
     }
@@ -1434,6 +1557,18 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     setActiveTabId(joinedTableId);
     setShowJoinPanel(false);
     
+    // Log successful join completion
+    systemLogger.logUserAction('table_join_completed', 'MultiTableEditor', {
+      leftTableId: suggestion.leftTableId,
+      rightTableId: suggestion.rightTableId,
+      joinType: suggestion.joinType,
+      resultTableId: joinedTableId,
+      resultSize: `${joinedRows.length}x${joinedColumnNames.length}`,
+      originalLeftSize: `${leftTable.rows}x${leftTable.cols}`,
+      originalRightSize: `${rightTable.rows}x${rightTable.cols}`,
+      timestamp: new Date().toISOString()
+    });
+    
     console.log('Created joined table:', joinedTable);
   }, [openTables]);
 
@@ -1470,6 +1605,14 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     console.log(`[MultiTableEditor] handleSaveAll called`);
     const dirtyTables = openTables.filter(t => t.isDirty);
     console.log(`[MultiTableEditor] Found ${dirtyTables.length} dirty tables:`, dirtyTables.map(t => `${t.id} (${t.originalName})`));
+    
+    // Log save all action
+    systemLogger.logUserAction('table_save_all_initiated', 'MultiTableEditor', {
+      dirtyTablesCount: dirtyTables.length,
+      totalTablesOpen: openTables.length,
+      dirtyTableIds: dirtyTables.map(t => t.id),
+      timestamp: new Date().toISOString()
+    });
     
     if (dirtyTables.length > 0) {
       console.log(`[MultiTableEditor] Opening save dialog`);

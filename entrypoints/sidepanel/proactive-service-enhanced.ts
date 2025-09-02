@@ -247,7 +247,8 @@ class EnhancedProactiveService {
       console.log('[ProactiveService] Current page info for suggestions:', context.currentPageInfo);
       contextParts.push(`Current active webpage: ${context.currentPageInfo.url} (Page ID: ${context.currentPageInfo.pageId})`);
     } else {
-      console.log('[ProactiveService] No current page info available for suggestions');
+      console.log('[ProactiveService] No current page info available for suggestions - may affect context quality');
+      contextParts.push(`Current active webpage: None available`);
     }
     
     if (context.currentToolViewTab) {
@@ -377,7 +378,8 @@ class EnhancedProactiveService {
     if (currentPageInfo !== undefined) {
       console.log('[EnhancedProactiveService] currentPageInfo updating:', {
         from: this.currentContext.currentPageInfo,
-        to: currentPageInfo
+        to: currentPageInfo,
+        timestamp: new Date().toISOString()
       });
       this.currentContext.currentPageInfo = currentPageInfo;
     }

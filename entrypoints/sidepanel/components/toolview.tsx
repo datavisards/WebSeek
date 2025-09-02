@@ -5,6 +5,7 @@ import ChatTab from './chattab';
 import CodeTab from './codetab';
 import HistoryTab from './historytab';
 import MacroSuggestionPanel from './MacroSuggestionPanel';
+import SystemLogsViewer from './SystemLogsViewer';
 
 interface ToolViewProps {
     logs: string[];
@@ -58,7 +59,8 @@ const ToolView: React.FC<ToolViewProps> = ({
     editingTableId,
     onTableModified
 }) => {
-    const [activeTab, setActiveTab] = useState<'chat' | 'code' | 'suggestions' | 'history'>('suggestions');
+    const [activeTab, setActiveTab] = useState<'chat' | 'code' | 'suggestions' | 'history' | 'logs'>('suggestions');
+    const [showSystemLogs, setShowSystemLogs] = useState(false);
 
     const isMinimized = heightMode === 'minimum';
     
@@ -103,6 +105,14 @@ const ToolView: React.FC<ToolViewProps> = ({
                 >
                     History {logs.length > 0 && `(${logs.length})`}
                 </h3>
+                <button
+                    className={`system-logs-btn ${isMinimized ? 'disabled' : ''}`}
+                    onClick={() => !isMinimized && setShowSystemLogs(true)}
+                    title="View System Logs for Data Analysis"
+                    disabled={isMinimized}
+                >
+                    📊 System Logs
+                </button>
                 {activeTab === 'suggestions' && onDismissAllSuggestions && suggestions.filter(s => s.scope === 'macro').length > 0 && (
                     <button
                         className="dismiss-all-btn"
@@ -168,6 +178,12 @@ const ToolView: React.FC<ToolViewProps> = ({
                     )}
                 </div>
             )}
+            
+            {/* System Logs Viewer Modal */}
+            <SystemLogsViewer
+                isOpen={showSystemLogs}
+                onClose={() => setShowSystemLogs(false)}
+            />
         </div>
     );
 };

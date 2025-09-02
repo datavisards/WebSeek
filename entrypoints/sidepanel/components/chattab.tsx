@@ -3,6 +3,7 @@ import { Message, Instance, ChatType } from '../types';
 import { chatWithAgent } from '../api-selector';
 import { generateInstanceContext, detectMarkdown, renderMarkdown, generateId, updateInstances } from '../utils';
 import { proactiveService } from '../proactive-service-enhanced';
+import { systemLogger } from '../system-logger';
 import './chattab.css';
 
 interface ChatTabProps {
@@ -45,7 +46,18 @@ const ChatTab: React.FC<ChatTabProps> = ({
     const [autoCompleteStartPos, setAutoCompleteStartPos] = useState(0);
     const messagesEndRef = useRef<null | HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+    const currentPageInfoRef = useRef<{pageId: string, url: string} | null>(currentPageInfo);
     const [isRetrying, setIsRetrying] = useState(false);
+
+    // Keep ref in sync with prop
+    useEffect(() => {
+        currentPageInfoRef.current = currentPageInfo;
+    }, [currentPageInfo]);
+
+    // Debug logging for currentPageInfo changes
+    useEffect(() => {
+        console.log('[ChatTab] currentPageInfo updated:', currentPageInfo);
+    }, [currentPageInfo]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -186,10 +198,10 @@ const ChatTab: React.FC<ChatTabProps> = ({
         if (import.meta.env.WXT_USE_LLM == "true") {
             const { imageContext, textContext } = await generateInstanceContext(currentInstances);
             
-            // Construct application context
+            // Construct application context using ref for most current value
             const applicationContext = {
                 currentToolViewTab,
-                currentPageInfo,
+                currentPageInfo: currentPageInfoRef.current, // Use ref for latest value
                 isInEditor,
                 editingTableId
             };
@@ -205,10 +217,10 @@ const ChatTab: React.FC<ChatTabProps> = ({
             message = result.message;
             newInstances = result.instances || [];
         } else {
-            // Construct application context even when LLM is disabled
+            // Construct application context even when LLM is disabled using ref
             const applicationContext = {
                 currentToolViewTab,
-                currentPageInfo,
+                currentPageInfo: currentPageInfoRef.current, // Use ref for latest value
                 isInEditor,
                 editingTableId
             };
@@ -227,6 +239,16 @@ const ChatTab: React.FC<ChatTabProps> = ({
             inputValue.trim();
 
         if (!userMessage || agentLoading) return;
+        
+        // System logging for chat interaction
+        const startTime = Date.now();
+        systemLogger.logAIInteraction('chat', {
+            messageLength: userMessage.length,
+            isRetry: !!retryMessageId,
+            hasInstances: instances.length > 0,
+            instanceTypes: [...new Set(instances.map(i => i.type))],
+            messageContent: userMessage.substring(0, 100) + (userMessage.length > 100 ? '...' : ''), // First 100 chars for analysis
+        }, { startTime });
         
         // Stop proactive suggestions when user sends a message
         proactiveService.stopSuggestions();
@@ -264,10 +286,31 @@ const ChatTab: React.FC<ChatTabProps> = ({
                 operations: operationLogs
             });
 
+            // System logging for successful AI response
+            systemLogger.logAIInteraction('chat', {
+                responseLength: message.length,
+                hasOperations: operationLogs && operationLogs.length > 0,
+                operationsCount: operationLogs ? operationLogs.length : 0,
+                instancesModified: newInstances.length !== instances.length,
+                success: true
+            }, { 
+                startTime, 
+                endTime: Date.now(),
+                duration: Date.now() - startTime
+            });
+
             // Update the instances
             updateInstances(instances, newInstances, setInstances, onTableModified);
         } catch (error) {
             console.error('Error in chat:', error);
+            
+            // System logging for chat error
+            systemLogger.logError('chat_error', error, {
+                userMessage: userMessage.substring(0, 100),
+                isRetry: !!retryMessageId,
+                instanceCount: instances.length
+            });
+            
             addMessage({
                 role: 'agent',
                 message: 'Sorry, I encountered an error while processing your request. Please try again.',
