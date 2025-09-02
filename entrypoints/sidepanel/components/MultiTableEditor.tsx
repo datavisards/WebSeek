@@ -71,6 +71,8 @@ interface MultiTableEditorProps {
     metadata?: any;
   }) => void;
   setIsInEditor?: React.Dispatch<React.SetStateAction<boolean>>; // For tracking editor state
+  // Callback to register MultiTableEditor functions for external access
+  onRegisterCallbacks?: (callbacks: { markTableDirty: (tableId: string) => void }) => void;
 }
 
 const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
@@ -99,6 +101,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
   currentSuggestion,
   onOperation,
   setIsInEditor,
+  onRegisterCallbacks
 }) => {
   console.log('[MultiTableEditor] Component loaded with setIsInEditor:', !!setIsInEditor);
   // State for managing multiple open tables
@@ -300,6 +303,14 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       t.id === tableId ? { ...t, isDirty: true } : t
     ));
   }, []);
+
+  // Register callback for external access
+  useEffect(() => {
+    if (onRegisterCallbacks) {
+      console.log(`[MultiTableEditor] Registering markTableDirty callback`);
+      onRegisterCallbacks({ markTableDirty });
+    }
+  }, [onRegisterCallbacks, markTableDirty]);
 
   // Enhanced handlers that work with multiple tables
   const handleAddToTable = useCallback((instance: Instance, row: number, col: number) => {

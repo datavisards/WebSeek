@@ -31,6 +31,7 @@ interface ToolViewProps {
     currentPageInfo?: {pageId: string, url: string} | null;
     isInEditor?: boolean;
     editingTableId?: string | null;
+    onTableModified?: (tableId: string) => void; // Add callback for table modifications
 }
 
 const ToolView: React.FC<ToolViewProps> = ({
@@ -54,7 +55,8 @@ const ToolView: React.FC<ToolViewProps> = ({
     onRestoreToCheckpoint,
     currentPageInfo,
     isInEditor,
-    editingTableId
+    editingTableId,
+    onTableModified
 }) => {
     const [activeTab, setActiveTab] = useState<'chat' | 'code' | 'suggestions' | 'history'>('suggestions');
 
@@ -155,6 +157,7 @@ const ToolView: React.FC<ToolViewProps> = ({
                             currentPageInfo={currentPageInfo}
                             isInEditor={isInEditor}
                             editingTableId={editingTableId}
+                            onTableModified={onTableModified}
                         />
                     )}
                     {activeTab === 'history' && (

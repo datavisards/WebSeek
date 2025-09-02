@@ -55,9 +55,11 @@ interface InstanceViewProps {
     closeTableEditor: () => void;
     openVisualizationEditor: (spec: any) => void;
   } | null>; // For programmatic control from parent component
+  onRegisterMultiTableCallbacks?: (callbacks: { markTableDirty: (tableId: string) => void }) => void; // For external table dirty state management
+  onTableModified?: (tableId: string) => void; // For notifying about table modifications
 }
 
-const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages, workspaceName, onWorkspaceNameChange, onOperation, updateHTMLContext, addMessage, setAgentLoading, currentSuggestion, setIsInEditor, setIsInCaptureMode, onEditingTableIdChange, onHTMLLoadingStatesChange, callbackRef }: InstanceViewProps) => {
+const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages, workspaceName, onWorkspaceNameChange, onOperation, updateHTMLContext, addMessage, setAgentLoading, currentSuggestion, setIsInEditor, setIsInCaptureMode, onEditingTableIdChange, onHTMLLoadingStatesChange, callbackRef, onRegisterMultiTableCallbacks, onTableModified }: InstanceViewProps) => {
   console.log('[InstanceView] Component loaded with setIsInEditor:', !!setIsInEditor);
   // Custom hooks
   const { fetchHTMLContent, htmlLoadingStates } = useHTMLContent(updateHTMLContext);
@@ -2249,7 +2251,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         "operations": operationLogs
       });
       // update the instances
-      updateInstances(instances, newInstances, setInstances);      
+      updateInstances(instances, newInstances, setInstances, onTableModified);      
     } finally {
       setAgentLoading(false);
       // Resume proactive suggestions after inference completes
@@ -2715,6 +2717,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
             onLiftRowToHeader={(_tableId: string, rowIndex: number) => handleLiftRowToHeader(rowIndex)}
             currentSuggestion={currentSuggestion}
             setIsInEditor={setIsInEditor}
+            onRegisterCallbacks={onRegisterMultiTableCallbacks}
           />
         ) : editingVisualizationSpec ? (
           // Visualization Editor View

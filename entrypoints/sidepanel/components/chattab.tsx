@@ -19,6 +19,7 @@ interface ChatTabProps {
     currentPageInfo?: {pageId: string, url: string} | null;
     isInEditor?: boolean;
     editingTableId?: string | null;
+    onTableModified?: (tableId: string) => void; // Add callback for table modifications
 }
 
 const ChatTab: React.FC<ChatTabProps> = ({
@@ -34,7 +35,8 @@ const ChatTab: React.FC<ChatTabProps> = ({
     currentToolViewTab,
     currentPageInfo,
     isInEditor,
-    editingTableId
+    editingTableId,
+    onTableModified
 }) => {
     const [inputValue, setInputValue] = useState('');
     const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -263,7 +265,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
             });
 
             // Update the instances
-            updateInstances(instances, newInstances, setInstances);
+            updateInstances(instances, newInstances, setInstances, onTableModified);
         } catch (error) {
             console.error('Error in chat:', error);
             addMessage({
@@ -343,7 +345,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
             );
 
             // Update the instances
-            updateInstances(currentInstances, newInstances, setInstances);
+            updateInstances(currentInstances, newInstances, setInstances, onTableModified);
         } catch (error) {
             console.error('Error in retry:', error);
             setMessages(prev =>

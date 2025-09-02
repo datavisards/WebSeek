@@ -138,7 +138,7 @@ export class MacroToolExecutor {
       
       console.log(`🎉 All steps completed. Applying final changes to ${instances.length} instances`);
       
-      // Apply final changes
+      // Apply final changes using the provided updateInstances function
       updateInstances(instances);
       
       return {

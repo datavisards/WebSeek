@@ -1182,13 +1182,24 @@ export function mapToObject(obj: any): any {
 export function updateInstances(
     oldInstances: Instance[], 
     newInstances: InstanceEvent[] | null | undefined, 
-    setInstances: (instances: Instance[]) => void
+    setInstances: (instances: Instance[]) => void,
+    onTableModified?: (tableId: string) => void
 ): void {
     // If there are structured results, update the instances
     console.log("Old instances:", oldInstances);
     let instancesClone = structuredClone(oldInstances);
+    const modifiedTableIds = new Set<string>();
+    
     if (newInstances && newInstances.length > 0) {
         newInstances.forEach(event => {
+            // Track table modifications
+            if (event.action === "update" && event.instance?.type === 'table') {
+                const targetId = event.targetId || event.instance.id;
+                modifiedTableIds.add(targetId);
+            } else if (event.action === "add" && event.instance?.type === 'table') {
+                modifiedTableIds.add(event.instance.id);
+            }
+            
             // Fill incomplete fields of event.instance
             if (event.instance) {
                 event.instance.id = event.instance.id || generateId();
@@ -1268,6 +1279,14 @@ export function updateInstances(
     }
     console.log("Updated instances:", instancesClone);
     setInstances(instancesClone);
+    
+    // Notify about table modifications
+    if (onTableModified && modifiedTableIds.size > 0) {
+        modifiedTableIds.forEach(tableId => {
+            console.log(`[updateInstances] Notifying table modification: ${tableId}`);
+            onTableModified(tableId);
+        });
+    }
 }
 
 /**

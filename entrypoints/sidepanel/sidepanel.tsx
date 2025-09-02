@@ -134,6 +134,22 @@ const SidePanel = () => {
     openVisualizationEditor: (spec: any) => void;
   } | null>(null);
 
+  // Callback to notify MultiTableEditor about external table modifications
+  const multiTableEditorCallbacks = useRef<{
+    markTableDirty: (tableId: string) => void;
+  } | null>(null);
+
+  // Handle external table modifications (e.g., from chat)
+  const handleTableModified = useCallback((tableId: string) => {
+    console.log(`[SidePanel] External table modification detected: ${tableId}`);
+    if (multiTableEditorCallbacks.current?.markTableDirty) {
+      console.log(`[SidePanel] Marking table ${tableId} as dirty via MultiTableEditor callback`);
+      multiTableEditorCallbacks.current.markTableDirty(tableId);
+    } else {
+      console.log(`[SidePanel] MultiTableEditor callback not available, table ${tableId} dirty state not updated`);
+    }
+  }, []);
+
   // Handle HTML loading state changes from InstanceView
   const handleHTMLLoadingStatesChange = useCallback((loadingStates: Record<string, boolean>) => {
     setHtmlLoadingStates(loadingStates);
@@ -984,6 +1000,28 @@ const SidePanel = () => {
         const description = `Execute ${toolName} macro tool`;
         const logMessage = `Applied macro tool: ${toolName}`;
         recordableSetInstances(newInstances, description, logMessage);
+        
+        // Check if any tables were modified and notify MultiTableEditor
+        if (handleTableModified && instances !== newInstances) {
+          const oldTables = instances.filter(inst => inst.type === 'table');
+          const newTables = newInstances.filter(inst => inst.type === 'table');
+          
+          // Check for modified or new tables
+          const modifiedTableIds = new Set<string>();
+          
+          // Check for new tables
+          newTables.forEach(newTable => {
+            const oldTable = oldTables.find(old => old.id === newTable.id);
+            if (!oldTable || JSON.stringify(oldTable) !== JSON.stringify(newTable)) {
+              modifiedTableIds.add(newTable.id);
+            }
+          });
+          
+          // Notify for all modified tables
+          modifiedTableIds.forEach(tableId => {
+            handleTableModified(tableId);
+          });
+        }
       };
       
       const result = await executeMacroTool(toolCall, instances, wrappedUpdateInstances);
@@ -1104,6 +1142,28 @@ const SidePanel = () => {
       const wrappedUpdateInstances = (newInstances: Instance[]) => {
         const description = `Execute composite suggestion: ${toolSequence.goal}`;
         recordableSetInstances(newInstances, description);
+        
+        // Check if any tables were modified and notify MultiTableEditor
+        if (handleTableModified && instances !== newInstances) {
+          const oldTables = instances.filter(inst => inst.type === 'table');
+          const newTables = newInstances.filter(inst => inst.type === 'table');
+          
+          // Check for modified or new tables
+          const modifiedTableIds = new Set<string>();
+          
+          // Check for new tables
+          newTables.forEach(newTable => {
+            const oldTable = oldTables.find(old => old.id === newTable.id);
+            if (!oldTable || JSON.stringify(oldTable) !== JSON.stringify(newTable)) {
+              modifiedTableIds.add(newTable.id);
+            }
+          });
+          
+          // Notify for all modified tables
+          modifiedTableIds.forEach(tableId => {
+            handleTableModified(tableId);
+          });
+        }
       };
       
       const result = await executeCompositeSuggestion({ toolSequence }, instances, wrappedUpdateInstances);
@@ -1248,6 +1308,7 @@ const SidePanel = () => {
         currentPageInfo={currentPageInfo}
         isInEditor={isInEditor}
         editingTableId={editingTableId}
+        onTableModified={handleTableModified}
       />
       
       {/* InstanceView now appears second/below */}
@@ -1276,6 +1337,11 @@ const SidePanel = () => {
           (suggestions.length > 0 ? suggestions.sort((a, b) => b.confidence - a.confidence)[0] : undefined)
         }
         callbackRef={instanceViewCallbacks}
+        onRegisterMultiTableCallbacks={(callbacks) => {
+          console.log(`[SidePanel] Registering MultiTableEditor callbacks`);
+          multiTableEditorCallbacks.current = callbacks;
+        }}
+        onTableModified={handleTableModified}
       />
       
       <SuggestionIndicator
