@@ -1,5 +1,5 @@
 // visualizationeditor.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import VisualizationRenderer from './visualizationrenderer';
 import { Instance, ProactiveSuggestion } from '../types';
 import GhostInstance from './GhostInstance';
@@ -11,6 +11,7 @@ interface VisualizationEditorProps {
   onCancel: () => void;
   availableInstances: Instance[];
   currentSuggestion?: ProactiveSuggestion;
+  onSpecChange?: (spec: object) => void;
 }
 
 const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
@@ -19,6 +20,7 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
   onCancel,
   availableInstances,
   currentSuggestion,
+  onSpecChange,
 }) => {
   const [spec, setSpec] = useState(
     typeof initialSpec === 'string'
@@ -29,8 +31,6 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
   const [importedData, setImportedData] = useState<any | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [xAxisTitle, setXAxisTitle] = useState<string>('');
-  const [yAxisTitle, setYAxisTitle] = useState<string>('');
 
   // Validate the spec whenever it changes and update the parsedSpec state.
   useEffect(() => {
@@ -44,22 +44,12 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
     }
   }, [spec]);
 
-  // Extract axis titles from initial spec
+  // Call onSpecChange whenever the parsed spec changes (for state preservation)
   useEffect(() => {
-    try {
-      const parsed = JSON.parse(spec);
-      if (parsed.encoding) {
-        if (parsed.encoding.x && parsed.encoding.x.axis && parsed.encoding.x.axis.title) {
-          setXAxisTitle(parsed.encoding.x.axis.title);
-        }
-        if (parsed.encoding.y && parsed.encoding.y.axis && parsed.encoding.y.axis.title) {
-          setYAxisTitle(parsed.encoding.y.axis.title);
-        }
-      }
-    } catch (error) {
-      // Ignore parse errors for axis title extraction
+    if (parsedSpec && onSpecChange) {
+      onSpecChange(parsedSpec);
     }
-  }, [initialSpec]); // Only run when initialSpec changes
+  }, [parsedSpec, onSpecChange]);
 
   const handleImportData = (instance: Instance) => {
     if (instance.type === 'table') {
@@ -108,19 +98,6 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
   const handleInsertData = () => {
     if (!importedData || !parsedSpec) return;
     const newSpec: any = { ...parsedSpec, data: { values: importedData } };
-    
-    // Apply axis titles if specified
-    if (xAxisTitle || yAxisTitle) {
-      const encoding = newSpec.encoding || {};
-      if (xAxisTitle && encoding.x) {
-        encoding.x = { ...encoding.x, axis: { ...encoding.x.axis, title: xAxisTitle } };
-      }
-      if (yAxisTitle && encoding.y) {
-        encoding.y = { ...encoding.y, axis: { ...encoding.y.axis, title: yAxisTitle } };
-      }
-      newSpec.encoding = encoding;
-    }
-    
     setSpec(JSON.stringify(newSpec, null, 2));
   };
 
@@ -135,10 +112,10 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
     }
   };
 
-  const handleImageUrlReady = (url: string) => {
+  const handleImageUrlReady = useCallback((url: string) => {
     console.log('Image URL ready:', url);
     setImageUrl(url);
-  };
+  }, []);
 
   return (
     <div className="view-container" style={{ position: 'relative' }}>
@@ -174,34 +151,6 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
               <div className="vis-editor-error">Invalid JSON: {parseError}</div>
             )}
           </div>
-
-          <section className="vis-editor-axis-controls">
-            <h4 className="vis-editor-label">Axis Titles</h4>
-            <div className="vis-editor-axis-inputs">
-              <div className="vis-editor-input-group">
-                <label htmlFor="x-axis-title">X-Axis Title:</label>
-                <input
-                  id="x-axis-title"
-                  type="text"
-                  value={xAxisTitle}
-                  onChange={(e) => setXAxisTitle(e.target.value)}
-                  placeholder="Enter X-axis title"
-                  className="vis-editor-input"
-                />
-              </div>
-              <div className="vis-editor-input-group">
-                <label htmlFor="y-axis-title">Y-Axis Title:</label>
-                <input
-                  id="y-axis-title"
-                  type="text"
-                  value={yAxisTitle}
-                  onChange={(e) => setYAxisTitle(e.target.value)}
-                  placeholder="Enter Y-axis title"
-                  className="vis-editor-input"
-                />
-              </div>
-            </div>
-          </section>
 
           <section className="vis-editor-data-importer">
             <h4 className="vis-editor-label">Import Data from Instance</h4>

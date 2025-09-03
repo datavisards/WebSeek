@@ -119,7 +119,7 @@ const VisualizationRenderer: React.FC<VisualizationRendererProps> = ({
     })();
 
     return () => { cancelled = true; };
-  }, [spec, onImageUrlReady]);
+  }, [spec]); // Removed onImageUrlReady from dependency array to prevent flickering
 
   // Attach interactivity once SVG content is in DOM
   useEffect(() => {
