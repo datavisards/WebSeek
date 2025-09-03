@@ -24,7 +24,6 @@ interface ShelfVisualizationEditorProps {
   onCancel: () => void;
   availableInstances: Instance[];
   initialSpec?: object | string | null;
-  onSpecChange?: (spec: object) => void;
 }
 
 interface Shelf {
@@ -119,7 +118,6 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
   onCancel,
   availableInstances,
   initialSpec,
-  onSpecChange,
 }) => {
   console.log('[ShelfVisualizationEditor] Component initialized with initialSpec:', initialSpec);
   console.log('[ShelfVisualizationEditor] initialSpec type:', typeof initialSpec);
@@ -634,13 +632,6 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
     console.log('Generated spec:', spec);
     return spec;
   }, [shelves, chartType, availableInstances, isInteractive, stableInteractionConfig]);
-
-  // Call onSpecChange whenever the generated spec changes (for state preservation)
-  useEffect(() => {
-    if (generateSpec && onSpecChange) {
-      onSpecChange(generateSpec);
-    }
-  }, [generateSpec, onSpecChange]);
 
   const handleDragStart = (e: React.DragEvent, column: Column) => {
     e.dataTransfer.setData('application/json', JSON.stringify(column));
