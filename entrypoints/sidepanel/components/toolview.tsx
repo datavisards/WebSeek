@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Message, Instance, ProactiveSuggestion } from '../types';
 import './toolview.css';
 import ChatTab from './chattab';
-import CodeTab from './codetab';
 import HistoryTab from './historytab';
 import MacroSuggestionPanel from './MacroSuggestionPanel';
 import SystemLogsViewer from './SystemLogsViewer';
@@ -59,7 +58,7 @@ const ToolView: React.FC<ToolViewProps> = ({
     editingTableId,
     onTableModified
 }) => {
-    const [activeTab, setActiveTab] = useState<'chat' | 'code' | 'suggestions' | 'history' | 'logs'>('suggestions');
+    const [activeTab, setActiveTab] = useState<'chat' | 'suggestions' | 'history' | 'logs'>('suggestions');
     const [showSystemLogs, setShowSystemLogs] = useState(false);
 
     const isMinimized = heightMode === 'minimum';

@@ -40,7 +40,6 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "/pyodide/*",
         "viewer.html"
       ],
       "matches": [
