@@ -2727,7 +2727,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         ) : editingVisualizationSpec ? (
           // Visualization Editor View
           <>
-            <div className="visualization-editor-mode-switcher">
+            {/* <div className="visualization-editor-mode-switcher">
               <button 
                 className={`mode-btn ${visualizationEditorMode === 'shelf' ? 'active' : ''}`}
                 onClick={() => setVisualizationEditorMode('shelf')}
@@ -2740,7 +2740,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
               >
                 JSON Editor
               </button>
-            </div>
+            </div> */}
             {visualizationEditorMode === 'shelf' ? (
               <ShelfVisualizationEditor
                 onSave={handleSaveVisualization}
