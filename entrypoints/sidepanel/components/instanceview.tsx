@@ -2576,6 +2576,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     onOperation(`Open visualization editor to create a new visualization with default bar chart template`);
   };
 
+  // Add handler to track spec changes during editing (for state preservation between modes)
+  const handleSpecChange = (spec: object) => {
+    setEditingVisualizationSpec(spec);
+  };
+
   // Add save/cancel handlers for VisualizationEditor
   const handleSaveVisualization = (spec: object, imageUrl: string) => {
     if (originalInstanceId) {
@@ -2742,6 +2747,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                 onCancel={handleCancelVisualization}
                 availableInstances={availableInstances}
                 initialSpec={editingVisualizationSpec}
+                onSpecChange={handleSpecChange}
               />
             ) : (
               <VisualizationEditor
@@ -2750,6 +2756,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                 onCancel={handleCancelVisualization}
                 availableInstances={availableInstances}
                 currentSuggestion={currentSuggestion}
+                onSpecChange={handleSpecChange}
               />
             )}
           </>
