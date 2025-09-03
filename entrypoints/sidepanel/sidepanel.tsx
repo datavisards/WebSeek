@@ -675,11 +675,13 @@ const SidePanel = () => {
             const cellUpdates: string[] = [];
             if (table?.cells) {
               table.cells.forEach((row: any[], rowIndex: number) => {
-                row.forEach((cell: any, colIndex: number) => {
-                  if (cell) {
-                    cellUpdates.push(`R${rowIndex}C${colIndex}`);
-                  }
-                });
+                if (row && Array.isArray(row)) {
+                  row.forEach((cell: any, colIndex: number) => {
+                    if (cell) {
+                      cellUpdates.push(`R${rowIndex}C${colIndex}`);
+                    }
+                  });
+                }
               });
             }
             return cellUpdates;
@@ -1024,6 +1026,18 @@ const SidePanel = () => {
   ) => {
     try {
       console.log('[SidePanel] Requesting suggestion refinement for failed tool:', failedToolCall, 'Error:', errorMessage);
+      
+      // Defensive coding: Check if current active tab is in htmlContext
+      if (currentPageInfo && currentPageInfo.pageId) {
+        const currentPageInContext = htmlContext[currentPageInfo.pageId];
+        if (!currentPageInContext) {
+          console.warn(`[SidePanel] Current active tab ${currentPageInfo.pageId} not found in htmlContext for suggestion refinement. Available pages:`, Object.keys(htmlContext));
+          // Show a warning but continue with refinement since it might still work with other pages
+          console.log('[SidePanel] Proceeding with refinement using available HTML context');
+        } else {
+          console.log(`[SidePanel] Current active tab ${currentPageInfo.pageId} found in htmlContext with URL: ${currentPageInContext.pageURL}`);
+        }
+      }
       
       // Find the original suggestion
       const originalSuggestion = suggestions.find(s => s.id === originalSuggestionId);

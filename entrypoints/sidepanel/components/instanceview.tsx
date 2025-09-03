@@ -1034,6 +1034,29 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       return;
     }
 
+    // Ensure table cells array is properly initialized
+    if (!table.cells) {
+      table.cells = [];
+    }
+
+    // Ensure the row exists and is valid - if not, initialize it
+    if (!table.cells[row] || !Array.isArray(table.cells[row])) {
+      console.warn(`Table row ${row} is null or invalid for table ${tableId}, initializing...`);
+      // Initialize missing rows up to the required row
+      for (let i = table.cells.length; i <= row; i++) {
+        table.cells[i] = new Array(table.cols || 0).fill(null);
+      }
+    }
+
+    // Ensure the row has enough columns
+    if (table.cells[row].length <= col) {
+      const currentLength = table.cells[row].length;
+      const neededLength = Math.max(col + 1, table.cols || 0);
+      for (let i = currentLength; i < neededLength; i++) {
+        table.cells[row][i] = null;
+      }
+    }
+
     const currentContent = table.cells[row][col];
 
     // Handle different content types
@@ -2223,6 +2246,22 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     });
     setAgentLoading(true);
     try {
+      // Defensive coding: Check if we have any HTML context available for inference
+      const htmlContextKeys = Object.keys(htmlContextRef.current);
+      if (htmlContextKeys.length === 0) {
+        console.warn(`[InstanceView] No HTML context available for inference. Please ensure there are pages loaded in the workspace.`);
+        addMessage({
+          role: 'agent',
+          message: '⚠️ No page context is available for inference. Please load or refresh some pages to provide context for the AI inference.',
+          id: generateId(),
+          isRetrying: false
+        });
+        setAgentLoading(false);
+        proactiveService.resumeSuggestions(); // Resume suggestions since we're not proceeding
+        return;
+      }
+      console.log(`[InstanceView] HTML context available for inference with ${htmlContextKeys.length} pages:`, htmlContextKeys);
+      
       let message: string = "", newInstances: any[] = [];
       if (import.meta.env.WXT_USE_LLM == "true") {
         // If using LLM, we need to generate the context first

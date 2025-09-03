@@ -309,7 +309,7 @@ export type Locator = string; // Stable ID (AID)
 - **Source Assignment:** When generating an instance, you MUST correctly assign its \`source\` field.
   - For a new instance created from scratch (e.g., a summary you write), use a \`ManualSource\`. Example: \`"source": { "type": "manual" }\`.
   - For new instances created from web content, you MUST generate a \`WebCaptureSource\` object. This includes creating a \`locator\` string, and you can get it from the source element in the HTML. The \`locator\` field should be a string containing the stable ID (AID) for the element (use the \`data-aid-id\` attribute value, e.g., "aid-a1b2c3d4").
-
+- If you are going to join tables, preserve web sources if possible (if both records to be joined are from the web, you can use either one for the cells)
 ---
 
 ### HTML Contexts:

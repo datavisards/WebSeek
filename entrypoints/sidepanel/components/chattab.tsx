@@ -240,6 +240,23 @@ const ChatTab: React.FC<ChatTabProps> = ({
 
         if (!userMessage || agentLoading) return;
         
+        // Defensive coding: Check if current active tab is in htmlContext
+        if (currentPageInfo && currentPageInfo.pageId) {
+            const currentPageInContext = htmlContext[currentPageInfo.pageId];
+            if (!currentPageInContext) {
+                console.warn(`[ChatTab] Current active tab ${currentPageInfo.pageId} not found in htmlContext. Available pages:`, Object.keys(htmlContext));
+                // Show a warning message to the user
+                addMessage({
+                    role: 'agent',
+                    message: '⚠️ The current page context is not available. Please refresh the page or switch to a different tab to ensure the AI has access to the current page content.',
+                    id: generateId(),
+                    isRetrying: false
+                });
+                return;
+            }
+            console.log(`[ChatTab] Current active tab ${currentPageInfo.pageId} found in htmlContext with URL: ${currentPageInContext.pageURL}`);
+        }
+        
         // System logging for chat interaction
         const startTime = Date.now();
         systemLogger.logAIInteraction('chat', {
@@ -358,6 +375,16 @@ const ChatTab: React.FC<ChatTabProps> = ({
         const currentInstances = userMessage.instancesCheckpoint || instances;
         if (userMessage.instancesCheckpoint) {
             setInstances(userMessage.instancesCheckpoint);
+        }
+
+        // Defensive coding: Log warning if current active tab is not in htmlContext during retry
+        if (currentPageInfo && currentPageInfo.pageId) {
+            const currentPageInContext = htmlContext[currentPageInfo.pageId];
+            if (!currentPageInContext) {
+                console.warn(`[ChatTab] During retry, current active tab ${currentPageInfo.pageId} not found in htmlContext. Available pages:`, Object.keys(htmlContext));
+            } else {
+                console.log(`[ChatTab] During retry, current active tab ${currentPageInfo.pageId} found in htmlContext with URL: ${currentPageInContext.pageURL}`);
+            }
         }
 
         // Stop proactive suggestions when user retries a message

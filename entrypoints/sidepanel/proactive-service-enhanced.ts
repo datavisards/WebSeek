@@ -279,11 +279,6 @@ class EnhancedProactiveService {
       this.handleSuggestionDismissed(e.detail.suggestion);
     });
 
-    // Listen for instance operations (for undo support)
-    document.addEventListener('applyInstanceOperations', (e: any) => {
-      this.handleInstanceOperations(e.detail.operations);
-    });
-
     // Set up debounced rule trigger handler
     (triggerEngine as any).onDebouncedRuleTrigger = (rule: any) => {
       console.log('[EnhancedProactiveService] Debounced rule triggered:', rule.id);
@@ -921,6 +916,17 @@ class EnhancedProactiveService {
   ) {
     console.log('[EnhancedProactiveService] 🔬 Starting micro suggestions for rules:', microRules.map(r => r.id));
     
+    // Defensive coding: Check if current active tab is in htmlContext
+    if (this.currentContext.currentPageInfo && this.currentContext.currentPageInfo.pageId) {
+      const currentPageInContext = currentHtmlContexts[this.currentContext.currentPageInfo.pageId];
+      if (!currentPageInContext) {
+        console.warn(`[EnhancedProactiveService] Current active tab ${this.currentContext.currentPageInfo.pageId} not found in htmlContext for micro suggestions. Available pages:`, Object.keys(currentHtmlContexts));
+        console.log('[EnhancedProactiveService] Skipping micro suggestion generation due to missing current page context');
+        return;
+      }
+      console.log(`[EnhancedProactiveService] Current active tab ${this.currentContext.currentPageInfo.pageId} found in htmlContext with URL: ${currentPageInContext.pageURL}`);
+    }
+    
     // Set micro generation state
     this.isGeneratingMicro = true;
     console.log('[EnhancedProactiveService] 🔬 Micro generation state set to TRUE');
@@ -1094,6 +1100,18 @@ class EnhancedProactiveService {
     currentHtmlContexts: Record<string, any>
   ) {
     console.log('[EnhancedProactiveService] Generating macro suggestions for rules:', macroRules.map(r => r.id));
+    
+    // Defensive coding: Check if current active tab is in htmlContext
+    if (this.currentContext.currentPageInfo && this.currentContext.currentPageInfo.pageId) {
+      const currentPageInContext = currentHtmlContexts[this.currentContext.currentPageInfo.pageId];
+      if (!currentPageInContext) {
+        console.warn(`[EnhancedProactiveService] Current active tab ${this.currentContext.currentPageInfo.pageId} not found in htmlContext for macro suggestions. Available pages:`, Object.keys(currentHtmlContexts));
+        console.log('[EnhancedProactiveService] Skipping macro suggestion generation due to missing current page context');
+        return;
+      }
+      console.log(`[EnhancedProactiveService] Current active tab ${this.currentContext.currentPageInfo.pageId} found in htmlContext with URL: ${currentPageInContext.pageURL}`);
+    }
+    
     console.log('[EnhancedProactiveService] HTML contexts available for macro suggestions:', {
       contextKeys: Object.keys(currentHtmlContexts),
       contextDetails: Object.entries(currentHtmlContexts).map(([key, value]) => ({

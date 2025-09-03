@@ -123,6 +123,7 @@
   background: white;
   font-size: 0.65rem;
   cursor: pointer;
+  width: 100%;
 }
 
 .filter-dropdown:focus {
@@ -152,7 +153,7 @@
   transition: all 0.2s;
 }
 
-.column-header {
+.column-item-header {
   display: flex;
   align-items: center;
   gap: 0.3rem;
@@ -183,12 +184,12 @@
   min-width: 20px;
 }
 
-.column-name {
+/* .column-name {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
+} */
 
 .column-profile {
   font-size: 0.55rem;

@@ -1185,7 +1185,9 @@ const TableGrid: React.FC<TableGridProps> = ({
 
       if (newRow !== selectedCell.row || newCol !== selectedCell.col) {
         // Find the original row index for the new display row
-        const newOriginalRow = newRow < filteredAndSortedRows.length ? filteredAndSortedRows[newRow].originalIndex : newRow;
+        const newOriginalRow = newRow < filteredAndSortedRows.length && filteredAndSortedRows[newRow] 
+          ? filteredAndSortedRows[newRow].originalIndex 
+          : newRow;
         setSelectedCell({ row: newRow, col: newCol, originalRow: newOriginalRow });
         setSelectedRows(new Set());
         setSelectedColumns(new Set());
@@ -1787,7 +1789,9 @@ const TableGrid: React.FC<TableGridProps> = ({
 
       {/* Row Headers */}
       {Array.from({ length: effectiveTable.rows }, (_, displayRowIndex) => {
-        const originalRowIndex = displayRowIndex < filteredAndSortedRows.length ? filteredAndSortedRows[displayRowIndex].originalIndex : displayRowIndex;
+        const originalRowIndex = displayRowIndex < filteredAndSortedRows.length && filteredAndSortedRows[displayRowIndex] 
+          ? filteredAndSortedRows[displayRowIndex].originalIndex 
+          : displayRowIndex;
         return (
           <div
             key={`row-${displayRowIndex}`}
@@ -1819,7 +1823,10 @@ const TableGrid: React.FC<TableGridProps> = ({
           let cell;
           let originalRowIndex = displayRowIndex; // Default to display index
           
-          if (displayRowIndex < filteredAndSortedRows.length && colIndex < filteredAndSortedRows[displayRowIndex].row.length) {
+          if (displayRowIndex < filteredAndSortedRows.length && 
+              filteredAndSortedRows[displayRowIndex] && 
+              filteredAndSortedRows[displayRowIndex].row && 
+              colIndex < filteredAndSortedRows[displayRowIndex].row.length) {
             // Use filtered and sorted data and get original row index
             cell = filteredAndSortedRows[displayRowIndex].row[colIndex];
             originalRowIndex = filteredAndSortedRows[displayRowIndex].originalIndex;

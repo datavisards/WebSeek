@@ -21,7 +21,7 @@ const openai = new OpenAI({
 const model_name = {
     "chat": "google/gemini-2.5-flash",
     "infer": "google/gemini-2.5-flash",
-    "suggest": "google/gemini-2.5-flash",
+    "suggest": "x-ai/grok-code-fast-1",
 };
 
 export async function chatWithAgent(
