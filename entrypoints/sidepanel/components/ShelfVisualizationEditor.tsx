@@ -6,6 +6,7 @@ import './shelfvisualizationeditor.css';
 interface Column {
   id: string;
   name: string;
+  actualColumnName: string; // The real column name from the table
   type: 'numeral' | 'categorical';
   instanceId: string;
   instanceType: 'table' | 'text';
@@ -187,6 +188,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           columns.push({
             id: `${instance.id}_col_${i}`,
             name: `${instance.id}: ${columnName}`,
+            actualColumnName: columnName,
             type: columnType,
             instanceId: instance.id,
             instanceType: 'table',
@@ -197,6 +199,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
         columns.push({
           id: `${instance.id}_text`,
           name: `${instance.id}: Text`,
+          actualColumnName: 'Text',
           type: 'categorical',
           instanceId: instance.id,
           instanceType: 'text'
@@ -252,7 +255,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           
           const matchingColumn = availableColumns.find(col => {
             // Try multiple matching strategies:
-            // 1. Direct field name match with column ID
+            // 1. Direct field name match with column ID (old format)
             const idMatch = col.id === fieldName;
             // 2. Column name after colon matches field
             const nameMatch = col.name.split(': ')[1] === fieldName;
@@ -261,18 +264,26 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             // 4. Extract column index from col.id and convert to letter to match field
             const colIdParts = col.id.split('_col_');
             const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
+            // 5. NEW: Direct match with sanitized actual column name
+            const sanitizedMatch = sanitizeFieldName(col.actualColumnName) === fieldName;
+            // 6. NEW: Direct match with actual column name
+            const actualNameMatch = col.actualColumnName === fieldName;
             
             console.log('[ShelfVisualizationEditor] Checking column:', {
               colId: col.id,
               colName: col.name,
+              actualColumnName: col.actualColumnName,
+              sanitizedColumnName: sanitizeFieldName(col.actualColumnName),
               fieldName,
               idMatch,
               nameMatch,
               letterMatch,
-              letterFromIndex
+              letterFromIndex,
+              sanitizedMatch,
+              actualNameMatch
             });
             
-            return idMatch || nameMatch || letterMatch || letterFromIndex;
+            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch;
           });
           
           if (matchingColumn) {
@@ -290,7 +301,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           
           const matchingColumn = availableColumns.find(col => {
             // Try multiple matching strategies:
-            // 1. Direct field name match with column ID
+            // 1. Direct field name match with column ID (old format)
             const idMatch = col.id === fieldName;
             // 2. Column name after colon matches field
             const nameMatch = col.name.split(': ')[1] === fieldName;
@@ -299,18 +310,26 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             // 4. Extract column index from col.id and convert to letter to match field
             const colIdParts = col.id.split('_col_');
             const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
+            // 5. NEW: Direct match with sanitized actual column name
+            const sanitizedMatch = sanitizeFieldName(col.actualColumnName) === fieldName;
+            // 6. NEW: Direct match with actual column name
+            const actualNameMatch = col.actualColumnName === fieldName;
             
             console.log('[ShelfVisualizationEditor] Checking column:', {
               colId: col.id,
               colName: col.name,
+              actualColumnName: col.actualColumnName,
+              sanitizedColumnName: sanitizeFieldName(col.actualColumnName),
               fieldName,
               idMatch,
               nameMatch,
               letterMatch,
-              letterFromIndex
+              letterFromIndex,
+              sanitizedMatch,
+              actualNameMatch
             });
             
-            return idMatch || nameMatch || letterMatch || letterFromIndex;
+            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch;
           });
           
           if (matchingColumn) {
@@ -328,7 +347,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           
           const matchingColumn = availableColumns.find(col => {
             // Try multiple matching strategies:
-            // 1. Direct field name match with column ID
+            // 1. Direct field name match with column ID (old format)
             const idMatch = col.id === fieldName;
             // 2. Column name after colon matches field
             const nameMatch = col.name.split(': ')[1] === fieldName;
@@ -337,8 +356,12 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             // 4. Extract column index from col.id and convert to letter to match field
             const colIdParts = col.id.split('_col_');
             const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
+            // 5. NEW: Direct match with sanitized actual column name
+            const sanitizedMatch = sanitizeFieldName(col.actualColumnName) === fieldName;
+            // 6. NEW: Direct match with actual column name
+            const actualNameMatch = col.actualColumnName === fieldName;
             
-            return idMatch || nameMatch || letterMatch || letterFromIndex;
+            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch;
           });
           
           if (matchingColumn) {
@@ -458,7 +481,10 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
                 }
               }
               
-              row[`${instance.id}_col_${j}`] = convertedValue;
+              // Use actual column name instead of instanceId_col_j
+              const columnName = tableInstance.columnNames?.[j] || getColumnName(j);
+              const sanitizedColumnName = sanitizeFieldName(columnName);
+              row[sanitizedColumnName] = convertedValue;
             }
             data.push(row);
           }
@@ -466,7 +492,8 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           console.log('Table data for', column.instanceId, ':', data);
         } else if (instance.type === 'text') {
           const textInstance = instance as TextInstance;
-          dataSources.set(column.instanceId, [{ [`${instance.id}_text`]: textInstance.content }]);
+          const sanitizedTextFieldName = sanitizeFieldName('Text');
+          dataSources.set(column.instanceId, [{ [sanitizedTextFieldName]: textInstance.content }]);
         }
       });
 
@@ -481,28 +508,31 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
 
     if (shelves.x?.length) {
       const xColumn = shelves.x[0];
+      const sanitizedFieldName = sanitizeFieldName(xColumn.actualColumnName);
       encoding.x = {
-        field: xColumn.id,
+        field: sanitizedFieldName,
         type: xColumn.type === 'numeral' ? 'quantitative' : 'nominal',
-        title: xColumn.name.split(': ')[1]
+        title: xColumn.actualColumnName
       };
     }
 
     if (shelves.y?.length) {
       const yColumn = shelves.y[0];
+      const sanitizedFieldName = sanitizeFieldName(yColumn.actualColumnName);
       encoding.y = {
-        field: yColumn.id,
+        field: sanitizedFieldName,
         type: yColumn.type === 'numeral' ? 'quantitative' : 'nominal',
-        title: yColumn.name.split(': ')[1]
+        title: yColumn.actualColumnName
       };
     }
 
     if (shelves.color?.length) {
       const colorColumn = shelves.color[0];
+      const sanitizedFieldName = sanitizeFieldName(colorColumn.actualColumnName);
       encoding.color = {
-        field: colorColumn.id,
+        field: sanitizedFieldName,
         type: colorColumn.type === 'numeral' ? 'quantitative' : 'nominal',
-        title: colorColumn.name.split(': ')[1]
+        title: colorColumn.actualColumnName
       };
     }
 
@@ -512,12 +542,13 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
       // For histograms, we need special encoding
       if (shelves.x?.length) {
         const xColumn = shelves.x[0];
+        const sanitizedFieldName = sanitizeFieldName(xColumn.actualColumnName);
         // For histograms, X should be binned and Y should be count
         encoding.x = {
-          field: xColumn.id,
+          field: sanitizedFieldName,
           type: 'quantitative',
           bin: true,
-          title: xColumn.name.split(': ')[1]
+          title: xColumn.actualColumnName
         };
         encoding.y = {
           aggregate: 'count',
@@ -551,9 +582,9 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           tooltipFields.push(...allFields);
         } else {
           // Fallback to only chart fields if no data available
-          if (shelves.x?.length) tooltipFields.push(shelves.x[0].id);
-          if (shelves.y?.length) tooltipFields.push(shelves.y[0].id);
-          if (shelves.color?.length) tooltipFields.push(shelves.color[0].id);
+          if (shelves.x?.length) tooltipFields.push(sanitizeFieldName(shelves.x[0].actualColumnName));
+          if (shelves.y?.length) tooltipFields.push(sanitizeFieldName(shelves.y[0].actualColumnName));
+          if (shelves.color?.length) tooltipFields.push(sanitizeFieldName(shelves.color[0].actualColumnName));
         }
 
         encoding.tooltip = tooltipFields.map(field => ({ field }));
