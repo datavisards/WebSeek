@@ -179,7 +179,7 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
         )}
       </div> */}
 
-      <button
+      {/* <button
         onClick={() => handleCaptureStart()}
         style={{
           borderRadius: 4,
@@ -200,80 +200,37 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
           }} 
         />
         Capture
-      </button>
+      </button> */}
 
       {/* Instance Tools Dropdown */}
-      <div style={{ display: 'inline-block', position: 'relative' }}>
-        <button
-          onClick={e => {
-            e.stopPropagation();
-            e.preventDefault();
-            setInstanceToolsOpen(v => !v);
-          }}
-          style={{ 
-            minWidth: 110,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}
-        >
-          <img 
-            src="/icon/tools.svg" 
-            alt="Tools" 
-            style={{ 
-              width: '12px', 
-              height: '12px'
-            }} 
-          />
-          Instance Tools ▾
-        </button>
-        {instanceToolsOpen && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '110%',
-              left: 0,
-              background: 'white',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-              zIndex: 1000,
-              minWidth: '140px',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* <div
-              className="contextmenuoption"
-              onClick={() => {
-                handleCreateSketch();
-                setInstanceToolsOpen(false);
-              }}
-            >
-              Sketch
-            </div> */}
-            <div
-              className="contextmenuoption"
-              onClick={() => {
-                handleCreateTable();
-                setInstanceToolsOpen(false);
-              }}
-            >
-              Table
-            </div>
-            <div
-              className="contextmenuoption"
-              onClick={() => {
-                handleCreateVisualization();
-                setInstanceToolsOpen(false);
-              }}
-            >
-              Visualization
-            </div>
-          </div>
-        )}
-      </div>
-
       <button
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+        }}
+        onClick={() => {
+          handleCreateTable();
+          setInstanceToolsOpen(false);
+        }}
+      >
+        Table
+      </button>
+      <button
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+        }}
+        onClick={() => {
+          handleCreateVisualization();
+          setInstanceToolsOpen(false);
+        }}
+      >
+        Visualization
+      </button>
+
+      {/* <button
         onClick={() => handleModeSwitch(mode === 'hand' ? 'select' : 'hand')}
         style={{
           background: mode === 'select' ? '#0078ff' : undefined,
@@ -286,20 +243,20 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
         }}
         title={mode === 'select' ? 'Switch to Hand Tool' : 'Switch to Selection Tool'}
       >
-        <img 
-          src={mode === 'select' ? '/icon/select.svg' : '/icon/hand.svg'} 
-          alt={mode === 'select' ? 'Select' : 'Hand'} 
-          style={{ 
-            width: '12px', 
+        <img
+          src={mode === 'select' ? '/icon/select.svg' : '/icon/hand.svg'}
+          alt={mode === 'select' ? 'Select' : 'Hand'}
+          style={{
+            width: '12px',
             height: '12px',
             filter: mode === 'select' ? 'invert(1)' : undefined
-          }} 
+          }}
         />
         {mode === 'select' ? 'Select' : 'Hand'}
-      </button>
+      </button> */}
 
       {/* Infer Button - only visible when instances are selected */}
-      {currentSelection.length > 0 && (
+      {/* {currentSelection.length > 0 && (
         <button
           onClick={() => handleInfer(currentSelection)}
           style={{
@@ -312,17 +269,17 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
           }}
           title={`Infer ${currentSelection.length} selected instance${currentSelection.length === 1 ? '' : 's'}`}
         >
-          <img 
-            src="/icon/robot.svg" 
-            alt="Infer" 
-            style={{ 
-              width: '12px', 
+          <img
+            src="/icon/robot.svg"
+            alt="Infer"
+            style={{
+              width: '12px',
               height: '12px',
-            }} 
+            }}
           />
           Infer
         </button>
-      )}
+      )} */}
     </div>
   );
 };

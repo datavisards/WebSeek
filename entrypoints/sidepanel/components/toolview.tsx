@@ -111,7 +111,7 @@ const ToolView: React.FC<ToolViewProps> = ({
                     title="View System Logs for Data Analysis"
                     disabled={isMinimized}
                 >
-                    📊 System Logs
+                    System Logs
                 </button>
                 {activeTab === 'suggestions' && onDismissAllSuggestions && suggestions.filter(s => s.scope === 'macro').length > 0 && (
                     <button
