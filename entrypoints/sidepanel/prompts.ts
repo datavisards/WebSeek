@@ -465,11 +465,64 @@ You are WebSeek's proactive AI assistant. You must provide ${scope} suggestions 
 - You CANNOT use categories other than the rule IDs provided
 - You MUST include valid ruleIds in every suggestion
 
+**CRITICAL: INTELLIGENT SUGGESTION FILTERING**
+${scope === 'macro' ? 
+`**MACRO SUGGESTION INTELLIGENCE REQUIREMENTS:**
+- ONLY generate suggestions that are HIGHLY USEFUL for the user's general goal and current workflow
+- Analyze the workspace context, user's data, and current task to infer their primary objective
+- REJECT low-value suggestions that don't meaningfully advance their work
+- Prioritize suggestions that save significant time or unlock new capabilities
+- Consider the user's expertise level - avoid suggesting obvious or trivial actions
+- Focus on suggestions that address real bottlenecks or enhance productivity
+
+**HIGH-VALUE MACRO SUGGESTIONS (Generate these):**
+✅ External resources directly relevant to current data analysis task
+✅ Workflow improvements that save 10+ minutes of manual work  
+✅ Tools/websites that unlock new analytical capabilities
+✅ Automation suggestions for repetitive processes
+✅ Data sources that significantly enhance current dataset
+
+**LOW-VALUE MACRO SUGGESTIONS (DO NOT generate):**
+❌ Generic suggestions not tied to specific user goals
+❌ Obvious actions the user likely already knows
+❌ Resources marginally related to current work
+❌ Suggestions that don't meaningfully improve efficiency
+❌ Actions that duplicate existing user capabilities` :
+`**MICRO SUGGESTION INTELLIGENCE REQUIREMENTS:**
+- RESPECT the user's editing choices and current work in progress
+- DO NOT abruptly discard or override user's creations without clear benefit
+- Build upon what the user has already created rather than replacing it
+- Focus on enhancement and completion rather than wholesale changes
+- Consider the user's editing patterns and respect their data organization choices
+
+**RESPECTFUL MICRO SUGGESTIONS (Generate these):**
+✅ Complete partially filled data structures (extend user's work)
+✅ Enhance existing content with additional relevant details
+✅ Fill missing values in user's established patterns
+✅ Add complementary data that supports user's schema
+✅ Improve data quality while preserving user's structure
+
+**DISRESPECTFUL MICRO SUGGESTIONS (DO NOT generate):**
+❌ Replace user's work with completely different data
+❌ Restructure tables in ways that ignore user's organization
+❌ Discard user's column choices or naming conventions
+❌ Override user's data selection without clear quality benefit
+❌ Suggest changes that invalidate user's time investment`}
+
 **CRITICAL: NO REDUNDANT SUGGESTIONS**
 - NEVER suggest changes that result in identical or trivially different content
 - Your suggestions MUST provide genuine value and meaningful improvements
 - If you cannot suggest meaningful improvements, return success: false
 - For table updates: The suggested table MUST have new data, more rows, additional columns, or enhanced content
+
+**ANTI-REPETITION SAFEGUARDS:**
+${scope === 'macro' && triggeredRules.some(r => r.id === 'suggest-table-join') ? 
+`**TABLE JOIN REPETITION PREVENTION:**
+- NEVER suggest joining tables A and B if they have already been merged or joined
+- Check suggestion history for previous join operations between the same tables
+- Look for evidence of previous merges: combined column names, consolidated data, source prefixes
+- If tables show signs of being previously joined (e.g., "Amazon_Price" + "BH_Price" columns), return success: false
+- Analyze recent logs for completed join operations and avoid re-suggesting the same combinations` : ''}
 
 **CURRENT SCOPE: ${scope.toUpperCase()}**
 ${scope === 'macro' ? 
@@ -692,6 +745,28 @@ export const createRuleConstraints = (triggeredRules: any[]): string => {
         case 'table-cell-completion':
           return `- ${rule.name}: You MUST verify that captured webpage elements have POSITIONAL, STRUCTURAL, or SEMANTIC relationships before suggesting completion. 
 
+**CRITICAL REQUIREMENT: RESPECT USER'S WORK AND CHOICES**
+- The suggested table MUST build upon and enhance the user's existing work
+- PRESERVE the user's data organization, column structure, and naming conventions
+- DO NOT override or replace user's carefully selected data without clear benefit
+- ADD new data that complements what the user has already created
+- RESPECT the user's time investment in structuring their data
+
+**USER-RESPECTFUL COMPLETION PRINCIPLES:**
+✅ **Respectful Approaches (Use these):**
+- Extend user's existing column structure with additional rows of similar data
+- Complete partially filled rows using the same data pattern the user established
+- Add new columns that complement user's selected data fields (only if meaningful)
+- Fill missing cells in user's established schema without changing their organization
+- Enhance existing data with additional details while preserving user's structure
+
+❌ **Disrespectful Approaches (NEVER do these):**
+- Completely replace user's work with different data structure
+- Ignore user's column choices and suggest entirely different fields
+- Override user's naming conventions without clear improvement
+- Discard user's data selection in favor of "better" alternatives
+- Restructure the table in ways that invalidate user's time investment
+
 **CRITICAL REQUIREMENT: NEVER SUGGEST AN IDENTICAL TABLE**
 - The suggested table MUST be meaningfully different from the current table
 - You MUST add NEW data, expand rows, or improve structure
@@ -785,19 +860,34 @@ DO NOT suggest trivial additions or formatting changes. DO NOT suggest completio
 **CRITICAL: PREVENT REDUNDANT JOINS**
 Before suggesting any join operation, you MUST verify that the tables are NOT already joined or merged:
 
+**REPETITION PREVENTION - MANDATORY CHECKS:**
+1. **Suggestion History Analysis**: Check if these EXACT tables have been suggested for joining before
+2. **Recent Log Analysis**: Scan recent logs for completed join operations between these tables
+3. **Column Name Evidence**: Look for combined column names that indicate previous joins (e.g., "Amazon_Price", "BH_Photo_Price")
+4. **Data Source Tracking**: Identify if tables already contain merged data from multiple sources
+5. **Previous Merge Detection**: Check for evidence that these tables were previously consolidated
+
+**WHEN TO RETURN success: false - EXPANDED CRITERIA:**
+- Tables A and B were suggested for joining in recent suggestion history
+- Recent logs show "merge", "join", or "combine" operations between these tables
+- User has already accepted a suggestion to join these specific tables
+- Tables show evidence of being results of previous join operations
+- Column names indicate previous merging with source prefixes (e.g., "Amazon_", "BH_", "Source1_")
+- Tables contain identical or near-identical data (would result in redundant join)
+- Tables already have comprehensive data that spans multiple sources
+
+**EXAMPLE REDUNDANCY DETECTION:**
+❌ **DO NOT SUGGEST - Evidence of Previous Join:**
+- Suggestion history shows: "Merge ProductTable_Amazon and ProductTable_BH accepted 5 minutes ago"
+- Recent logs contain: "Updated table with merged Amazon and B&H data"
+- Column names like: ["Product", "Amazon_Price", "BH_Price", "Amazon_Rating", "BH_Rating"]
+- Table already contains data from both sources in a single consolidated structure
+
 **PRE-JOIN VALIDATION (MANDATORY):**
 1. **Check for Existing Joins**: Analyze if tables already contain merged data from multiple sources
 2. **Detect Combined Columns**: Look for columns that indicate data has been consolidated (e.g., "Amazon Price" + "B&H Price" in same table)
 3. **Identify Merged Records**: Check if tables already contain comprehensive data that would result from a join
 4. **Source Analysis**: Verify tables contain distinct, complementary data rather than already-combined datasets
-
-**WHEN TO RETURN success: false (DO NOT SUGGEST JOIN):**
-- Tables already contain merged data from multiple sources
-- One table is clearly a result of previous join operations (has combined column names like "Source A Price", "Source B Price")
-- Tables have overlapping data that suggests they're already consolidated
-- Column names indicate previous merging (prefixed with source names, e.g., "Amazon_", "BH_")
-- Tables contain identical or near-identical data (would result in redundant join)
-- Tables already have comprehensive data that spans multiple sources
 
 **CRITICAL: GENERATE CONCRETE JOIN OPERATIONS**
 You MUST provide specific join operations using exact tools and parameters. Analyze the tables to determine:
@@ -1052,10 +1142,24 @@ export const createSuggestionHistoryContext = (
     entry.ruleId === 'table-cell-completion' || entry.suggestionType?.includes('completion')
   );
   
-  let completionWarning = '';
+  // Special warning for repeated table join attempts
+  const tableJoinAttempts = relevantHistory.filter(entry => 
+    entry.ruleId === 'table-joining' || entry.ruleId === 'suggest-table-join' || 
+    entry.suggestionType?.includes('join') || entry.suggestionType?.includes('merge')
+  );
+  
+  let warnings = '';
+  
   if (tableCompletionAttempts.length >= 2) {
-    completionWarning = `\n\n**⚠️ REPEATED TABLE COMPLETION WARNING:**\nTable completion has been suggested ${tableCompletionAttempts.length} times recently. This may indicate the table is already complete. Before suggesting completion again, verify there are actually more meaningful items to extract from the webpage. If the table is substantially complete, return success: false instead.`;
+    warnings += `\n\n**⚠️ REPEATED TABLE COMPLETION WARNING:**\nTable completion has been suggested ${tableCompletionAttempts.length} times recently. This may indicate the table is already complete. Before suggesting completion again, verify there are actually more meaningful items to extract from the webpage. If the table is substantially complete, return success: false instead.`;
+  }
+  
+  if (tableJoinAttempts.length >= 1) {
+    const joinDetails = tableJoinAttempts.map(attempt => 
+      `"${attempt.suggestionType || 'table join'}" ${attempt.timeSinceAcceptance || 'recently'}`
+    ).join(', ');
+    warnings += `\n\n**⚠️ REPEATED TABLE JOIN WARNING:**\nTable join operations have been suggested recently: ${joinDetails}. Before suggesting new joins, verify that:\n- The suggested tables have NOT already been joined or merged\n- This is not a repetition of a previously accepted join suggestion\n- The tables contain distinct, complementary data (not already consolidated)\n- Column names don't indicate previous joins (e.g., "Source1_", "Amazon_", etc.)\nIf tables show evidence of previous joins, return success: false.`;
   }
 
-  return `Previous suggestion activity:\n${historyText}${completionWarning}\n\nConsider this history when determining the appropriate suggestion level and avoid repeating the same suggestion type.`;
+  return `Previous suggestion activity:\n${historyText}${warnings}\n\nConsider this history when determining the appropriate suggestion level and avoid repeating the same suggestion type or operations on the same data.`;
 };
