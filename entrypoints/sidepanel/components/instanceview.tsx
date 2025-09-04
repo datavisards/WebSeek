@@ -55,7 +55,7 @@ interface InstanceViewProps {
     closeTableEditor: () => void;
     openVisualizationEditor: (spec: any) => void;
   } | null>; // For programmatic control from parent component
-  onRegisterMultiTableCallbacks?: (callbacks: { markTableDirty: (tableId: string) => void }) => void; // For external table dirty state management
+  onRegisterMultiTableCallbacks?: (callbacks: { markTableDirty: (tableId: string) => void; updateTableInstance: (tableId: string, instance: TableInstance) => void }) => void; // For external table dirty state management
   onTableModified?: (tableId: string) => void; // For notifying about table modifications
 }
 
@@ -994,6 +994,18 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   // Add debouncing for web content operations to prevent duplicates
   const lastOperationRef = useRef<{ type: string; cellKey: string; timestamp: number } | null>(null);
 
+  // Store callbacks for multi-table editor to sync state
+  const multiTableCallbacksRef = useRef<{ updateTableInstance?: (tableId: string, instance: TableInstance) => void }>({});
+
+  // Handle callback registration from MultiTableEditor
+  const handleRegisterMultiTableCallbacks = useCallback((callbacks: { markTableDirty: (tableId: string) => void; updateTableInstance: (tableId: string, instance: TableInstance) => void }) => {
+    console.log('[InstanceView] Registering MultiTableEditor callbacks:', {
+      hasMarkTableDirty: !!callbacks.markTableDirty,
+      hasUpdateTableInstance: !!callbacks.updateTableInstance
+    });
+    multiTableCallbacksRef.current = { updateTableInstance: callbacks.updateTableInstance };
+  }, []);
+
   // Handle captured content for table cells
   const handleTableCellCapture = (message: any) => {
     console.log('[InstanceView] handleTableCellCapture called:', {
@@ -1584,12 +1596,19 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     }), `Remove cell content (${row + 1}, ${String.fromCharCode(65 + col)})`, logMessage);
   };
 
-  const saveTable = (tableId?: string, isDirty?: boolean) => {
+  const saveTable = (tableId?: string, isDirty?: boolean, tableInstance?: TableInstance) => {
     const targetTableId = tableId || editingTableId;
     
-    const table = instances.find(inst => inst.id === targetTableId && inst.type === 'table') as TableInstance | undefined;
+    // Try to find table in instances first, then use provided tableInstance
+    let table = instances.find(inst => inst.id === targetTableId && inst.type === 'table') as TableInstance | undefined;
+    
+    // If table not found in instances but tableInstance is provided (e.g., for joined tables)
+    if (!table && tableInstance) {
+      table = tableInstance;
+    }
     
     if (!table) {
+      console.warn(`[InstanceView] saveTable: Could not find table ${targetTableId}`);
       return null;
     }
     
@@ -1605,6 +1624,13 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       return originalInstanceId || null;
     } else {
       // Table was modified, keep it with current ID
+      
+      // If table instance was provided, update the existing instance in the array
+      if (tableInstance) {
+        setInstances(prev => prev.map(inst => 
+          inst.id === targetTableId ? tableInstance : inst
+        ));
+      }
       
       // Log the operation
       let withstr = "";
@@ -1738,57 +1764,71 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   };
 
   // Handle adding a row to the table
-  const handleAddRow = (position: 'before' | 'after', rowIndex: number) => {
-    if (!editingTableId) return;
-    onOperation(`Add row ${position} row ${rowIndex + 1} in table "${editingTableId}"`);
+  const handleAddRow = (tableId: string, position: 'before' | 'after', rowIndex: number) => {
+    console.log(`[InstanceView] handleAddRow: tableId=${tableId}, position=${position}, rowIndex=${rowIndex}`);
+    onOperation(`Add row ${position} row ${rowIndex + 1} in table "${tableId}"`);
 
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
         const newRowIndex = position === 'after' ? rowIndex + 1 : rowIndex;
         const newRows = inst.rows + 1;
 
         // First, update row numbers for existing cells that need to be shifted
         const newCells = [...inst.cells.slice(0, newRowIndex), Array(inst.cols).fill(null), ...inst.cells.slice(newRowIndex)];
 
-        return {
+        const updatedInstance = {
           ...inst,
           rows: newRows,
           cells: newCells
         };
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
   };
 
   // Handle removing a row from the table
-  const handleRemoveRow = (rowIndex: number) => {
-    if (!editingTableId) return;
-    onOperation(`Remove row ${rowIndex + 1} from table "${editingTableId}"`);
+  const handleRemoveRow = (tableId: string, rowIndex: number) => {
+    console.log(`[InstanceView] handleRemoveRow: tableId=${tableId}, rowIndex=${rowIndex}`);
+    onOperation(`Remove row ${rowIndex + 1} from table "${tableId}"`);
 
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
         const newRows = inst.rows - 1;
 
         // Remove cells in the specified row and update row numbers
         const newCells = [...inst.cells.slice(0, rowIndex), ...inst.cells.slice(rowIndex + 1)];
 
-        return {
+        const updatedInstance = {
           ...inst,
           rows: newRows,
           cells: newCells
         };
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
   };
 
   // Handle adding a column to the table
-  const handleAddColumn = (position: 'before' | 'after', colIndex: number) => {
-    if (!editingTableId) return;
-    onOperation(`Add column ${position} column ${String.fromCharCode(65 + colIndex)} in table "${editingTableId}"`);
+  const handleAddColumn = (tableId: string, position: 'before' | 'after', colIndex: number) => {
+    console.log(`[InstanceView] handleAddColumn: tableId=${tableId}, position=${position}, colIndex=${colIndex}`);
+    onOperation(`Add column ${position} column ${String.fromCharCode(65 + colIndex)} in table "${tableId}"`);
 
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
         const newColIndex = position === 'after' ? colIndex + 1 : colIndex;
         const newCols = inst.cols + 1;
 
@@ -1813,25 +1853,32 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           ...currentColumnNames.slice(newColIndex)
         ];
 
-        return {
+        const updatedInstance = {
           ...inst,
           cols: newCols,
           cells: newCells,
           columnTypes: newColumnTypes,
           columnNames: newColumnNames
         };
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
   };
 
   // Handle removing a column from the table
-  const handleRemoveColumn = (colIndex: number) => {
-    if (!editingTableId) return;
-    onOperation(`Remove column ${String.fromCharCode(65 + colIndex)} from table "${editingTableId}"`);
+  const handleRemoveColumn = (tableId: string, colIndex: number) => {
+    console.log(`[InstanceView] handleRemoveColumn: tableId=${tableId}, colIndex=${colIndex}`);
+    onOperation(`Remove column ${String.fromCharCode(65 + colIndex)} from table "${tableId}"`);
 
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
         const newCols = inst.cols - 1;
 
         const newCells = inst.cells.map(rowArr => {
@@ -1853,13 +1900,20 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           ...currentColumnNames.slice(colIndex + 1)
         ];
 
-        return {
+        const updatedInstance = {
           ...inst,
           cols: newCols,
           cells: newCells,
           columnTypes: newColumnTypes,
           columnNames: newColumnNames
         };
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
@@ -1901,10 +1955,20 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   };
 
   // Handle updating column type
-  const handleUpdateColumnType = (colIndex: number, columnType: 'numeral' | 'categorical') => {
-    if (!editingTableId) return;
+  const handleUpdateColumnType = (tableId: string, colIndex: number, columnType: 'numeral' | 'categorical') => {
+    console.log(`[InstanceView] handleUpdateColumnType: tableId=${tableId}, colIndex=${colIndex}, columnType=${columnType}`);
+    console.log(`[InstanceView] Current callback state:`, {
+      hasCallback: !!multiTableCallbacksRef.current.updateTableInstance,
+      callbackKeys: Object.keys(multiTableCallbacksRef.current)
+    });
+    
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
+        console.log(`[InstanceView] Found table ${tableId} for column type update`, {
+          currentColumnTypes: inst.columnTypes,
+          targetColumn: colIndex,
+          newType: columnType
+        });
         const currentColumnTypes = inst.columnTypes || [];
         const newColumnTypes = [...currentColumnTypes];
         newColumnTypes[colIndex] = columnType;
@@ -1928,21 +1992,46 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           });
         }
         
-        return {
+        const updatedInstance = {
           ...inst,
           columnTypes: newColumnTypes,
           cells: updatedCells
         };
+        
+        console.log(`[InstanceView] Created updated instance for ${tableId}:`, {
+          oldColumnTypes: inst.columnTypes,
+          newColumnTypes: updatedInstance.columnTypes,
+          hasCallback: !!multiTableCallbacksRef.current.updateTableInstance,
+          cellsPreview: updatedInstance.cells.slice(0, 3).map(row => row.map(cell => 
+            cell && 'content' in cell ? cell.content : (cell?.type || 'null')
+          ))
+        });
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          console.log(`[InstanceView] Calling updateTableInstance callback for ${tableId}`);
+          try {
+            multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+            console.log(`[InstanceView] Successfully called updateTableInstance callback for ${tableId}`);
+          } catch (error) {
+            console.error(`[InstanceView] Error calling updateTableInstance callback:`, error);
+          }
+        } else {
+          console.log(`[InstanceView] No updateTableInstance callback available for ${tableId}`);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
   };
 
   // Handle updating column name
-  const handleUpdateColumnName = (colIndex: number, columnName: string) => {
-    if (!editingTableId) return;
+  const handleUpdateColumnName = (tableId: string, colIndex: number, columnName: string) => {
+    console.log(`[InstanceView] handleUpdateColumnName: tableId=${tableId}, colIndex=${colIndex}, columnName=${columnName}`);
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
+        console.log(`[InstanceView] Found table ${tableId} for column name update`);
         const currentColumnNames = inst.columnNames || [];
         const newColumnNames = [...currentColumnNames];
         
@@ -1953,18 +2042,26 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         
         newColumnNames[colIndex] = columnName;
         
-        return { ...inst, columnNames: newColumnNames };
+        const updatedInstance = { ...inst, columnNames: newColumnNames };
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
   };
 
   // Handle column transformation
-  const handleTransformColumn = (colIndex: number, transformType: string, options?: any) => {
-    if (!editingTableId) return;
+  const handleTransformColumn = (tableId: string, colIndex: number, transformType: string, options?: any) => {
+    console.log(`[InstanceView] handleTransformColumn: tableId=${tableId}, colIndex=${colIndex}, transformType=${transformType}`);
     
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
+        console.log(`[InstanceView] Found table ${tableId} for column transformation`);
         const newCells = inst.cells.map(row => {
           const cell = row[colIndex];
           if (!cell || cell.type !== 'text' || !cell.content) return row;
@@ -2083,7 +2180,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           return newRow;
         });
         
-        return { ...inst, cells: newCells };
+        const updatedInstance = { ...inst, cells: newCells };
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
@@ -2732,7 +2836,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
             initialTableId={editingTableId}
             instances={instances}
             htmlContext={htmlContextRef.current}
-            onSaveTable={(tableId: string, _tableName?: string, isDirty?: boolean) => saveTable(tableId, isDirty)}
+            onSaveTable={(tableId: string, tableName?: string, isDirty?: boolean, tableInstance?: TableInstance) => saveTable(tableId, isDirty, tableInstance)}
+            onAddInstance={(instance: Instance) => {
+              console.log(`[InstanceView] Adding new instance to main array: ${instance.id}`);
+              setInstances(prev => [...prev, instance]);
+            }}
             onCancel={cancelTableEdit}
             onClose={closeTableEditor}
             onAddToTable={(_tableId: string, instance: Instance, row: number, col: number) => handleAddToTable(instance, row, col)}
@@ -2745,18 +2853,18 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
             availableInstances={availableInstances}
             onCaptureToCell={(_tableId: string, row: number, col: number) => handleCaptureToTableCell(row, col)}
             isCaptureEnabled={isCaptureEnabled}
-            onAddRow={(_tableId: string, position: 'before' | 'after', rowIndex: number) => handleAddRow(position, rowIndex)}
-            onRemoveRow={(_tableId: string, rowIndex: number) => handleRemoveRow(rowIndex)}
-            onAddColumn={(_tableId: string, position: 'before' | 'after', colIndex: number) => handleAddColumn(position, colIndex)}
-            onRemoveColumn={(_tableId: string, colIndex: number) => handleRemoveColumn(colIndex)}
-            onUpdateColumnType={(_tableId: string, colIndex: number, columnType: 'numeral' | 'categorical') => handleUpdateColumnType(colIndex, columnType)}
+            onAddRow={(tableId: string, position: 'before' | 'after', rowIndex: number) => handleAddRow(tableId, position, rowIndex)}
+            onRemoveRow={(tableId: string, rowIndex: number) => handleRemoveRow(tableId, rowIndex)}
+            onAddColumn={(tableId: string, position: 'before' | 'after', colIndex: number) => handleAddColumn(tableId, position, colIndex)}
+            onRemoveColumn={(tableId: string, colIndex: number) => handleRemoveColumn(tableId, colIndex)}
+            onUpdateColumnType={(tableId: string, colIndex: number, columnType: 'numeral' | 'categorical') => handleUpdateColumnType(tableId, colIndex, columnType)}
             onOperation={onOperation}
-            onUpdateColumnName={(_tableId: string, colIndex: number, columnName: string) => handleUpdateColumnName(colIndex, columnName)}
-            onTransformColumn={(_tableId: string, colIndex: number, transformType: string, options?: any) => handleTransformColumn(colIndex, transformType, options)}
+            onUpdateColumnName={(tableId: string, colIndex: number, columnName: string) => handleUpdateColumnName(tableId, colIndex, columnName)}
+            onTransformColumn={(tableId: string, colIndex: number, transformType: string, options?: any) => handleTransformColumn(tableId, colIndex, transformType, options)}
             onLiftRowToHeader={(_tableId: string, rowIndex: number) => handleLiftRowToHeader(rowIndex)}
             currentSuggestion={currentSuggestion}
             setIsInEditor={setIsInEditor}
-            onRegisterCallbacks={onRegisterMultiTableCallbacks}
+            onRegisterCallbacks={handleRegisterMultiTableCallbacks}
           />
         ) : editingVisualizationSpec ? (
           // Visualization Editor View

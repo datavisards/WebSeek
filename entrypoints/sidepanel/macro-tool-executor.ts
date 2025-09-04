@@ -123,6 +123,9 @@ export class MacroToolExecutor {
         case 'renameColumn':
           return await this.executeRenameColumn(toolCall.parameters, currentInstances, updateInstances);
         
+        case 'fillMissingValues':
+          return await this.executeFillMissingValues(toolCall.parameters, currentInstances, updateInstances);
+        
         default:
           return {
             success: false,
@@ -1433,6 +1436,285 @@ export class MacroToolExecutor {
       };
     }
   }
+
+  /**
+   * Execute fillMissingValues tool - fills missing values in table columns
+   */
+  private static async executeFillMissingValues(
+    params: {
+      instanceId: string;
+      columnName: string;
+      strategy: string;
+      constantValue?: string;
+      missingIndicators?: string[];
+    },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string; result?: any }> {
+    try {
+      const { instanceId, columnName, strategy, constantValue, missingIndicators = ["", "N/A", "null", "NULL", "-"] } = params;
+      
+      // Find the target table instance
+      const tableInstance = currentInstances.find(inst => inst.id === instanceId && inst.type === 'table') as TableInstance;
+      if (!tableInstance) {
+        return {
+          success: false,
+          message: `Table instance '${instanceId}' not found`
+        };
+      }
+
+      // Resolve column name and get index
+      const columnInfo = this.resolveColumnName(columnName, tableInstance);
+      if (!columnInfo) {
+        return {
+          success: false,
+          message: `Column '${columnName}' not found in table '${instanceId}'`
+        };
+      }
+
+      const { columnIndex } = columnInfo;
+      
+      // Extract column values
+      const columnValues: (string | null)[] = tableInstance.cells.map(row => {
+        const cell = row[columnIndex];
+        if (!cell || !('content' in cell) || !cell.content || missingIndicators.includes(cell.content.trim())) {
+          return null; // Missing value
+        }
+        return cell.content;
+      });
+
+      // Calculate statistics for imputation
+      const validValues = columnValues.filter(val => val !== null) as string[];
+      const missingCount = columnValues.length - validValues.length;
+      const missingPercentage = (missingCount / columnValues.length) * 100;
+
+      if (missingCount === 0) {
+        return {
+          success: false,
+          message: `No missing values found in column '${columnName}'`
+        };
+      }
+
+      if (missingPercentage > 80) {
+        return {
+          success: false,
+          message: `Too many missing values (${missingPercentage.toFixed(1)}%). Cannot reliably impute column '${columnName}'`
+        };
+      }
+
+      // Calculate imputation value based on strategy
+      let imputeValue: string;
+      
+      switch (strategy) {
+        case 'mean': {
+          const numericalValues = validValues.map(val => parseFloat(val)).filter(val => !isNaN(val));
+          if (numericalValues.length === 0) {
+            return {
+              success: false,
+              message: `Cannot calculate mean for non-numerical column '${columnName}'`
+            };
+          }
+          const mean = numericalValues.reduce((sum, val) => sum + val, 0) / numericalValues.length;
+          imputeValue = mean.toString();
+          break;
+        }
+        
+        case 'median': {
+          const numericalValues = validValues.map(val => parseFloat(val)).filter(val => !isNaN(val));
+          if (numericalValues.length === 0) {
+            return {
+              success: false,
+              message: `Cannot calculate median for non-numerical column '${columnName}'`
+            };
+          }
+          numericalValues.sort((a, b) => a - b);
+          const mid = Math.floor(numericalValues.length / 2);
+          const median = numericalValues.length % 2 === 0 
+            ? (numericalValues[mid - 1] + numericalValues[mid]) / 2
+            : numericalValues[mid];
+          imputeValue = median.toString();
+          break;
+        }
+        
+        case 'mode': {
+          const valueCounts: { [key: string]: number } = {};
+          validValues.forEach(val => {
+            valueCounts[val] = (valueCounts[val] || 0) + 1;
+          });
+          const mode = Object.entries(valueCounts).reduce((a, b) => valueCounts[a[0]] > valueCounts[b[0]] ? a : b)[0];
+          imputeValue = mode;
+          break;
+        }
+        
+        case 'constant': {
+          if (!constantValue) {
+            return {
+              success: false,
+              message: `Constant value required for 'constant' strategy`
+            };
+          }
+          imputeValue = constantValue;
+          break;
+        }
+        
+        case 'forward_fill': {
+          // Will be handled row by row below
+          imputeValue = '';
+          break;
+        }
+        
+        case 'backward_fill': {
+          // Will be handled row by row below
+          imputeValue = '';
+          break;
+        }
+        
+        case 'interpolate': {
+          const numericalValues = validValues.map(val => parseFloat(val)).filter(val => !isNaN(val));
+          if (numericalValues.length === 0) {
+            return {
+              success: false,
+              message: `Cannot interpolate non-numerical column '${columnName}'`
+            };
+          }
+          // Will be handled row by row below
+          imputeValue = '';
+          break;
+        }
+        
+        default:
+          return {
+            success: false,
+            message: `Unknown imputation strategy: ${strategy}`
+          };
+      }
+
+      // Create new cells with imputed values
+      const newCells = tableInstance.cells.map((row, rowIndex) => {
+        const newRow = [...row];
+        const cell = newRow[columnIndex];
+        
+        if (!cell || !('content' in cell) || !cell.content || missingIndicators.includes(cell.content.trim())) {
+          // This is a missing value, fill it
+          let fillValue = imputeValue;
+          
+          // Special handling for forward/backward fill and interpolation
+          if (strategy === 'forward_fill') {
+            // Find the last valid value before this row
+            for (let i = rowIndex - 1; i >= 0; i--) {
+              const prevCell = tableInstance.cells[i][columnIndex];
+              if (prevCell && 'content' in prevCell && prevCell.content && !missingIndicators.includes(prevCell.content.trim())) {
+                fillValue = prevCell.content;
+                break;
+              }
+            }
+            if (!fillValue && validValues.length > 0) {
+              fillValue = validValues[0]; // Fallback to first valid value
+            }
+          } else if (strategy === 'backward_fill') {
+            // Find the next valid value after this row
+            for (let i = rowIndex + 1; i < tableInstance.cells.length; i++) {
+              const nextCell = tableInstance.cells[i][columnIndex];
+              if (nextCell && 'content' in nextCell && nextCell.content && !missingIndicators.includes(nextCell.content.trim())) {
+                fillValue = nextCell.content;
+                break;
+              }
+            }
+            if (!fillValue && validValues.length > 0) {
+              fillValue = validValues[validValues.length - 1]; // Fallback to last valid value
+            }
+          } else if (strategy === 'interpolate') {
+            // Simple linear interpolation between nearest valid values
+            let prevValue: number | null = null;
+            let nextValue: number | null = null;
+            let prevIndex = -1;
+            let nextIndex = -1;
+            
+            // Find previous valid numerical value
+            for (let i = rowIndex - 1; i >= 0; i--) {
+              const prevCell = tableInstance.cells[i][columnIndex];
+              if (prevCell && 'content' in prevCell && prevCell.content && !missingIndicators.includes(prevCell.content.trim())) {
+                const val = parseFloat(prevCell.content);
+                if (!isNaN(val)) {
+                  prevValue = val;
+                  prevIndex = i;
+                  break;
+                }
+              }
+            }
+            
+            // Find next valid numerical value
+            for (let i = rowIndex + 1; i < tableInstance.cells.length; i++) {
+              const nextCell = tableInstance.cells[i][columnIndex];
+              if (nextCell && 'content' in nextCell && nextCell.content && !missingIndicators.includes(nextCell.content.trim())) {
+                const val = parseFloat(nextCell.content);
+                if (!isNaN(val)) {
+                  nextValue = val;
+                  nextIndex = i;
+                  break;
+                }
+              }
+            }
+            
+            if (prevValue !== null && nextValue !== null) {
+              // Linear interpolation
+              const ratio = (rowIndex - prevIndex) / (nextIndex - prevIndex);
+              fillValue = (prevValue + ratio * (nextValue - prevValue)).toString();
+            } else if (prevValue !== null) {
+              fillValue = prevValue.toString();
+            } else if (nextValue !== null) {
+              fillValue = nextValue.toString();
+            } else {
+              // Fallback to mean if no valid values found for interpolation
+              const numericalValues = validValues.map(val => parseFloat(val)).filter(val => !isNaN(val));
+              if (numericalValues.length > 0) {
+                const mean = numericalValues.reduce((sum, val) => sum + val, 0) / numericalValues.length;
+                fillValue = mean.toString();
+              } else {
+                fillValue = '0'; // Ultimate fallback
+              }
+            }
+          }
+          
+          newRow[columnIndex] = {
+            type: 'text',
+            id: `filled_${rowIndex}_${columnIndex}`,
+            content: fillValue,
+            source: { type: 'manual' }
+          };
+        }
+        
+        return newRow;
+      });
+
+      // Update instances
+      const updatedInstances = currentInstances.map(inst => {
+        if (inst.id === instanceId && inst.type === 'table') {
+          return { ...inst, cells: newCells };
+        }
+        return inst;
+      });
+
+      updateInstances(updatedInstances);
+
+      return {
+        success: true,
+        message: `Filled ${missingCount} missing values in column '${columnName}' using ${strategy} strategy`,
+        result: {
+          filledCount: missingCount,
+          strategy: strategy,
+          columnName: columnName,
+          missingPercentage: missingPercentage.toFixed(1)
+        }
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        message: `Error filling missing values: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
+  }
 }
 
 /**
@@ -1477,10 +1759,10 @@ export const executeCompositeSuggestion = async (
       currentInstances,
       updateInstances
     );
-  } else {
-    return {
-      success: false,
-      message: "Suggestion must contain either toolCall or toolSequence"
-    };
-  }
-};
+    } else {
+      return {
+        success: false,
+        message: "Suggestion must contain either toolCall or toolSequence"
+      };
+    }
+  };

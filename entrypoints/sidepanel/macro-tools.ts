@@ -433,6 +433,60 @@ export const MACRO_TOOLS: MacroTool[] = [
       "Conversion should be logically valid (e.g., don't convert text to numerical if no numbers present)",
       "Cleaning pattern must be a valid regex if specified"
     ]
+  },
+  {
+    name: "fillMissingValues",
+    description: "Fills missing or empty cells in table columns using various imputation strategies. Useful for completing datasets with gaps.",
+    parameters: [
+      {
+        name: "instanceId",
+        type: "string",
+        description: "The ID of the table instance containing missing values",
+        required: true
+      },
+      {
+        name: "columnName",
+        type: "string",
+        description: "The name of the column to fill missing values in (must be exact column name like 'A', 'B', 'C')",
+        required: true
+      },
+      {
+        name: "strategy",
+        type: "string",
+        description: "The imputation strategy to use",
+        required: true,
+        options: ["mean", "median", "mode", "forward_fill", "backward_fill", "constant", "interpolate"]
+      },
+      {
+        name: "constantValue",
+        type: "string",
+        description: "The constant value to use when strategy is 'constant'",
+        required: false
+      },
+      {
+        name: "missingIndicators",
+        type: "array",
+        description: "Array of values to treat as missing (default: empty string, 'N/A', 'null', 'NULL', '-')",
+        required: false,
+        defaultValue: ["", "N/A", "null", "NULL", "-"]
+      }
+    ],
+    examples: [
+      'fillMissingValues("Table1", "B", "mean")',                                    // Fill with column mean
+      'fillMissingValues("Table1", "A", "mode")',                                    // Fill with most frequent value
+      'fillMissingValues("Table1", "C", "constant", "Unknown")',                     // Fill with constant value
+      'fillMissingValues("Table1", "D", "forward_fill")',                           // Fill with previous valid value
+      'fillMissingValues("Table1", "E", "interpolate")',                            // Linear interpolation for numbers
+      'fillMissingValues("Table1", "F", "median", null, ["", "N/A", "missing"])'   // Custom missing indicators
+    ],
+    constraints: [
+      "Instance must exist and be a table type",
+      "Column name must exist in the specified table",
+      "Strategy 'mean', 'median', and 'interpolate' only work with numerical columns",
+      "Strategy 'constant' requires constantValue parameter",
+      "At least 10% of column values should be non-missing for reliable imputation",
+      "Missing value percentage should be between 10%-80% for meaningful imputation"
+    ]
   }
 ];
 
