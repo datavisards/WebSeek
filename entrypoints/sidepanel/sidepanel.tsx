@@ -148,6 +148,9 @@ const SidePanel = () => {
     saveTable: () => void;
     closeTableEditor: () => void;
     openVisualizationEditor: (spec: any) => void;
+    // isInVisualizationEditor: () => boolean;
+    // saveCurrentVisualization: () => boolean;
+    // hasNonEmptyVisualization: () => boolean;
   } | null>(null);
 
   // Callback to notify MultiTableEditor about external table modifications
@@ -1167,6 +1170,41 @@ const SidePanel = () => {
       
       console.log('[SidePanel] User confirmed visualization creation, proceeding');
     }
+
+    // Special handling for createVisualization when in visualization editor mode
+    // TODO: Implement when visualization editor callbacks are available
+    /*
+    if (toolCall.function === 'createVisualization' && 
+        instanceViewCallbacks.current?.isInVisualizationEditor && 
+        instanceViewCallbacks.current.isInVisualizationEditor()) {
+      console.log('[SidePanel] createVisualization requested while in visualization editor, checking for confirmation');
+      
+      let shouldContinue = true;
+      
+      // Check if current visualization is non-empty
+      if (instanceViewCallbacks.current?.hasNonEmptyVisualization && 
+          instanceViewCallbacks.current.hasNonEmptyVisualization()) {
+        shouldContinue = window.confirm(
+          `You are currently editing a visualization. Creating a new visualization will save your current work and replace it with the new one. Continue?`
+        );
+      } else {
+        console.log('[SidePanel] Current visualization is empty, proceeding without confirmation');
+      }
+      
+      if (!shouldContinue) {
+        console.log('[SidePanel] User cancelled visualization creation');
+        return;
+      }
+      
+      // Save current visualization if it exists
+      if (instanceViewCallbacks.current?.saveCurrentVisualization) {
+        const saved = instanceViewCallbacks.current.saveCurrentVisualization();
+        console.log('[SidePanel] Current visualization saved:', saved);
+      }
+      
+      console.log('[SidePanel] User confirmed visualization creation, proceeding');
+    }
+    */
     
     try {
       console.log('[SidePanel] Current instances before tool execution:', instances.length);
@@ -1267,7 +1305,44 @@ const SidePanel = () => {
               }
             }, 200);
           }
+        } else if (toolCall.function === 'createVisualization' && result.result?.newVisualizationSpec) {
+          // Handle createVisualization when not in table editor (e.g., from visualization editor or main view)
+          console.log('[SidePanel] createVisualization succeeded from non-table context, handling visualization editor transition');
+          console.log('[SidePanel] editingTableId:', editingTableId, 'newInstanceId:', result.result.newInstanceId);
+          
+          if (instanceViewCallbacks.current?.openVisualizationEditor) {
+            console.log('[SidePanel] Calling openVisualizationEditor with new spec');
+            // Small delay to ensure any state updates are processed
+            setTimeout(() => {
+              instanceViewCallbacks.current?.openVisualizationEditor(result.result.newVisualizationSpec);
+            }, 100);
+          } else {
+            console.log('[SidePanel] openVisualizationEditor callback not available');
+          }
         }
+        
+        // Special handling for createVisualization: switch to visualization editor with new spec
+        // TODO: Implement when visualization editor callbacks are available
+        /*
+        if (toolCall.function === 'createVisualization' && 
+            instanceViewCallbacks.current?.isInVisualizationEditor &&
+            instanceViewCallbacks.current.isInVisualizationEditor() && 
+            result.result?.newVisualizationSpec) {
+          console.log('[SidePanel] createVisualization succeeded while in visualization editor, switching to new spec');
+          console.log('[SidePanel] New visualization ID:', result.result.newInstanceId);
+          
+          // Open the visualization editor with the new visualization spec
+          if (instanceViewCallbacks.current?.openVisualizationEditor) {
+            console.log('[SidePanel] Auto-opening visualization editor with new spec from result');
+            // Small delay to ensure any state updates are processed
+            setTimeout(() => {
+              instanceViewCallbacks.current?.openVisualizationEditor(result.result.newVisualizationSpec);
+            }, 100);
+          } else {
+            console.log('[SidePanel] openVisualizationEditor callback not available');
+          }
+        }
+        */
         
         // Log already added by wrappedUpdateInstances - no need to add another log here
         

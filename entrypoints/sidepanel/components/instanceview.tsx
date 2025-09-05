@@ -16,6 +16,7 @@ import { createEmbeddedTextInstance, createEmbeddedImageInstance, createManualSo
 import { useHTMLContent } from './useHTMLContent';
 import { useInputHandlers } from './useInputHandlers';
 import SnapshotStatusIndicator from './SnapshotStatusIndicator';
+import VisualizationRenderer from './visualizationrenderer';
 import './instanceview.css';
 import { message } from 'vega-lite/types_unstable/log/index.js';
 import { chatWithAgent } from '../api-selector';
@@ -106,6 +107,30 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   const [sketchCount, setSketchCount] = useState(0);
   const sketchCountRef = useRef(0);
   const [isCaptureEnabled, setIsCaptureEnabled] = useState(true);
+  
+  // Add logging for capture enabled state changes
+  const setIsCaptureEnabledWithLogging = useCallback((enabled: boolean, reason?: string) => {
+    console.log(`[InstanceView] isCaptureEnabled changing: ${!enabled} -> ${enabled}`, {
+      reason: reason || 'unknown',
+      timestamp: Date.now(),
+      stack: new Error().stack?.split('\n')[2]?.trim()
+    });
+    setIsCaptureEnabled(enabled);
+    
+    // Add a safeguard timeout - if capture is disabled for more than 30 seconds, re-enable it
+    if (!enabled) {
+      setTimeout(() => {
+        setIsCaptureEnabled(current => {
+          if (!current) {
+            console.warn('[InstanceView] Capture timeout - re-enabling capture after 30 seconds');
+            setCaptureTarget(null);
+            return true;
+          }
+          return current;
+        });
+      }, 30000);
+    }
+  }, []);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -917,7 +942,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         handleScreenshotFinished(msg);
       } else if (msg.action === 'selection_canceled') {
         setCaptureTarget(null);
-        setIsCaptureEnabled(true);
+        setIsCaptureEnabledWithLogging(true, 'selection_canceled');
       } else if (msg.action === 'exit_selection') {
         setSelectedInstanceId(null);
         setDraggingInstanceId(null);
@@ -988,7 +1013,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         }
       ], `Create image "${newId}" from element selection`, logMessage);
     }
-    setIsCaptureEnabled(true);
+    setIsCaptureEnabledWithLogging(true, 'handleElementSelected');
   };
 
   // Add debouncing for web content operations to prevent duplicates
@@ -1029,7 +1054,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         (now - lastOperationRef.current.timestamp) < 1000) {
       console.log('[InstanceView] Preventing duplicate operation:', operationType);
       setCaptureTarget(null);
-      setIsCaptureEnabled(true);
+      setIsCaptureEnabledWithLogging(true, 'duplicate_operation_prevention');
       return;
     }
     
@@ -1042,7 +1067,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     if (!table) {
       console.error('Table not found for capture target');
       setCaptureTarget(null);
-      setIsCaptureEnabled(true);
+      setIsCaptureEnabledWithLogging(true, 'table_not_found');
       return;
     }
 
@@ -1143,7 +1168,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
 
     // Clear capture target and re-enable capture
     setCaptureTarget(null);
-    setIsCaptureEnabled(true);
+    setIsCaptureEnabledWithLogging(true, 'handleTableCellCapture_completed');
   };
 
   const handleScreenshotFinished = (message: any) => {
@@ -1171,7 +1196,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       }
     ], `Create image "${newId}" from screenshot`, logMessage);
     
-    setIsCaptureEnabled(true);
+    setIsCaptureEnabledWithLogging(true, 'handleScreenshotFinished');
   }
 
   // Delete selected instance
@@ -1213,14 +1238,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     // send message via the background port
     if (bgPort.current) {
       bgPort.current.postMessage({ action: 'start_element_selection' });
-      setIsCaptureEnabled(false);
+      setIsCaptureEnabledWithLogging(false, 'handleCaptureStart');
     }
   };
 
   const handleScreenshotStart = () => {
     if (bgPort.current) {
       bgPort.current.postMessage({ action: 'start_screenshot_capture' });
-      setIsCaptureEnabled(false);
+      setIsCaptureEnabledWithLogging(false, 'handleScreenshotStart');
     }
   }
 
@@ -1244,7 +1269,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           setDraggingInstanceId(null);
           setDraggingEmbeddedId(null);
           setCaptureTarget(null);
-          setIsCaptureEnabled(true);
+          setIsCaptureEnabledWithLogging(true, 'escape_key_pressed');
         }
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         // Check if we're focused on an input field
@@ -1691,20 +1716,96 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           console.log('[InstanceView] Current states before opening viz editor:', {
             editingTableId,
             editingVisualizationSpec: !!editingVisualizationSpec,
-            editingTextId
+            editingTextId,
+            originalInstanceId
           });
+          
+          // Check if we're already in visualization editor mode
+          if (editingVisualizationSpec && originalInstanceId) {
+            console.log('[InstanceView] Already in visualization editor, saving current work and returning to instance view');
+            
+            // Check if current visualization is non-empty (has meaningful content)
+            const hasNonEmptyViz = editingVisualizationSpec && 
+                                   typeof editingVisualizationSpec === 'object' && 
+                                   Object.keys(editingVisualizationSpec).length > 0;
+                                   
+            if (hasNonEmptyViz) {
+              // Save the current visualization to the instance
+              const currentInstance = instances.find(inst => inst.id === originalInstanceId);
+              if (currentInstance && currentInstance.type === 'visualization') {
+                console.log('[InstanceView] Saving current visualization before returning to instance view');
+                const specToSave = typeof editingVisualizationSpec === 'string' 
+                  ? JSON.parse(editingVisualizationSpec) 
+                  : editingVisualizationSpec;
+                
+                // Update the instance with the current spec
+                const updatedInstances = instances.map(inst => 
+                  inst.id === originalInstanceId 
+                    ? { ...inst, spec: specToSave }
+                    : inst
+                );
+                setInstances(updatedInstances);
+                console.log('[InstanceView] Current visualization saved');
+              }
+            } else {
+              console.log('[InstanceView] Current visualization is empty, no need to save');
+            }
+            
+            // Exit visualization editor and return to instance view
+            setEditingVisualizationSpec(null);
+            setOriginalInstanceId(null);
+            setAvailableInstances([]);
+            console.log('[InstanceView] Exited visualization editor, returning to instance view');
+            return;
+          }
+          
+          // Normal case: not currently in visualization editor, proceed as usual
           setEditingVisualizationSpec(spec);
           // Set available instances to exclude visualizations, same as double-click behavior
           setAvailableInstances(instances.filter(inst => inst.type !== 'visualization'));
           console.log('[InstanceView] setEditingVisualizationSpec called with:', spec);
           console.log('[InstanceView] setAvailableInstances called with filtered instances count:', instances.filter(inst => inst.type !== 'visualization').length);
-        }
+        },
+        // isInVisualizationEditor: () => {
+        //   return !!editingVisualizationSpec;
+        // },
+        // saveCurrentVisualization: () => {
+        //   console.log('[InstanceView] saveCurrentVisualization callback called');
+        //   if (editingVisualizationSpec && originalInstanceId) {
+        //     console.log('[InstanceView] Saving current visualization for instance:', originalInstanceId);
+        //     // Find the current instance being edited
+        //     const currentInstance = instances.find(inst => inst.id === originalInstanceId);
+        //     if (currentInstance && currentInstance.type === 'visualization') {
+        //       // Ensure spec is an object
+        //       const spec = typeof editingVisualizationSpec === 'string' 
+        //         ? JSON.parse(editingVisualizationSpec) 
+        //         : editingVisualizationSpec;
+              
+        //       // Update the instance with the current spec
+        //       const updatedInstances = instances.map(inst => 
+        //         inst.id === originalInstanceId 
+        //           ? { ...inst, spec: spec }
+        //           : inst
+        //       );
+        //       setInstances(updatedInstances);
+        //       console.log('[InstanceView] Current visualization saved');
+        //       return true;
+        //     }
+        //   }
+        //   console.log('[InstanceView] No current visualization to save or missing originalInstanceId');
+        //   return false;
+        // },
+        // hasNonEmptyVisualization: () => {
+        //   return !!editingVisualizationSpec && 
+        //          typeof editingVisualizationSpec === 'object' && 
+        //          Object.keys(editingVisualizationSpec).length > 0;
+        // }
       };
       console.log('[InstanceView] Callback ref populated successfully');
     } else {
       console.log('[InstanceView] callbackRef is null, skipping population');
     }
-  }, [callbackRef, editingTableId, instances]);
+  }, [callbackRef, editingTableId, instances, editingVisualizationSpec, originalInstanceId]);
 
   // Debug tracking for visualization editor state
   useEffect(() => {
@@ -1715,6 +1816,48 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       editingTextId
     });
   }, [editingVisualizationSpec, editingTableId, editingTextId]);
+
+  // Sync editingVisualizationSpec with instance changes when editing a visualization
+  useEffect(() => {
+    if (editingVisualizationSpec) {
+      // Case 1: We have originalInstanceId (double-click edit)
+      if (originalInstanceId) {
+        const currentInstance = instances.find(inst => inst.id === originalInstanceId);
+        if (currentInstance && currentInstance.type === 'visualization' && currentInstance.spec) {
+          // Check if the instance spec has changed from what we're currently editing
+          if (JSON.stringify(currentInstance.spec) !== JSON.stringify(editingVisualizationSpec)) {
+            console.log('[InstanceView] Detected spec change in edited visualization instance, updating editingVisualizationSpec');
+            console.log('[InstanceView] Old spec:', editingVisualizationSpec);
+            console.log('[InstanceView] New spec:', currentInstance.spec);
+            setEditingVisualizationSpec(currentInstance.spec);
+          }
+        }
+      } else {
+        // Case 2: No originalInstanceId (chat-initiated edit) - look for the most recent visualization
+        // that might match what we're editing, or auto-update to latest if it's significantly different
+        const visualizationInstances = instances.filter(inst => inst.type === 'visualization');
+        if (visualizationInstances.length > 0) {
+          // Find the most recent visualization instance
+          const newestVisualization = visualizationInstances.reduce((newest, current) => {
+            // Use a simple heuristic: assume the instance with the highest ID suffix is newest
+            const newestId = newest.id.replace(/\D/g, '');
+            const currentId = current.id.replace(/\D/g, '');
+            return parseInt(currentId) > parseInt(newestId) ? current : newest;
+          });
+          
+          if (newestVisualization.spec && 
+              JSON.stringify(newestVisualization.spec) !== JSON.stringify(editingVisualizationSpec)) {
+            console.log('[InstanceView] Detected new visualization while editor is open, updating to newest spec');
+            console.log('[InstanceView] Current spec:', editingVisualizationSpec);
+            console.log('[InstanceView] New spec:', newestVisualization.spec);
+            setEditingVisualizationSpec(newestVisualization.spec);
+            // Also update originalInstanceId to track this instance
+            setOriginalInstanceId(newestVisualization.id);
+          }
+        }
+      }
+    }
+  }, [instances, editingVisualizationSpec, originalInstanceId]);
 
   const cancelTableEdit = () => {
     if (!editingTableId) return;
@@ -1759,7 +1902,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       bgPort.current.postMessage({
         action: 'start_element_selection'
       });
-      setIsCaptureEnabled(false);
+      setIsCaptureEnabledWithLogging(false, 'handleCaptureToTableCell');
     }
   };
 
@@ -3187,18 +3330,19 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                           }}
                         />
                       ) : (
-                        <div style={{
-                          width: '100%',
-                          height: '100%',
-                          background: '#f0f0f0',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '12px',
-                          color: '#666'
-                        }}>
-                          📊 Visualization
-                        </div>
+                        <VisualizationThumbnailGenerator 
+                          key={instance.id}
+                          instance={instance}
+                          onThumbnailGenerated={(thumbnailUrl: string) => {
+                            // Update the instance with the generated thumbnail
+                            const updatedInstances = instances.map(inst => 
+                              inst.id === instance.id 
+                                ? { ...inst, thumbnail: thumbnailUrl }
+                                : inst
+                            );
+                            setInstances(updatedInstances);
+                          }}
+                        />
                       )
                     ) : null}
                     {selectedInstanceId === instance.id && (
@@ -3256,6 +3400,75 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       />
     </>
   );
-};
+}
+
+// Component for generating thumbnails for visualization instances
+interface VisualizationThumbnailGeneratorProps {
+  instance: Instance;
+  onThumbnailGenerated: (thumbnailUrl: string) => void;
+}
+
+const VisualizationThumbnailGenerator: React.FC<VisualizationThumbnailGeneratorProps> = ({
+  instance,
+  onThumbnailGenerated
+}) => {
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    // Generate thumbnail when component mounts
+    if (!isGenerating && instance.type === 'visualization' && instance.spec) {
+      setIsGenerating(true);
+    }
+  }, [instance, isGenerating]);
+
+  if (instance.type !== 'visualization' || !instance.spec) {
+    return (
+      <div style={{
+        width: '100%',
+        height: '100%',
+        background: '#f0f0f0',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '12px',
+        color: '#666'
+      }}>
+        📊 No Spec
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Show loading state while generating */}
+      <div style={{
+        width: '100%',
+        height: '100%',
+        background: '#f0f0f0',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '12px',
+        color: '#666'
+      }}>
+        {isGenerating ? '⏳ Generating...' : '📊 Visualization'}
+      </div>
+      
+      {/* Invisible VisualizationRenderer to generate thumbnail */}
+      {isGenerating && (
+        <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '200px', height: '150px' }}>
+          <VisualizationRenderer
+            key={`thumb-${instance.id}`}
+            spec={instance.spec}
+            onImageUrlReady={(imageUrl: string) => {
+              onThumbnailGenerated(imageUrl);
+              setIsGenerating(false);
+            }}
+          />
+        </div>
+      )}
+    </>
+  );
+};;
 
 export default InstanceView;

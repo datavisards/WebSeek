@@ -1827,15 +1827,35 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
           {onCaptureToCell && (
             <button 
               onClick={() => {
+                console.log('[MultiTableEditor] Capture button clicked:', {
+                  hasSelectedCell: !!selectedCell,
+                  selectedCell,
+                  hasOnCaptureToCell: !!onCaptureToCell,
+                  isCaptureEnabled,
+                  timestamp: Date.now()
+                });
+                
                 if (selectedCell) {
                   // Use original row index if available for data operations
                   const rowToUse = selectedCell.originalRow ?? selectedCell.row;
+                  console.log('[MultiTableEditor] Calling onCaptureToCell with:', {
+                    tableId: selectedCell.tableId,
+                    rowToUse,
+                    col: selectedCell.col
+                  });
                   onCaptureToCell?.(selectedCell.tableId, rowToUse, selectedCell.col);
                   markTableDirty(selectedCell.tableId);
+                } else {
+                  console.warn('[MultiTableEditor] Capture button clicked but no selected cell');
                 }
               }}
               disabled={!isCaptureEnabled || !selectedCell}
-              title={!selectedCell ? "Click on a table cell first to capture content to it" : `Capture content to cell (${selectedCell.row + 1}, ${String.fromCharCode(65 + selectedCell.col)})`}
+              style={{
+                opacity: (!isCaptureEnabled || !selectedCell) ? 0.5 : 1,
+                backgroundColor: !isCaptureEnabled ? '#ffcccc' : (!selectedCell ? '#ffffcc' : ''),
+                cursor: (!isCaptureEnabled || !selectedCell) ? 'not-allowed' : 'pointer'
+              }}
+              title={!isCaptureEnabled ? "Capture in progress..." : !selectedCell ? "Click on a table cell first to capture content to it" : `Capture content to cell (${selectedCell.row + 1}, ${String.fromCharCode(65 + selectedCell.col)})`}
             >
               {selectedCell 
                 ? `Capture to Cell (${selectedCell.row + 1}, ${String.fromCharCode(65 + selectedCell.col)})` 

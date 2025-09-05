@@ -210,16 +210,29 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
     try {
       const spec = typeof initialSpec === 'string' ? JSON.parse(initialSpec) : initialSpec;
       console.log('[ShelfVisualizationEditor] Parsing spec:', spec);
+      
+      // Log data values for debugging
+      if (spec.data?.values && spec.data.values.length > 0) {
+        console.log('[ShelfVisualizationEditor] Spec data sample:', {
+          firstRow: spec.data.values[0],
+          dataColumns: Object.keys(spec.data.values[0]),
+          totalRows: spec.data.values.length
+        });
+      }
 
       // Extract chart type from mark and encoding
       if (spec.mark) {
         const markType = typeof spec.mark === 'string' ? spec.mark : spec.mark.type;
+        console.log('[ShelfVisualizationEditor] Detected mark type:', markType);
         
         // Special case: detect histograms by checking for binning in x-axis and count in y-axis
         if (markType === 'bar' && spec.encoding?.x?.bin && spec.encoding?.y?.aggregate === 'count') {
           setChartType('histogram');
         } else if (['bar', 'line', 'point', 'histogram'].includes(markType)) {
           setChartType(markType);
+        } else if (markType === 'circle') {
+          // Convert 'circle' to 'point' for compatibility
+          setChartType('point');
         }
       }
 
@@ -252,22 +265,34 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             const sanitizedMatch = sanitizeFieldName(col.actualColumnName) === fieldName;
             // 6. NEW: Direct match with actual column name
             const actualNameMatch = col.actualColumnName === fieldName;
+            // 7. NEW: Check if the field name sanitized matches the sanitized actual column name
+            const bothSanitizedMatch = sanitizeFieldName(fieldName) === sanitizeFieldName(col.actualColumnName);
+            // 8. NEW: Check if field name matches the original column name from data values in the spec
+            let dataColumnMatch = false;
+            if (spec.data?.values && spec.data.values.length > 0) {
+              const dataColumns = Object.keys(spec.data.values[0]);
+              dataColumnMatch = dataColumns.includes(fieldName) && dataColumns.includes(col.actualColumnName) && 
+                               dataColumns.indexOf(fieldName) === dataColumns.indexOf(col.actualColumnName);
+            }
             
-            console.log('[ShelfVisualizationEditor] Checking column:', {
+            console.log('[ShelfVisualizationEditor] Checking column for x-axis:', {
               colId: col.id,
               colName: col.name,
               actualColumnName: col.actualColumnName,
               sanitizedColumnName: sanitizeFieldName(col.actualColumnName),
               fieldName,
+              sanitizedFieldName: sanitizeFieldName(fieldName),
               idMatch,
               nameMatch,
               letterMatch,
               letterFromIndex,
               sanitizedMatch,
-              actualNameMatch
+              actualNameMatch,
+              bothSanitizedMatch,
+              dataColumnMatch
             });
             
-            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch;
+            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch || bothSanitizedMatch || dataColumnMatch;
           });
           
           if (matchingColumn) {
@@ -298,22 +323,34 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             const sanitizedMatch = sanitizeFieldName(col.actualColumnName) === fieldName;
             // 6. NEW: Direct match with actual column name
             const actualNameMatch = col.actualColumnName === fieldName;
+            // 7. NEW: Check if the field name sanitized matches the sanitized actual column name
+            const bothSanitizedMatch = sanitizeFieldName(fieldName) === sanitizeFieldName(col.actualColumnName);
+            // 8. NEW: Check if field name matches the original column name from data values in the spec
+            let dataColumnMatch = false;
+            if (spec.data?.values && spec.data.values.length > 0) {
+              const dataColumns = Object.keys(spec.data.values[0]);
+              dataColumnMatch = dataColumns.includes(fieldName) && dataColumns.includes(col.actualColumnName) && 
+                               dataColumns.indexOf(fieldName) === dataColumns.indexOf(col.actualColumnName);
+            }
             
-            console.log('[ShelfVisualizationEditor] Checking column:', {
+            console.log('[ShelfVisualizationEditor] Checking column for y-axis:', {
               colId: col.id,
               colName: col.name,
               actualColumnName: col.actualColumnName,
               sanitizedColumnName: sanitizeFieldName(col.actualColumnName),
               fieldName,
+              sanitizedFieldName: sanitizeFieldName(fieldName),
               idMatch,
               nameMatch,
               letterMatch,
               letterFromIndex,
               sanitizedMatch,
-              actualNameMatch
+              actualNameMatch,
+              bothSanitizedMatch,
+              dataColumnMatch
             });
             
-            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch;
+            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch || bothSanitizedMatch || dataColumnMatch;
           });
           
           if (matchingColumn) {
@@ -344,8 +381,17 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             const sanitizedMatch = sanitizeFieldName(col.actualColumnName) === fieldName;
             // 6. NEW: Direct match with actual column name
             const actualNameMatch = col.actualColumnName === fieldName;
+            // 7. NEW: Check if the field name sanitized matches the sanitized actual column name
+            const bothSanitizedMatch = sanitizeFieldName(fieldName) === sanitizeFieldName(col.actualColumnName);
+            // 8. NEW: Check if field name matches the original column name from data values in the spec
+            let dataColumnMatch = false;
+            if (spec.data?.values && spec.data.values.length > 0) {
+              const dataColumns = Object.keys(spec.data.values[0]);
+              dataColumnMatch = dataColumns.includes(fieldName) && dataColumns.includes(col.actualColumnName) && 
+                               dataColumns.indexOf(fieldName) === dataColumns.indexOf(col.actualColumnName);
+            }
             
-            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch;
+            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch || bothSanitizedMatch || dataColumnMatch;
           });
           
           if (matchingColumn) {
@@ -376,8 +422,17 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
             const sanitizedMatch = sanitizeFieldName(col.actualColumnName) === fieldName;
             // 6. NEW: Direct match with actual column name
             const actualNameMatch = col.actualColumnName === fieldName;
+            // 7. NEW: Check if the field name sanitized matches the sanitized actual column name
+            const bothSanitizedMatch = sanitizeFieldName(fieldName) === sanitizeFieldName(col.actualColumnName);
+            // 8. NEW: Check if field name matches the original column name from data values in the spec
+            let dataColumnMatch = false;
+            if (spec.data?.values && spec.data.values.length > 0) {
+              const dataColumns = Object.keys(spec.data.values[0]);
+              dataColumnMatch = dataColumns.includes(fieldName) && dataColumns.includes(col.actualColumnName) && 
+                               dataColumns.indexOf(fieldName) === dataColumns.indexOf(col.actualColumnName);
+            }
             
-            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch;
+            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch || bothSanitizedMatch || dataColumnMatch;
           });
           
           if (matchingColumn) {

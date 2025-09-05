@@ -445,10 +445,10 @@ class EnhancedProactiveService {
     const logs = this.currentContext.logs;
     console.log('[EnhancedProactiveService] Using current context logs for suggestions:', logs.length);
     
-    if (this.suggestionCount >= this.settings.maxSuggestionsPerSession) {
-      console.log('[EnhancedProactiveService] Max suggestions reached for session');
-      return;
-    }
+    // if (this.suggestionCount >= this.settings.maxSuggestionsPerSession) {
+    //   console.log('[EnhancedProactiveService] Max suggestions reached for session');
+    //   return;
+    // }
 
     // Check if we should skip generation based on recent activity
     if (this.shouldSkipSuggestionGeneration(logs)) {
@@ -1709,33 +1709,6 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
             if (instancesEditingOtherTables.length > 0) {
               violatesMicroConstraints = true;
               console.warn('[EnhancedProactiveService] REJECTING micro suggestion - violates constraint: editing instances other than current table');
-            }
-            
-            // Constraint 2: Limit table row additions to 30 rows max
-            const tableUpdates = result.instances.filter((inst: any) => {
-              return inst.action === 'update' && inst.instance?.type === 'table';
-            });
-            
-            for (const tableUpdate of tableUpdates) {
-              const suggestedTable = tableUpdate.instance;
-              const currentInstances = this.currentContext.instances || [];
-              const currentTable = currentInstances.find(inst => inst.id === tableUpdate.targetId);
-              
-              if (currentTable && currentTable.type === 'table') {
-                const currentRows = (currentTable as any).cells?.length || 0;
-                const suggestedRows = suggestedTable.cells?.length || 0;
-                const addedRows = suggestedRows - currentRows;
-                
-                if (addedRows > 30) {
-                  violatesMicroConstraints = true;
-                  console.warn('[EnhancedProactiveService] REJECTING micro suggestion - violates constraint: adding more than 30 rows at once', {
-                    addedRows,
-                    currentRows,
-                    suggestedRows
-                  });
-                  break;
-                }
-              }
             }
           }
           

@@ -83,7 +83,13 @@ Note:
 - You may use markdown formatting in the summary for better readability (e.g., **bold**, *italic*, \`code\`, lists).
 - Do not leave any non-optional fields empty for each result instance.
 - When returning one or more instances in the results, assign a meaningful, human-readable, and unique ID to each instance (e.g., 'Annual_report', 'Info_list', etc.), which will be used for rendering.
-- For visualization, use the 'visualization' type and provide a Vega-Lite or similar spec in the 'spec' field.
+- **For visualization:** When creating VisualizationInstance objects:
+  - **IMPORTANT:** Do NOT embed data directly in the Vega-Lite spec. Instead, create specs that reference existing table instances.
+  - Use simple column references (A, B, C, etc.) as field names in the Vega-Lite spec encoding
+  - The spec should be compatible with WebSeek's shelf-based visualization editor  
+  - Example: Use field names like "A", "B", "C" for x/y axes, mark types like "point", "bar", "line", and include "width": "container", "height": "container"
+  - Do NOT include a "data" section with embedded values in the spec
+  - The visualization editor will automatically populate the data from existing table instances
 - **For tables:** When creating TableInstance objects, include the \`columnTypes\` field to specify the data type of each column:
   - Use 'numeral' for columns containing numeric data (numbers, prices, quantities, etc.)
   - Use 'categorical' for columns containing text data, categories, labels, or non-numeric identifiers
@@ -301,7 +307,13 @@ export type Locator = string; // Stable ID (AID)
 - Reference existing instances when relevant using their IDs
 - Be conversational and helpful while maintaining focus on web automation and visualization tasks
 - When returning one or more instances in the results, assign a meaningful, human-readable, and unique ID to each instance (e.g., 'Annual_Report', 'Info_list', 'Sales_Bar_Chart', etc.), which will be used for rendering.
-- For visualization, use the 'visualization' type and provide a Vega-Lite or similar spec in the 'spec' field.
+- **For visualization:** When creating VisualizationInstance objects:
+  - **IMPORTANT:** Do NOT embed data directly in the Vega-Lite spec. Instead, create specs that reference existing table instances.
+  - Use simple column references (A, B, C, etc.) as field names in the Vega-Lite spec encoding
+  - The spec should be compatible with WebSeek's shelf-based visualization editor
+  - Example valid visualization spec: Use field names like "A", "B", "C" for x/y axes, mark types like "point", "bar", "line", and include "width": "container", "height": "container"
+  - Do NOT include a "data" section with embedded values in the spec
+  - The visualization editor will automatically populate the data from existing table instances
 - **For tables:** When creating TableInstance objects, include the \`columnTypes\` field to specify the data type of each column:
   - Use 'numeral' for columns containing numeric data (numbers, prices, quantities, etc.)
   - Use 'categorical' for columns containing text data, categories, labels, or non-numeric identifiers

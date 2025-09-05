@@ -1167,6 +1167,113 @@ export const createSketchThumbnail = async (
     return tempCanvas.toDataURL('image/png');
 };
 
+/**
+ * Generate a thumbnail for a visualization spec using the VisualizationRenderer
+ */
+export const generateVisualizationThumbnail = async (spec: object): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        // Create a temporary container div
+        const tempContainer = document.createElement('div');
+        tempContainer.style.position = 'absolute';
+        tempContainer.style.left = '-9999px';
+        tempContainer.style.width = '400px';
+        tempContainer.style.height = '300px';
+        document.body.appendChild(tempContainer);
+
+        // We need to use React to render the VisualizationRenderer component
+        // Since we're in a utility function, we'll create the thumbnail via the same backend API
+        // that the VisualizationRenderer uses
+        generateVisualizationThumbnailViaBackend(spec)
+            .then(thumbnail => {
+                document.body.removeChild(tempContainer);
+                resolve(thumbnail);
+            })
+            .catch(error => {
+                document.body.removeChild(tempContainer);
+                reject(error);
+            });
+    });
+};
+
+/**
+ * Generate a thumbnail for a visualization spec by rendering it via the backend (same as VisualizationRenderer)
+ */
+const generateVisualizationThumbnailViaBackend = async (spec: object): Promise<string> => {
+    try {
+        // Call the same backend API that VisualizationRenderer uses
+        const response = await fetch(`http://${import.meta.env.VITE_BACKEND_URL}/api/render-interactive-svg/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ spec }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Backend request failed: ${response.status}`);
+        }
+
+        const json = await response.json();
+        
+        if (!json.svg) {
+            throw new Error('Backend response missing SVG content');
+        }
+
+        // Convert SVG to blob URL (same as VisualizationRenderer does)
+        const blob = new Blob([json.svg], { type: 'image/svg+xml' });
+        return URL.createObjectURL(blob);
+    } catch (error) {
+        console.error('Failed to generate visualization thumbnail via backend:', error);
+        // Return a placeholder thumbnail as fallback
+        return createPlaceholderVisualizationThumbnail();
+    }
+};
+
+/**
+ * Create a placeholder thumbnail for visualizations that fail to render
+ */
+const createPlaceholderVisualizationThumbnail = (): string => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 200;
+    canvas.height = 150;
+    const ctx = canvas.getContext('2d');
+    
+    if (!ctx) return '';
+    
+    // Fill background
+    ctx.fillStyle = '#f8f9fa';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw border
+    ctx.strokeStyle = '#dee2e6';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
+    
+    // Draw chart icon
+    ctx.strokeStyle = '#6c757d';
+    ctx.lineWidth = 2;
+    
+    // Draw bars
+    const barWidth = 20;
+    const barSpacing = 30;
+    const startX = 50;
+    const baseY = canvas.height - 40;
+    
+    for (let i = 0; i < 4; i++) {
+        const barHeight = 20 + (i * 15);
+        ctx.fillStyle = '#6c757d';
+        ctx.fillRect(startX + i * barSpacing, baseY - barHeight, barWidth, barHeight);
+    }
+    
+    // Add "Chart" text
+    ctx.fillStyle = '#6c757d';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Visualization', canvas.width / 2, 30);
+    
+    return canvas.toDataURL('image/png');
+};
+
 export function mapToObject(obj: any): any {
     if (obj instanceof Map) {
         return Object.fromEntries(
@@ -1236,6 +1343,30 @@ export function updateInstances(
                     }).catch(err => {
                         console.error('Failed to generate sketch thumbnail:', err);
                     });
+                } else if (event.instance.type === "visualization" && !event.instance.thumbnail) {
+                    // Generate thumbnail for visualization instances without one
+                    const vizInstance = event.instance as VisualizationInstance;
+                    // Don't await here to avoid blocking the instance creation
+                    generateVisualizationThumbnailViaBackend(vizInstance.spec)
+                        .then((thumbnail: string) => {
+                            // Update the instance with the thumbnail after generation
+                            // This will be done asynchronously, so the instance appears first, then gets its thumbnail
+                            setTimeout(() => {
+                                const instancesEl = document.querySelector('.instance-view');
+                                if (instancesEl) {
+                                    // Trigger a re-render by updating the instances state if possible
+                                    // For now, we'll update the instance directly
+                                    vizInstance.thumbnail = thumbnail;
+                                    // Force a re-render by dispatching a custom event
+                                    const event = new CustomEvent('visualization-thumbnail-ready', { 
+                                        detail: { instanceId: vizInstance.id, thumbnail } 
+                                    });
+                                    window.dispatchEvent(event);
+                                }
+                            }, 100);
+                        }).catch((err: any) => {
+                            console.error('Failed to generate visualization thumbnail:', err);
+                        });
                 }
             }
             
@@ -1608,4 +1739,4 @@ export const evaluateFormulaInTable = (formula: string, table: any): string => {
   }
 };
 
-export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, normalizeTableInstance, cleanHTML, cleanHTMLScript, generateInstanceContext, generateId, parseInstance, mapToObject, updateInstances, areInstancesContentEqual, evaluateFormulaInTable };
+export default { getInstanceGeometry, extractJSONFromResponse, indexToLetters, normalizeTableInstance, cleanHTML, cleanHTMLScript, generateInstanceContext, generateId, parseInstance, mapToObject, updateInstances, areInstancesContentEqual, evaluateFormulaInTable, generateVisualizationThumbnail };
