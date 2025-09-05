@@ -42,6 +42,62 @@ const sanitizeFieldName = (name: string): string => {
     .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
 };
 
+// Helper function to find the best matching column, preferring more specific table names
+const findBestMatchingColumn = (availableColumns: Column[], fieldName: string, spec?: any): Column | null => {
+  const allMatchingColumns = availableColumns.filter(col => {
+    // Try multiple matching strategies:
+    // 1. Direct field name match with column ID (old format)
+    const idMatch = col.id === fieldName;
+    // 2. Column name after colon matches field
+    const nameMatch = col.name.split(': ')[1] === fieldName;
+    // 3. Field is a column letter (A, B, C) and matches the column position
+    const letterMatch = /^[A-Z]+$/.test(fieldName) && col.name.split(': ')[1] === fieldName;
+    // 4. Extract column index from col.id and convert to letter to match field
+    const colIdParts = col.id.split('_col_');
+    const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
+    // 5. Direct match with sanitized actual column name
+    const sanitizedMatch = sanitizeFieldName(col.actualColumnName) === fieldName;
+    // 6. Direct match with actual column name
+    const actualNameMatch = col.actualColumnName === fieldName;
+    // 7. Check if the field name sanitized matches the sanitized actual column name
+    const bothSanitizedMatch = sanitizeFieldName(fieldName) === sanitizeFieldName(col.actualColumnName);
+    // 8. Check if field name matches the original column name from data values in the spec
+    let dataColumnMatch = false;
+    if (spec?.data?.values && spec.data.values.length > 0) {
+      const dataColumns = Object.keys(spec.data.values[0]);
+      dataColumnMatch = dataColumns.includes(fieldName) && dataColumns.includes(col.actualColumnName) && 
+                       dataColumns.indexOf(fieldName) === dataColumns.indexOf(col.actualColumnName);
+    }
+    
+    return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch || bothSanitizedMatch || dataColumnMatch;
+  });
+  
+  if (allMatchingColumns.length === 0) {
+    return null;
+  }
+  
+  // If only one match, return it
+  if (allMatchingColumns.length === 1) {
+    return allMatchingColumns[0];
+  }
+  
+  // If multiple matches, prefer tables with more specific/longer names (likely original tables)
+  // Sort by: 1) table name length (longer = more specific), 2) presence of numbers/underscores (more specific)
+  return allMatchingColumns.sort((a, b) => {
+    const aTableName = a.instanceId;
+    const bTableName = b.instanceId;
+    
+    // Prefer tables with longer names (table1_1 over table)
+    const lengthDiff = bTableName.length - aTableName.length;
+    if (lengthDiff !== 0) return lengthDiff;
+    
+    // Prefer tables with numbers/underscores (more specific identifiers)
+    const aSpecificity = (aTableName.match(/[0-9_]/g) || []).length;
+    const bSpecificity = (bTableName.match(/[0-9_]/g) || []).length;
+    return bSpecificity - aSpecificity;
+  })[0];
+};
+
 // Helper function to generate column names (A, B, C, etc.)
 const getColumnName = (index: number): string => {
   let result = '';
@@ -250,50 +306,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           const fieldName = spec.encoding.x.field;
           console.log('[ShelfVisualizationEditor] Looking for x-axis field:', fieldName);
           
-          const matchingColumn = availableColumns.find(col => {
-            // Try multiple matching strategies:
-            // 1. Direct field name match with column ID (old format)
-            const idMatch = col.id === fieldName;
-            // 2. Column name after colon matches field
-            const nameMatch = col.name.split(': ')[1] === fieldName;
-            // 3. Field is a column letter (A, B, C) and matches the column position
-            const letterMatch = /^[A-Z]+$/.test(fieldName) && col.name.split(': ')[1] === fieldName;
-            // 4. Extract column index from col.id and convert to letter to match field
-            const colIdParts = col.id.split('_col_');
-            const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
-            // 5. NEW: Direct match with sanitized actual column name
-            const sanitizedMatch = sanitizeFieldName(col.actualColumnName) === fieldName;
-            // 6. NEW: Direct match with actual column name
-            const actualNameMatch = col.actualColumnName === fieldName;
-            // 7. NEW: Check if the field name sanitized matches the sanitized actual column name
-            const bothSanitizedMatch = sanitizeFieldName(fieldName) === sanitizeFieldName(col.actualColumnName);
-            // 8. NEW: Check if field name matches the original column name from data values in the spec
-            let dataColumnMatch = false;
-            if (spec.data?.values && spec.data.values.length > 0) {
-              const dataColumns = Object.keys(spec.data.values[0]);
-              dataColumnMatch = dataColumns.includes(fieldName) && dataColumns.includes(col.actualColumnName) && 
-                               dataColumns.indexOf(fieldName) === dataColumns.indexOf(col.actualColumnName);
-            }
-            
-            console.log('[ShelfVisualizationEditor] Checking column for x-axis:', {
-              colId: col.id,
-              colName: col.name,
-              actualColumnName: col.actualColumnName,
-              sanitizedColumnName: sanitizeFieldName(col.actualColumnName),
-              fieldName,
-              sanitizedFieldName: sanitizeFieldName(fieldName),
-              idMatch,
-              nameMatch,
-              letterMatch,
-              letterFromIndex,
-              sanitizedMatch,
-              actualNameMatch,
-              bothSanitizedMatch,
-              dataColumnMatch
-            });
-            
-            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch || bothSanitizedMatch || dataColumnMatch;
-          });
+          const matchingColumn = findBestMatchingColumn(availableColumns, fieldName, spec);
           
           if (matchingColumn) {
             newShelves.x = [matchingColumn];
@@ -308,50 +321,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           const fieldName = spec.encoding.y.field;
           console.log('[ShelfVisualizationEditor] Looking for y-axis field:', fieldName);
           
-          const matchingColumn = availableColumns.find(col => {
-            // Try multiple matching strategies:
-            // 1. Direct field name match with column ID (old format)
-            const idMatch = col.id === fieldName;
-            // 2. Column name after colon matches field
-            const nameMatch = col.name.split(': ')[1] === fieldName;
-            // 3. Field is a column letter (A, B, C) and matches the column position
-            const letterMatch = /^[A-Z]+$/.test(fieldName) && col.name.split(': ')[1] === fieldName;
-            // 4. Extract column index from col.id and convert to letter to match field
-            const colIdParts = col.id.split('_col_');
-            const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
-            // 5. NEW: Direct match with sanitized actual column name
-            const sanitizedMatch = sanitizeFieldName(col.actualColumnName) === fieldName;
-            // 6. NEW: Direct match with actual column name
-            const actualNameMatch = col.actualColumnName === fieldName;
-            // 7. NEW: Check if the field name sanitized matches the sanitized actual column name
-            const bothSanitizedMatch = sanitizeFieldName(fieldName) === sanitizeFieldName(col.actualColumnName);
-            // 8. NEW: Check if field name matches the original column name from data values in the spec
-            let dataColumnMatch = false;
-            if (spec.data?.values && spec.data.values.length > 0) {
-              const dataColumns = Object.keys(spec.data.values[0]);
-              dataColumnMatch = dataColumns.includes(fieldName) && dataColumns.includes(col.actualColumnName) && 
-                               dataColumns.indexOf(fieldName) === dataColumns.indexOf(col.actualColumnName);
-            }
-            
-            console.log('[ShelfVisualizationEditor] Checking column for y-axis:', {
-              colId: col.id,
-              colName: col.name,
-              actualColumnName: col.actualColumnName,
-              sanitizedColumnName: sanitizeFieldName(col.actualColumnName),
-              fieldName,
-              sanitizedFieldName: sanitizeFieldName(fieldName),
-              idMatch,
-              nameMatch,
-              letterMatch,
-              letterFromIndex,
-              sanitizedMatch,
-              actualNameMatch,
-              bothSanitizedMatch,
-              dataColumnMatch
-            });
-            
-            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch || bothSanitizedMatch || dataColumnMatch;
-          });
+          const matchingColumn = findBestMatchingColumn(availableColumns, fieldName, spec);
           
           if (matchingColumn) {
             newShelves.y = [matchingColumn];
@@ -366,33 +336,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           const fieldName = spec.encoding.color.field;
           console.log('[ShelfVisualizationEditor] Looking for color field:', fieldName);
           
-          const matchingColumn = availableColumns.find(col => {
-            // Try multiple matching strategies:
-            // 1. Direct field name match with column ID (old format)
-            const idMatch = col.id === fieldName;
-            // 2. Column name after colon matches field
-            const nameMatch = col.name.split(': ')[1] === fieldName;
-            // 3. Field is a column letter (A, B, C) and matches the column position
-            const letterMatch = /^[A-Z]+$/.test(fieldName) && col.name.split(': ')[1] === fieldName;
-            // 4. Extract column index from col.id and convert to letter to match field
-            const colIdParts = col.id.split('_col_');
-            const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
-            // 5. NEW: Direct match with sanitized actual column name
-            const sanitizedMatch = sanitizeFieldName(col.actualColumnName) === fieldName;
-            // 6. NEW: Direct match with actual column name
-            const actualNameMatch = col.actualColumnName === fieldName;
-            // 7. NEW: Check if the field name sanitized matches the sanitized actual column name
-            const bothSanitizedMatch = sanitizeFieldName(fieldName) === sanitizeFieldName(col.actualColumnName);
-            // 8. NEW: Check if field name matches the original column name from data values in the spec
-            let dataColumnMatch = false;
-            if (spec.data?.values && spec.data.values.length > 0) {
-              const dataColumns = Object.keys(spec.data.values[0]);
-              dataColumnMatch = dataColumns.includes(fieldName) && dataColumns.includes(col.actualColumnName) && 
-                               dataColumns.indexOf(fieldName) === dataColumns.indexOf(col.actualColumnName);
-            }
-            
-            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch || bothSanitizedMatch || dataColumnMatch;
-          });
+          const matchingColumn = findBestMatchingColumn(availableColumns, fieldName, spec);
           
           if (matchingColumn) {
             newShelves.color = [matchingColumn];
@@ -407,33 +351,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           const fieldName = spec.encoding.size.field;
           console.log('[ShelfVisualizationEditor] Looking for size field:', fieldName);
           
-          const matchingColumn = availableColumns.find(col => {
-            // Try multiple matching strategies:
-            // 1. Direct field name match with column ID (old format)
-            const idMatch = col.id === fieldName;
-            // 2. Column name after colon matches field
-            const nameMatch = col.name.split(': ')[1] === fieldName;
-            // 3. Field is a column letter (A, B, C) and matches the column position
-            const letterMatch = /^[A-Z]+$/.test(fieldName) && col.name.split(': ')[1] === fieldName;
-            // 4. Extract column index from col.id and convert to letter to match field
-            const colIdParts = col.id.split('_col_');
-            const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
-            // 5. NEW: Direct match with sanitized actual column name
-            const sanitizedMatch = sanitizeFieldName(col.actualColumnName) === fieldName;
-            // 6. NEW: Direct match with actual column name
-            const actualNameMatch = col.actualColumnName === fieldName;
-            // 7. NEW: Check if the field name sanitized matches the sanitized actual column name
-            const bothSanitizedMatch = sanitizeFieldName(fieldName) === sanitizeFieldName(col.actualColumnName);
-            // 8. NEW: Check if field name matches the original column name from data values in the spec
-            let dataColumnMatch = false;
-            if (spec.data?.values && spec.data.values.length > 0) {
-              const dataColumns = Object.keys(spec.data.values[0]);
-              dataColumnMatch = dataColumns.includes(fieldName) && dataColumns.includes(col.actualColumnName) && 
-                               dataColumns.indexOf(fieldName) === dataColumns.indexOf(col.actualColumnName);
-            }
-            
-            return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch || bothSanitizedMatch || dataColumnMatch;
-          });
+          const matchingColumn = findBestMatchingColumn(availableColumns, fieldName, spec);
           
           if (matchingColumn) {
             newShelves.size = [matchingColumn];

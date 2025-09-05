@@ -1819,44 +1819,20 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
 
   // Sync editingVisualizationSpec with instance changes when editing a visualization
   useEffect(() => {
-    if (editingVisualizationSpec) {
-      // Case 1: We have originalInstanceId (double-click edit)
-      if (originalInstanceId) {
-        const currentInstance = instances.find(inst => inst.id === originalInstanceId);
-        if (currentInstance && currentInstance.type === 'visualization' && currentInstance.spec) {
-          // Check if the instance spec has changed from what we're currently editing
-          if (JSON.stringify(currentInstance.spec) !== JSON.stringify(editingVisualizationSpec)) {
-            console.log('[InstanceView] Detected spec change in edited visualization instance, updating editingVisualizationSpec');
-            console.log('[InstanceView] Old spec:', editingVisualizationSpec);
-            console.log('[InstanceView] New spec:', currentInstance.spec);
-            setEditingVisualizationSpec(currentInstance.spec);
-          }
-        }
-      } else {
-        // Case 2: No originalInstanceId (chat-initiated edit) - look for the most recent visualization
-        // that might match what we're editing, or auto-update to latest if it's significantly different
-        const visualizationInstances = instances.filter(inst => inst.type === 'visualization');
-        if (visualizationInstances.length > 0) {
-          // Find the most recent visualization instance
-          const newestVisualization = visualizationInstances.reduce((newest, current) => {
-            // Use a simple heuristic: assume the instance with the highest ID suffix is newest
-            const newestId = newest.id.replace(/\D/g, '');
-            const currentId = current.id.replace(/\D/g, '');
-            return parseInt(currentId) > parseInt(newestId) ? current : newest;
-          });
-          
-          if (newestVisualization.spec && 
-              JSON.stringify(newestVisualization.spec) !== JSON.stringify(editingVisualizationSpec)) {
-            console.log('[InstanceView] Detected new visualization while editor is open, updating to newest spec');
-            console.log('[InstanceView] Current spec:', editingVisualizationSpec);
-            console.log('[InstanceView] New spec:', newestVisualization.spec);
-            setEditingVisualizationSpec(newestVisualization.spec);
-            // Also update originalInstanceId to track this instance
-            setOriginalInstanceId(newestVisualization.id);
-          }
+    if (editingVisualizationSpec && originalInstanceId) {
+      // Only sync when we have originalInstanceId (editing existing visualization)
+      const currentInstance = instances.find(inst => inst.id === originalInstanceId);
+      if (currentInstance && currentInstance.type === 'visualization' && currentInstance.spec) {
+        // Check if the instance spec has changed from what we're currently editing
+        if (JSON.stringify(currentInstance.spec) !== JSON.stringify(editingVisualizationSpec)) {
+          console.log('[InstanceView] Detected spec change in edited visualization instance, updating editingVisualizationSpec');
+          console.log('[InstanceView] Old spec:', editingVisualizationSpec);
+          console.log('[InstanceView] New spec:', currentInstance.spec);
+          setEditingVisualizationSpec(currentInstance.spec);
         }
       }
     }
+    // Removed the problematic case 2 logic that was auto-loading newest visualization for new instances
   }, [instances, editingVisualizationSpec, originalInstanceId]);
 
   const cancelTableEdit = () => {
@@ -2840,26 +2816,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setIsInEditor?.(true);
     
     setOriginalInstanceId(null);
-    // Start with a simple Vega-Lite spec as a template
-    const defaultSpec = {
-      "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-      "description": "A simple bar chart with embedded data.",
-      "data": {
-        "values": [
-          { "a": "A", "b": 28 }, { "a": "B", "b": 55 }, { "a": "C", "b": 43 },
-          { "a": "D", "b": 91 }, { "a": "E", "b": 81 }, { "a": "F", "b": 53 },
-          { "a": "G", "b": 19 }, { "a": "H", "b": 87 }, { "a": "I", "b": 52 }
-        ]
-      },
-      "mark": "bar",
-      "encoding": {
-        "x": { "field": "a", "type": "nominal", "axis": { "labelAngle": 0 } },
-        "y": { "field": "b", "type": "quantitative" }
-      }
-    };
-    setEditingVisualizationSpec(defaultSpec);
+    // Start with an empty spec for new visualization
+    setEditingVisualizationSpec({});
     setAvailableInstances(instances.filter(inst => inst.type === 'table' || inst.type === 'text' || inst.type === 'image'));
-    onOperation(`Open visualization editor to create a new visualization with default bar chart template`);
+    onOperation(`Open visualization editor to create a new visualization`);
   };
 
   // Add save/cancel handlers for VisualizationEditor
