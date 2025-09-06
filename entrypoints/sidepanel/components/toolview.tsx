@@ -58,7 +58,7 @@ const ToolView: React.FC<ToolViewProps> = ({
     editingTableId,
     onTableModified
 }) => {
-    const [activeTab, setActiveTab] = useState<'chat' | 'suggestions' | 'history' | 'logs'>('suggestions');
+    const [activeRightTab, setActiveRightTab] = useState<'chat' | 'history' | 'logs'>('chat');
     const [showSystemLogs, setShowSystemLogs] = useState(false);
 
     const isMinimized = heightMode === 'minimum';
@@ -86,41 +86,43 @@ const ToolView: React.FC<ToolViewProps> = ({
     return (
         <div className={`view-container tool-view height-${heightMode}`}>
             <div className="view-title-container">
-                <h3
-                    className={`tab-button ${activeTab === 'suggestions' ? 'active' : ''} ${isMinimized ? 'disabled' : ''}`}
-                    onClick={() => !isMinimized && setActiveTab('suggestions')}
-                >
-                    AI Suggestions {suggestions.filter(s => s.scope === 'macro').length > 0 && `(${suggestions.filter(s => s.scope === 'macro').length})`}
-                </h3>
-                <h3
-                    className={`tab-button ${activeTab === 'chat' ? 'active' : ''} ${isMinimized ? 'disabled' : ''}`}
-                    onClick={() => !isMinimized && setActiveTab('chat')}
-                >
-                    Chat
-                </h3>
-                <h3
-                    className={`tab-button ${activeTab === 'history' ? 'active' : ''} ${isMinimized ? 'disabled' : ''}`}
-                    onClick={() => !isMinimized && setActiveTab('history')}
-                >
-                    History {logs.length > 0 && `(${logs.length})`}
-                </h3>
-                <button
-                    className={`system-logs-btn ${isMinimized ? 'disabled' : ''}`}
-                    onClick={() => !isMinimized && setShowSystemLogs(true)}
-                    title="View System Logs for Data Analysis"
-                    disabled={isMinimized}
-                >
-                    System Logs
-                </button>
-                {activeTab === 'suggestions' && onDismissAllSuggestions && suggestions.filter(s => s.scope === 'macro').length > 0 && (
+                <div className="left-pane-header">
+                    <h3 className={`pane-title ${isMinimized ? 'disabled' : ''}`}>
+                        AI Suggestions {suggestions.filter(s => s.scope === 'macro').length > 0 && `(${suggestions.filter(s => s.scope === 'macro').length})`}
+                    </h3>
                     <button
-                        className="dismiss-all-btn"
-                        onClick={onDismissAllSuggestions}
-                        title="Dismiss all AI suggestions"
+                        className={`system-logs-btn ${isMinimized ? 'disabled' : ''}`}
+                        onClick={() => !isMinimized && setShowSystemLogs(true)}
+                        title="View System Logs for Data Analysis"
+                        disabled={isMinimized}
                     >
-                        Dismiss All
+                        System Logs
                     </button>
-                )}
+                    {onDismissAllSuggestions && suggestions.filter(s => s.scope === 'macro').length > 0 && (
+                        <button
+                            className="dismiss-all-btn"
+                            onClick={onDismissAllSuggestions}
+                            title="Dismiss all AI suggestions"
+                            disabled={isMinimized}
+                        >
+                            Dismiss All
+                        </button>
+                    )}
+                </div>
+                <div className="right-pane-header">
+                    <h3
+                        className={`tab-button ${activeRightTab === 'chat' ? 'active' : ''} ${isMinimized ? 'disabled' : ''}`}
+                        onClick={() => !isMinimized && setActiveRightTab('chat')}
+                    >
+                        Chat
+                    </h3>
+                    <h3
+                        className={`tab-button ${activeRightTab === 'history' ? 'active' : ''} ${isMinimized ? 'disabled' : ''}`}
+                        onClick={() => !isMinimized && setActiveRightTab('history')}
+                    >
+                        History {logs.length > 0 && `(${logs.length})`}
+                    </h3>
+                </div>
                 <div className="collapse-toggle-container">
                     <span className="height-mode-indicator">{getHeightModeDisplay()}</span>
                     <button
@@ -134,12 +136,9 @@ const ToolView: React.FC<ToolViewProps> = ({
             </div>
 
             {!isMinimized && (
-                <div className="view-content" style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    flex: 1,
-                }}>
-                    {activeTab === 'suggestions' && (
+                <div className="view-content split-pane-layout">
+                    {/* Left Pane: AI Suggestions */}
+                    <div className="left-pane">
                         <MacroSuggestionPanel
                             suggestions={suggestions}
                             onAccept={onAcceptSuggestion || (() => {})}
@@ -150,31 +149,35 @@ const ToolView: React.FC<ToolViewProps> = ({
                             className="embedded-suggestions-panel"
                             isCollapsed={false}
                         />
-                    )}
-                    {activeTab === 'chat' && (
-                        <ChatTab
-                            messages={messages}
-                            addMessage={addMessage}
-                            setMessages={setMessages}
-                            agentLoading={agentLoading}
-                            setAgentLoading={setAgentLoading}
-                            instances={instances}
-                            htmlContext={htmlContext}
-                            setInstances={setInstances}
-                            logs={logs}
-                            currentToolViewTab={activeTab}
-                            currentPageInfo={currentPageInfo}
-                            isInEditor={isInEditor}
-                            editingTableId={editingTableId}
-                            onTableModified={onTableModified}
-                        />
-                    )}
-                    {activeTab === 'history' && (
-                        <HistoryTab
-                            logs={logs}
-                            onRestoreToCheckpoint={onRestoreToCheckpoint}
-                        />
-                    )}
+                    </div>
+                    
+                    {/* Right Pane: Chat, History, System Logs */}
+                    <div className="right-pane">
+                        {activeRightTab === 'chat' && (
+                            <ChatTab
+                                messages={messages}
+                                addMessage={addMessage}
+                                setMessages={setMessages}
+                                agentLoading={agentLoading}
+                                setAgentLoading={setAgentLoading}
+                                instances={instances}
+                                htmlContext={htmlContext}
+                                setInstances={setInstances}
+                                logs={logs}
+                                currentToolViewTab={activeRightTab}
+                                currentPageInfo={currentPageInfo}
+                                isInEditor={isInEditor}
+                                editingTableId={editingTableId}
+                                onTableModified={onTableModified}
+                            />
+                        )}
+                        {activeRightTab === 'history' && (
+                            <HistoryTab
+                                logs={logs}
+                                onRestoreToCheckpoint={onRestoreToCheckpoint}
+                            />
+                        )}
+                    </div>
                 </div>
             )}
             

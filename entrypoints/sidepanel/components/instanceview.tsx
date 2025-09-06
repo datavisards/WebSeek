@@ -3240,8 +3240,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                         position: 'absolute',
                         top: '-18px', // 显示在实例上方
                         left: '-5px',
-                        color: '#bbb',
-                        fontSize: '11px',
+                        color: '#888',
+                        fontSize: '13px',
                         padding: '2px 6px',
                         borderRadius: '4px',
                         zIndex: 1001, // 确保显示在最上层
@@ -3345,7 +3345,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                                     key={cell.id}
                                     style={{
                                       margin: 0,
-                                      fontSize: '10px',
+                                      fontSize: '14px',
                                       overflow: 'hidden',
                                       textOverflow: 'ellipsis',
                                       whiteSpace: 'nowrap',
@@ -3370,9 +3370,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                                     src={cell.src}
                                     alt="thumbnail"
                                     style={{
-                                      maxWidth: '100%',
-                                      maxHeight: '100%',
-                                      objectFit: 'contain',
+                                      width: '30px',
+                                      height: '30px',
+                                      objectFit: 'cover',
                                       pointerEvents: 'none',
                                     }}
                                   />
