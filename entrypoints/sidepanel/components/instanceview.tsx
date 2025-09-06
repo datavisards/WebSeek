@@ -2875,6 +2875,123 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setIsInEditor?.(false);
   };
 
+  // Handler to create sample data instances (Medal or World statistics)
+  const handleCreateSampleData = () => {
+    // Show a modal or dropdown to let user choose between Medal and World data
+    const choice = window.confirm('Click OK for Medal data, or Cancel for World data');
+    
+    if (choice) {
+      // Create Medal data table
+      const medalData = [
+        ['NOC', 'Gold', 'Silver', 'Bronze', 'Total'],
+        ['United States‡', '40', '44', '42', '126'],
+        ['China', '40', '27', '24', '91'],
+        ['Japan', '20', '12', '13', '45'],
+        ['Australia', '18', '19', '16', '53'],
+        ['France*', '16', '26', '22', '64'],
+        ['Netherlands', '15', '7', '12', '34'],
+        ['Great Britain', '14', '22', '29', '65'],
+        ['South Korea', '13', '9', '10', '32'],
+        ['Italy', '12', '13', '15', '40'],
+        ['Germany', '12', '13', '8', '33'],
+        ['New Zealand', '10', '7', '3', '20'],
+        ['Canada', '9', '7', '11', '27'],
+        ['Uzbekistan', '8', '2', '3', '13'],
+        ['Hungary', '6', '7', '6', '19'],
+        ['Spain', '5', '4', '9', '18'],
+        ['Sweden', '4', '4', '3', '11'],
+        ['Kenya', '4', '2', '5', '11'],
+        ['Norway', '4', '1', '3', '8'],
+        ['Ireland', '4', '0', '3', '7'],
+        ['Brazil', '3', '7', '10', '20'],
+        ['Iran', '3', '6', '3', '12'],
+        ['Ukraine', '3', '5', '4', '12'],
+        ['Romania‡', '3', '4', '2', '9'],
+        ['Georgia', '3', '3', '1', '7'],
+        ['Belgium', '3', '1', '6', '10'],
+        ['Bulgaria', '3', '1', '3', '7'],
+        ['Serbia', '3', '1', '1', '5'],
+        ['Czech Republic', '3', '0', '2', '5'],
+        ['Denmark', '2', '2', '5', '9'],
+        ['Azerbaijan', '2', '2', '3', '7']
+      ];
+      
+      createSampleTableInstance('Medal', medalData, 'Olympic medal counts by country');
+      
+    } else {
+      // Create World data table
+      const worldData = [
+        ['Country', 'GDP', 'Population'],
+        ['United States', '27.721 trillion', '343,477,335'],
+        ['China', '17.795 trillion', '1,422,584,933'],
+        ['Germany', '4.526 trillion', '84,548,231'],
+        ['Japan', '4.204 trillion', '124,370,947'],
+        ['India', '3.568 trillion', '1,438,069,596'],
+        ['United Kingdom', '3.381 trillion', '68,682,962'],
+        ['France', '3.052 trillion', '66,438,822'],
+        ['Italy', '2.301 trillion', '59,499,453'],
+        ['Brazil', '2.174 trillion', '211,140,729'],
+        ['Canada', '2.142 trillion', '39,299,105'],
+        ['Australia', '1.728 trillion', '26,451,124'],
+        ['South Korea', '1.713 trillion', '51,748,739'],
+        ['Spain', '1.62 trillion', '47,911,579'],
+        ['Indonesia', '1.371 trillion', '281,190,067'],
+        ['Netherlands', '1.154 trillion', '18,092,524'],
+        ['Turkey', '1.118 trillion', '87,270,501'],
+        ['Switzerland', '884.94 billion', '8,870,561'],
+        ['Poland', '809.201 billion', '38,762,844'],
+        ['Argentina', '646.075 billion', '45,538,401'],
+        ['Belgium', '644.783 billion', '11,712,893'],
+        ['Sweden', '584.96 billion', '10,551,494'],
+        ['Ireland', '551.395 billion', '5,196,630'],
+        ['Thailand', '514.969 billion', '71,702,435'],
+        ['Israel', '513.611 billion', '9,256,314'],
+        ['Austria', '511.685 billion', '9,130,429'],
+        ['Singapore', '501.428 billion', '5,789,090'],
+        ['Norway', '485.311 billion', '5,519,167'],
+        ['Philippines', '437.146 billion', '114,891,199'],
+        ['Denmark', '407.092 billion', '5,948,136'],
+        ['Iran', '404.626 billion', '90,608,707']
+      ];
+      
+      createSampleTableInstance('World', worldData, 'World GDP and population data');
+    }
+  };
+
+  // Helper function to create a sample table instance
+  const createSampleTableInstance = (baseName: string, data: string[][], description: string) => {
+    const newId = baseName;
+    const rows = data.length;
+    const cols = data[0]?.length || 0;
+    
+    // Convert string data to table cells
+    const cells = data.map(row => 
+      row.map(cellValue => ({
+        type: 'text' as const,
+        id: generateId(),
+        source: createManualSource(),
+        content: cellValue
+      }))
+    );
+    
+    const newTable: Instance = normalizeTableInstance({
+      id: newId,
+      type: 'table',
+      source: createManualSource(),
+      rows,
+      cols,
+      cells,
+      x: 50,
+      y: 50,
+      width: Math.min(800, Math.max(400, cols * 120)),
+      height: Math.min(600, Math.max(200, rows * 30 + 60))
+    });
+    
+    const logMessage = `Created sample data table [${newId}](#instance-${newId}): ${description}`;
+    setInstances(prev => [...prev, newTable], `Create sample data "${newId}"`, logMessage);
+    onOperation(logMessage);
+  };
+
   return (
     <>
       <div
@@ -3024,6 +3141,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
               selectedInstanceIds={selectedInstanceIds}
               selectedInstanceId={selectedInstanceId}
               handleInfer={handleInfer}
+              handleCreateSampleData={handleCreateSampleData}
             />
             <InstanceContextMenu
               contextMenu={contextMenu}

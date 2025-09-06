@@ -18,6 +18,7 @@ interface InstanceViewHeaderProps {
   selectedInstanceIds: string[];
   selectedInstanceId: string | null;
   handleInfer: (instanceIds: string[]) => void;
+  handleCreateSampleData: () => void;
 }
 
 const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
@@ -38,6 +39,7 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
   selectedInstanceIds,
   selectedInstanceId,
   handleInfer,
+  handleCreateSampleData,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingName, setEditingName] = useState(workspaceName);
@@ -228,6 +230,25 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
         }}
       >
         Visualization
+      </button>
+
+      {/* Sample Data Button */}
+      <button
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          backgroundColor: '#28a745',
+          color: 'white',
+          border: '1px solid #28a745',
+        }}
+        onClick={() => {
+          handleCreateSampleData();
+          setInstanceToolsOpen(false);
+        }}
+        title="Add sample data (Medal or World statistics)"
+      >
+        Sample Data
       </button>
 
       {/* <button
