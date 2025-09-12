@@ -2,7 +2,6 @@
 
 A web extension that streamlines web data analysis by integrating example-driven idea demonstration with AI agents.
 
-Maintained by Yanwei Huang with love. In preparation for CHI 2026.
 
 ## Development
 
