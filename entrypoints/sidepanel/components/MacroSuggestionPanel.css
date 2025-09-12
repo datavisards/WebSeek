@@ -216,11 +216,24 @@
 }
 
 .expanded-details {
-  background: #f9fafb;
+  background: #eee;
   border-radius: 6px;
-  padding: 12px;
-  margin-top: 8px;
+  padding: 3px 9px;
   border: 1px solid #f3f4f6;
+}
+
+.tool-sequence-overview {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.tool-sequence-overview strong {
+  color: #374151;
+}
+
+.tool-name {
+  display: inline;
+  white-space: nowrap;
 }
 
 .detailed-description {
@@ -373,14 +386,6 @@
 .tool-indicator .tool-action {
   color: #0284c7;
   font-style: italic;
-}
-
-.tool-details {
-  margin-top: 12px;
-  padding: 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
 }
 
 .tool-info .tool-header {

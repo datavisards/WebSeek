@@ -2148,7 +2148,7 @@ function renderEmbeddedContent(embedded: EmbeddedInstance, evaluateFormula?: (fo
         ? evaluateFormula(textContent) 
         : textContent;
       return (
-        <p className={`cell-text ${isFormulaCell ? 'formula' : ''}`} style={{ margin: 0, fontSize: '12px' }}>
+        <p className={`cell-text ${isFormulaCell ? 'formula' : ''}`} style={{ margin: 0, fontSize: '16px' }}>
           {displayContent}
         </p>
       );
