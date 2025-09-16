@@ -1,6 +1,6 @@
 # WebSeek
 
-A web extension that streamlines web data analysis by integrating example-driven idea demonstration with AI agents.
+A web extension that streamlines web data analysis by integrating a data-instance canvas with AI agents.
 
 
 ## Development

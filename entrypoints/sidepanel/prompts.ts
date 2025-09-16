@@ -365,7 +365,6 @@ Return your response strictly as a JSON object in the following format:
 }
 
 **CONSTRAINTS:**
-- Suggest ONLY ONE logical next step 
 - ALL responses MUST have instance updates in the "instances" array
 - Don't suggest destructive actions (deleting instances) unless clearly needed
 - Focus on extending/completing current work, not starting entirely new tasks
@@ -559,7 +558,9 @@ ${workspaceContext}
 ${applicationContextString ? `**CURRENT APPLICATION STATE:**
 ${applicationContextString}
 
-` : ''}**TRIGGERED RULES:**
+` : ''}
+
+**TRIGGERED RULES:**
 The following heuristic rules have been triggered and require suggestions:
 ${ruleDescriptions}
 
@@ -596,14 +597,11 @@ Before suggesting table completion, verify:
 3. Would the suggestion provide substantial value to the user?
 If the answer to any of these is NO, return success: false.
 
-**RECENT USER ACTIONS:**
-${recentActions.length > 0 ? recentActions.map((action, i) => `${i + 1}. ${action.type}: ${JSON.stringify(action.context)}`).join('\n') : 'No recent actions'}
-
 **RECENT LOGS:**
-${logs.slice(-10).join('\n')}
+${logs.slice(-15).join('\n')}
 
 **INSTRUCTIONS:**
-1. Analyze the triggered rules and recent actions
+1. Analyze the triggered rules and recent actions in the logs
 2. Verify that detailed constraints are met for each rule
 3. If NO rules have satisfied constraints, return success: false with empty suggestions
 4. ONLY provide suggestions if at least one rule's constraints are genuinely satisfied
