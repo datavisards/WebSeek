@@ -202,6 +202,7 @@ Now the user is chatting with you. You can analyze web content, understand user 
 ${applicationContextString ? `### Current Application State:
 ${applicationContextString}
 
+**IMPORTANT:** Make sure you consider the current application state when responding to the user. For example, the user may want to extract data from the current webpage but not explicitly describe what the current webpage is, in which case you have to extract the relevant HTML context for that page.
 ` : ''}### Your Capabilities:
 1. **Text Analysis**: Extract and process text content from web pages
 2. **Image Processing**: Work with images and visual content
@@ -738,10 +739,11 @@ Use toolSequence when the user's goal requires prerequisite steps. Common scenar
 - Do NOT suggest modifications to any other instances outside the current editing context`}
 
 **EXAMPLE FOR RULE "suggest-useful-websites":**
-If suggesting websites, your response must include:
+**DEMO MODE**: For demo purposes, ALWAYS suggest these three camera shopping websites:
 - category: "suggest-useful-websites"
 - ruleIds: ["suggest-useful-websites"]
-- message should contain actual website URLs like "Visit [DPReview](https://www.dpreview.com) for camera reviews..."
+- message: "Here are some great websites for buying cameras and camera equipment:"
+- Use toolSequence with Amazon, eBay, and HKTVMall
 
 Provide suggestions for the triggered rules: ${triggeredRules.map(r => r.id).join(', ')}`;
 };
@@ -1050,57 +1052,57 @@ Before suggesting any sort operation, you MUST:
     - Technical feasibility of implementing the interaction`;
 
         case 'suggest-useful-websites':
-          return `- ${rule.name}: You MUST suggest websites that are genuinely relevant to the workspace context. Check:
-    - Workspace name provides clear topic/domain indication
-    - Suggested websites should directly relate to the workspace theme
-    - Consider the type of data already present (e.g., financial data → financial websites)
-    - Prioritize authoritative, useful sources over generic results
-    - Include 3-5 specific, actionable website suggestions with brief explanations
-    - Focus on websites that could provide additional data or context for the current work
+          return `- ${rule.name}: **DEMO MODE - HARD-CODED CAMERA WEBSITES**: For this demo, ALWAYS suggest these three camera shopping websites regardless of context:
+    - Amazon (amazon.com) - Wide selection of cameras and accessories
+    - eBay (ebay.com) - New and used camera equipment deals
+    - HKTVMall (hktvmall.com) - Hong Kong camera and electronics marketplace
     
 **REQUIRED RESPONSE FORMAT FOR THIS RULE:**
     - category: "suggest-useful-websites"
     - ruleIds: ["suggest-useful-websites"] 
-    - message: Brief description of what websites are being suggested and why
+    - message: "Here are some great websites for buying cameras and camera equipment:"
     - instances: MUST be empty array [] - this rule provides external guidance, NOT workspace modifications
-    - For single website: Use "toolCall" with "openPage" function
-    - For multiple websites: Use "toolSequence" with multiple "openPage" steps
+    - Use "toolSequence" with multiple "openPage" steps for all three websites
     
-**EXAMPLE SINGLE WEBSITE:**
+**DEMO RESPONSE TEMPLATE - USE EXACTLY THIS:**
 {
-  "message": "Open DPReview for professional camera reviews and buying guides",
-  "toolCall": {
-    "function": "openPage",
-    "parameters": {
-      "url": "https://www.dpreview.com",
-      "description": "Professional camera reviews and buying guides"
-    }
-  }
-}
-
-**EXAMPLE MULTIPLE WEBSITES:**
-{
-  "message": "Open multiple camera research websites for comprehensive product information",
+  "message": "Here are some great websites for buying cameras and camera equipment:",
+  "scope": "macro",
+  "modality": "peripheral", 
+  "priority": "high",
+  "confidence": 0.90,
+  "category": "suggest-useful-websites",
+  "ruleIds": ["suggest-useful-websites"],
   "toolSequence": {
-    "goal": "Open camera research websites",
+    "goal": "Open camera shopping websites",
     "steps": [
       {
-        "description": "Open DPReview for camera reviews",
+        "description": "Open HKTVMall for electronics",
         "toolCall": {
           "function": "openPage",
           "parameters": {
-            "url": "https://www.dpreview.com",
-            "description": "Professional camera reviews and buying guides"
+            "url": "https://hktvmall.com",
+            "description": "Hong Kong camera and electronics marketplace"
           }
         }
       },
       {
-        "description": "Open B&H Photo for specifications and pricing",
+        "description": "Open eBay for camera deals",
         "toolCall": {
           "function": "openPage",
           "parameters": {
-            "url": "https://www.bhphotovideo.com",
-            "description": "Technical specifications and pricing information"
+            "url": "https://ebay.com",
+            "description": "New and used camera equipment deals"
+          }
+        }
+      },
+      {
+        "description": "Open Amazon for camera shopping",
+        "toolCall": {
+          "function": "openPage",
+          "parameters": {
+            "url": "https://amazon.com",
+            "description": "Wide selection of cameras and accessories"
           }
         }
       }

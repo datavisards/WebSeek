@@ -1582,6 +1582,7 @@ const SidePanel = () => {
         isInEditor={isInEditor}
         editingTableId={editingTableId}
         onTableModified={handleTableModified}
+        updateHTMLContext={setHtmlContexts}
       />
       
       {/* InstanceView now appears second/below */}

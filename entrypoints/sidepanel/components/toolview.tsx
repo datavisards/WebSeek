@@ -32,6 +32,7 @@ interface ToolViewProps {
     isInEditor?: boolean;
     editingTableId?: string | null;
     onTableModified?: (tableId: string) => void; // Add callback for table modifications
+    updateHTMLContext?: React.Dispatch<React.SetStateAction<Record<string, { pageURL: string, htmlContent: string }>>>;
 }
 
 const ToolView: React.FC<ToolViewProps> = ({
@@ -56,7 +57,8 @@ const ToolView: React.FC<ToolViewProps> = ({
     currentPageInfo,
     isInEditor,
     editingTableId,
-    onTableModified
+    onTableModified,
+    updateHTMLContext
 }) => {
     const [activeRightTab, setActiveRightTab] = useState<'chat' | 'history' | 'logs'>('chat');
     const [showSystemLogs, setShowSystemLogs] = useState(false);
@@ -90,14 +92,6 @@ const ToolView: React.FC<ToolViewProps> = ({
                     <h3 className={`pane-title ${isMinimized ? 'disabled' : ''}`}>
                         AI Suggestions {suggestions.filter(s => s.scope === 'macro').length > 0 && `(${suggestions.filter(s => s.scope === 'macro').length})`}
                     </h3>
-                    <button
-                        className={`system-logs-btn ${isMinimized ? 'disabled' : ''}`}
-                        onClick={() => !isMinimized && setShowSystemLogs(true)}
-                        title="View System Logs for Data Analysis"
-                        disabled={isMinimized}
-                    >
-                        System Logs
-                    </button>
                     {onDismissAllSuggestions && suggestions.filter(s => s.scope === 'macro').length > 0 && (
                         <button
                             className="dismiss-all-btn"
@@ -169,6 +163,7 @@ const ToolView: React.FC<ToolViewProps> = ({
                                 isInEditor={isInEditor}
                                 editingTableId={editingTableId}
                                 onTableModified={onTableModified}
+                                updateHTMLContext={updateHTMLContext}
                             />
                         )}
                         {activeRightTab === 'history' && (

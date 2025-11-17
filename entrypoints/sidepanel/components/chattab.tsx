@@ -21,6 +21,7 @@ interface ChatTabProps {
     isInEditor?: boolean;
     editingTableId?: string | null;
     onTableModified?: (tableId: string) => void; // Add callback for table modifications
+    updateHTMLContext?: React.Dispatch<React.SetStateAction<Record<string, { pageURL: string, htmlContent: string }>>>;
 }
 
 const ChatTab: React.FC<ChatTabProps> = ({
@@ -37,7 +38,8 @@ const ChatTab: React.FC<ChatTabProps> = ({
     currentPageInfo,
     isInEditor,
     editingTableId,
-    onTableModified
+    onTableModified,
+    updateHTMLContext
 }) => {
     const [inputValue, setInputValue] = useState('');
     const [showAutocomplete, setShowAutocomplete] = useState(false);
@@ -58,6 +60,54 @@ const ChatTab: React.FC<ChatTabProps> = ({
     useEffect(() => {
         console.log('[ChatTab] currentPageInfo updated:', currentPageInfo);
     }, [currentPageInfo]);
+
+    // Helper function to fetch HTML context for current page if missing
+    const ensureHTMLContextForCurrentPage = async (): Promise<boolean> => {
+        if (!currentPageInfo?.pageId || !updateHTMLContext) {
+            console.warn('[ChatTab] Cannot fetch HTML context: missing currentPageInfo or updateHTMLContext callback');
+            return false;
+        }
+
+        // Check if HTML context already exists
+        if (htmlContext[currentPageInfo.pageId]) {
+            console.log('[ChatTab] HTML context already exists for current page');
+            return true;
+        }
+
+        console.log('[ChatTab] HTML context missing for current page, attempting to fetch...');
+        
+        try {
+            // Use background script proxy to fetch HTML content
+            const backendUrl = `http://${import.meta.env.VITE_BACKEND_URL}`;
+            const fetchResponse = await chrome.runtime.sendMessage({
+                type: 'PROXY_FETCH',
+                url: `${backendUrl}/api/snapshots/${currentPageInfo.pageId}`,
+                options: { method: 'GET' }
+            });
+            
+            if (fetchResponse?.ok) {
+                const snapshotData = JSON.parse(fetchResponse.data);
+                console.log('[ChatTab] Successfully fetched HTML content for current page');
+                
+                const newHtmlContext = {
+                    [currentPageInfo.pageId]: {
+                        pageURL: currentPageInfo.url,
+                        htmlContent: snapshotData.htmlContent
+                    }
+                };
+                
+                updateHTMLContext(prev => ({ ...prev, ...newHtmlContext }));
+                
+                return true;
+            } else {
+                console.warn('[ChatTab] Failed to fetch snapshot:', fetchResponse?.status || 'Unknown error');
+                return false;
+            }
+        } catch (error) {
+            console.error('[ChatTab] Error fetching HTML content:', error);
+            return false;
+        }
+    };
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -240,21 +290,31 @@ const ChatTab: React.FC<ChatTabProps> = ({
 
         if (!userMessage || agentLoading) return;
         
-        // Defensive coding: Check if current active tab is in htmlContext
+        // Ensure HTML context is available for current page before sending message
         if (currentPageInfo && currentPageInfo.pageId) {
             const currentPageInContext = htmlContext[currentPageInfo.pageId];
             if (!currentPageInContext) {
                 console.warn(`[ChatTab] Current active tab ${currentPageInfo.pageId} not found in htmlContext. Available pages:`, Object.keys(htmlContext));
-                // Show a warning message to the user
-                addMessage({
-                    role: 'agent',
-                    message: '⚠️ The current page context is not available. Please refresh the page or switch to a different tab to ensure the AI has access to the current page content.',
-                    id: generateId(),
-                    isRetrying: false
-                });
-                return;
+                console.log('[ChatTab] Attempting to fetch HTML context for current page...');
+                
+                // Try to fetch the HTML context
+                const htmlContextFetched = await ensureHTMLContextForCurrentPage();
+                
+                if (!htmlContextFetched) {
+                    // Show a warning message to the user if we couldn't fetch the context
+                    addMessage({
+                        role: 'agent',
+                        message: '⚠️ The current page context is not available. Please refresh the page or switch to a different tab to ensure the AI has access to the current page content.',
+                        id: generateId(),
+                        isRetrying: false
+                    });
+                    return;
+                }
+                
+                console.log('[ChatTab] Successfully fetched HTML context, proceeding with message...');
+            } else {
+                console.log(`[ChatTab] Current active tab ${currentPageInfo.pageId} found in htmlContext with URL: ${currentPageInContext.pageURL}`);
             }
-            console.log(`[ChatTab] Current active tab ${currentPageInfo.pageId} found in htmlContext with URL: ${currentPageInContext.pageURL}`);
         }
         
         // System logging for chat interaction
@@ -377,11 +437,21 @@ const ChatTab: React.FC<ChatTabProps> = ({
             setInstances(userMessage.instancesCheckpoint);
         }
 
-        // Defensive coding: Log warning if current active tab is not in htmlContext during retry
+        // Ensure HTML context is available for current page during retry
         if (currentPageInfo && currentPageInfo.pageId) {
             const currentPageInContext = htmlContext[currentPageInfo.pageId];
             if (!currentPageInContext) {
                 console.warn(`[ChatTab] During retry, current active tab ${currentPageInfo.pageId} not found in htmlContext. Available pages:`, Object.keys(htmlContext));
+                console.log('[ChatTab] Attempting to fetch HTML context for retry...');
+                
+                // Try to fetch the HTML context
+                const htmlContextFetched = await ensureHTMLContextForCurrentPage();
+                
+                if (!htmlContextFetched) {
+                    console.warn('[ChatTab] Could not fetch HTML context for retry, proceeding without current page context');
+                } else {
+                    console.log('[ChatTab] Successfully fetched HTML context for retry');
+                }
             } else {
                 console.log(`[ChatTab] During retry, current active tab ${currentPageInfo.pageId} found in htmlContext with URL: ${currentPageInContext.pageURL}`);
             }

@@ -232,25 +232,6 @@ const InstanceViewHeader: React.FC<InstanceViewHeaderProps> = ({
         Visualization
       </button>
 
-      {/* Sample Data Button */}
-      <button
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          backgroundColor: '#28a745',
-          color: 'white',
-          border: '1px solid #28a745',
-        }}
-        onClick={() => {
-          handleCreateSampleData();
-          setInstanceToolsOpen(false);
-        }}
-        title="Add sample data (Medal or World statistics)"
-      >
-        Sample Data
-      </button>
-
       {/* <button
         onClick={() => handleModeSwitch(mode === 'hand' ? 'select' : 'hand')}
         style={{
