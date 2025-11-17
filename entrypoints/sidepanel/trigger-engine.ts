@@ -172,9 +172,13 @@ export class TriggerEngine {
     this.addRule({
       id: 'table-joining',
       name: 'Joining Tables',
-      description: 'Suggest joining tables when matching columns are detected',
+      description: 'Suggest joining tables when exactly two tables are detected',
       pattern: (_events: UserActionEvent[], context: any) => {
-        return this.hasMultipleTablesWithMatchingColumns(context);
+        // DEMO MODE: Trigger when there are exactly two tables
+        if (!context.instances) return false;
+        const tables = context.instances.filter((i: any) => i.type === 'table');
+        console.log('[TriggerEngine] Table joining check: found', tables.length, 'tables');
+        return tables.length === 2;
       },
       suggestionType: 'suggest-table-join',
       scope: 'macro',

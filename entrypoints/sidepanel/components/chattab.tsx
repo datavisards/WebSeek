@@ -245,6 +245,58 @@ const ChatTab: React.FC<ChatTabProps> = ({
     ): Promise<{ message: string; instances: any[] }> => {
         let message: string = "", newInstances: any[] = [];
         
+        // Hard-coded demo behavior: Visualization creation when message includes "visualization" and @ mentions a table
+        const messageText = userMessage.toLowerCase();
+        if (messageText.includes("visualization") && userMessage.includes("@")) {
+            // Extract table mentions (@ followed by table ID)
+            const tableMentionMatches = userMessage.match(/@(\w+)/g);
+            if (tableMentionMatches) {
+                const tableMentions = tableMentionMatches.map(match => match.substring(1)); // Remove @
+                const mentionedTable = currentInstances.find(inst => 
+                    inst.type === 'table' && tableMentions.includes(inst.id)
+                );
+                
+                if (mentionedTable) {
+                    console.log('[ChatTab] Hard-coded demo: Creating visualization for table:', mentionedTable.id);
+                    
+                    // Create scatterplot using 3rd, 4th, and 5th columns (indices 2, 3, 4)
+                    const scatterplotSpec = {
+                        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                        "width": "container",
+                        "height": "container",
+                        "mark": "point",
+                        "encoding": {
+                            "x": { "field": "C", "type": "quantitative" },
+                            "y": { "field": "D", "type": "quantitative" },
+                            "color": { "field": "E", "type": "nominal" }
+                        }
+                    };
+                    
+                    const vizId = `Scatterplot_${mentionedTable.id}`;
+                    const visualizationInstance = {
+                        action: "add",
+                        instance: {
+                            type: "visualization",
+                            id: vizId,
+                            spec: scatterplotSpec,
+                            source: {
+                                type: "manual"
+                            },
+                            x: 300,
+                            y: 300,
+                            width: 400,
+                            height: 300
+                        }
+                    };
+                    
+                    message = `I've created a scatterplot visualization using the third column (C) as x-axis, fourth column (D) as y-axis, and fifth column (E) as color from table "${mentionedTable.id}". The visualization will help you explore the relationships between these data dimensions.`;
+                    newInstances = [visualizationInstance];
+                    
+                    return { message, instances: newInstances };
+                }
+            }
+        }
+        
         if (import.meta.env.WXT_USE_LLM == "true") {
             const { imageContext, textContext } = await generateInstanceContext(currentInstances);
             

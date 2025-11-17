@@ -2998,7 +2998,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         className="view-container instance-view"
       >
         {/* Trash Button */}
-        {!editingSketchId && !showTrash && (
+        {/* {!editingSketchId && !showTrash && (
           <div className="trash-icon" onClick={() => setShowTrash(true)}>
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
               <path d="M3 6v18h18v-18h-18zm5 14c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm5 0c0 .552-.448 1-1 1s-1-.448-1-1v-10c0-.552.448-1 1-1s1 .448 1 1v10zm4-18h-8v-2h-2v2h-8v2h18v-2z" />
@@ -3007,7 +3007,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
               <span className="trash-count">{deletedInstances.length}</span>
             )}
           </div>
-        )}
+        )} */}
 
         {editingSketchId ? (
           // Sketch Editor

@@ -529,12 +529,9 @@ ${scope === 'macro' ?
 
 **ANTI-REPETITION SAFEGUARDS:**
 ${scope === 'macro' && triggeredRules.some(r => r.id === 'suggest-table-join') ? 
-`**TABLE JOIN REPETITION PREVENTION:**
-- NEVER suggest joining tables A and B if they have already been merged or joined
-- Check suggestion history for previous join operations between the same tables
-- Look for evidence of previous merges: combined column names, consolidated data, source prefixes
-- If tables show signs of being previously joined (e.g., "Amazon_Price" + "BH_Price" columns), return success: false
-- Analyze recent logs for completed join operations and avoid re-suggesting the same combinations` : ''}
+`**TABLE JOIN DEMO MODE:**
+- For demo purposes, table joining suggestions are hard-coded and will appear when exactly two tables are present
+- All repetition prevention is disabled for the demo` : ''}
 
 **CURRENT SCOPE: ${scope.toUpperCase()}**
 ${scope === 'macro' ? 
@@ -867,7 +864,88 @@ DO NOT suggest trivial additions or formatting changes. DO NOT suggest completio
     - Data completeness and quality`;
         
         case 'table-joining':
-          return `- ${rule.name}: You MUST provide SPECIFIC, ACTIONABLE table join operations with exact steps and tool sequences. NEVER ask vague questions like "What would you like to do?" 
+          return `- ${rule.name}: **DEMO MODE - HARD-CODED CAMERA TABLE JOINING**: For this demo, when there are exactly two tables detected, ALWAYS suggest joining them with these specific parameters:
+    
+**DEMO HARD-CODED RESPONSE:**
+{
+  "success": true,
+  "message": "Combine the camera data from Amazon and eBay into a single, comprehensive table",
+  "instances": [],
+  "suggestions": [
+    {
+      "scope": "macro",
+      "modality": "peripheral",
+      "priority": "high",
+      "confidence": 0.90,
+      "category": "table-joining",
+      "ruleIds": ["table-joining"],
+      "message": "Combine the camera data from Amazon and eBay into a single, comprehensive table",
+      "toolSequence": {
+        "goal": "Transform numerical columns and merge camera data tables",
+        "steps": [
+          {
+            "description": "Transform third column to numerical format for first table",
+            "toolCall": {
+              "function": "convertColumnType",
+              "parameters": {
+                "tableId": "auto-detect-table-1",
+                "columnName": "C",
+                "targetType": "numerical"
+              }
+            }
+          },
+          {
+            "description": "Transform fourth column to numerical format for first table",
+            "toolCall": {
+              "function": "convertColumnType",
+              "parameters": {
+                "tableId": "auto-detect-table-1",
+                "columnName": "D",
+                "targetType": "numerical"
+              }
+            }
+          },
+          {
+            "description": "Transform third column to numerical format for second table",
+            "toolCall": {
+              "function": "convertColumnType",
+              "parameters": {
+                "tableId": "auto-detect-table-2",
+                "columnName": "C",
+                "targetType": "numerical"
+              }
+            }
+          },
+          {
+            "description": "Transform fourth column to numerical format for second table",
+            "toolCall": {
+              "function": "convertColumnType",
+              "parameters": {
+                "tableId": "auto-detect-table-2",
+                "columnName": "D",
+                "targetType": "numerical"
+              }
+            }
+          },
+          {
+            "description": "Merge tables by concatenation into Combined_Camera_Data",
+            "toolCall": {
+              "function": "mergeInstances",
+              "parameters": {
+                "sourceInstanceIds": ["auto-detect-table-1", "auto-detect-table-2"],
+                "mergeStrategy": "append",
+                "newInstanceName": "Combined_Camera_Data"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+
+**ALL OTHER TABLE JOINING SUGGESTIONS ARE DISABLED FOR THIS DEMO**
+You MUST provide SPECIFIC, ACTIONABLE table join operations with exact steps and tool sequences. NEVER ask vague questions like "What would you like to do?" 
 
 **CRITICAL: PREVENT REDUNDANT JOINS**
 Before suggesting any join operation, you MUST verify that the tables are NOT already joined or merged:
@@ -1167,10 +1245,11 @@ export const createSuggestionHistoryContext = (
   }
   
   if (tableJoinAttempts.length >= 1) {
-    const joinDetails = tableJoinAttempts.map(attempt => 
-      `"${attempt.suggestionType || 'table join'}" ${attempt.timeSinceAcceptance || 'recently'}`
-    ).join(', ');
-    warnings += `\n\n**⚠️ REPEATED TABLE JOIN WARNING:**\nTable join operations have been suggested recently: ${joinDetails}. Before suggesting new joins, verify that:\n- The suggested tables have NOT already been joined or merged\n- This is not a repetition of a previously accepted join suggestion\n- The tables contain distinct, complementary data (not already consolidated)\n- Column names don't indicate previous joins (e.g., "Source1_", "Amazon_", etc.)\nIf tables show evidence of previous joins, return success: false.`;
+    // DEMO MODE: Disable table join warnings for demo
+    // const joinDetails = tableJoinAttempts.map(attempt => 
+    //   `"${attempt.suggestionType || 'table join'}" ${attempt.timeSinceAcceptance || 'recently'}`
+    // ).join(', ');
+    // warnings += `\n\n**⚠️ REPEATED TABLE JOIN WARNING:**\nTable join operations have been suggested recently: ${joinDetails}. Before suggesting new joins, verify that:\n- The suggested tables have NOT already been joined or merged\n- This is not a repetition of a previously accepted join suggestion\n- The tables contain distinct, complementary data (not already consolidated)\n- Column names don't indicate previous joins (e.g., "Source1_", "Amazon_", etc.)\nIf tables show evidence of previous joins, return success: false.`;
   }
 
   return `Previous suggestion activity:\n${historyText}${warnings}\n\nConsider this history when determining the appropriate suggestion level and avoid repeating the same suggestion type or operations on the same data.`;

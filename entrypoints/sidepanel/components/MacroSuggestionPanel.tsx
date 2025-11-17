@@ -213,55 +213,63 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
                   {expandedSuggestion === suggestion.id && (
                     <div className="expanded-details">
                       {suggestion.toolSequence ? (
-                        <div className="tool-sequence-overview">
-                          <strong>Tools: </strong>
-                          {suggestion.toolSequence.steps.map((step, index) => (
-                            <span key={index} className="tool-name">
-                              {getToolIcon(step.toolCall.function)} {step.toolCall.function}
-                              {index < (suggestion.toolSequence?.steps.length || 0) - 1 ? ' → ' : ''}
-                            </span>
-                          ))}
-                        </div>
+                      <div className="tool-sequence-overview">
+                      <strong>Tools: </strong>
+                      <div className="tool-sequence-flow" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }}>
+                      {suggestion.toolSequence.steps.map((step, index) => (
+                      <span key={index} className="tool-step" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                      <span className="tool-name">
+                      {getToolIcon(step.toolCall.function)} {step.toolCall.function}
+                      </span>
+                      {index < (suggestion.toolSequence?.steps.length || 0) - 1 && (
+                      <span className="tool-arrow" style={{ marginLeft: '4px', marginRight: '4px' }}>→</span>
+                      )}
+                      </span>
+                      ))}
+                      </div>
+                      </div>
                       ) : suggestion.detailedDescription && (
-                        detectMarkdown(suggestion.detailedDescription) ? (
-                          <div 
-                            className="detailed-description markdown-content"
-                            dangerouslySetInnerHTML={{ __html: renderMarkdown(suggestion.detailedDescription) }}
-                          />
-                        ) : (
-                          <p className="detailed-description">
-                            {suggestion.detailedDescription}
-                          </p>
-                        )
+                      detectMarkdown(suggestion.detailedDescription) ? (
+                        <div 
+                        className="detailed-description markdown-content"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(suggestion.detailedDescription) }}
+                        />
+                      ) : (
+                        <p className="detailed-description">
+                        {suggestion.detailedDescription}
+                        </p>
+                      )
                       )}
 
                       {suggestion.toolCall && (
-                        <div className="tool-details">
-                          <strong>Tool: </strong>
-                          <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
-                          <span className="tool-name">{suggestion.toolCall.function}</span>
+                      <div className="tool-details">
+                        <strong>Tool: </strong>
+                        <div className="tool-info">
+                        <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
+                        <span className="tool-name">{suggestion.toolCall.function}</span>
                         </div>
+                      </div>
                       )}
                       
                       {suggestion.contextualData && (
-                        <div className="contextual-data">
-                          <strong>Context:</strong>
-                          <pre>{JSON.stringify(suggestion.contextualData, null, 2)}</pre>
-                        </div>
+                      <div className="contextual-data">
+                        <strong>Context:</strong>
+                        <pre>{JSON.stringify(suggestion.contextualData, null, 2)}</pre>
+                      </div>
                       )}
                       
                       {suggestion.instances && suggestion.instances.length > 0 && (
-                        <div className="instance-preview">
-                          <strong>Will affect {suggestion.instances.length} item(s)</strong>
-                          <ul>
-                            {suggestion.instances.map((instance, idx) => (
-                              <li key={idx}>
-                                {instance.action} {instance.instance?.type || 'item'}
-                                {instance.targetId && ` (${instance.targetId})`}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
+                      <div className="instance-preview">
+                        <strong>Will affect {suggestion.instances.length} item(s)</strong>
+                        <ul>
+                        {suggestion.instances.map((instance, idx) => (
+                          <li key={idx}>
+                          {instance.action} {instance.instance?.type || 'item'}
+                          {instance.targetId && ` (${instance.targetId})`}
+                          </li>
+                        ))}
+                        </ul>
+                      </div>
                       )}
                     </div>
                   )}
