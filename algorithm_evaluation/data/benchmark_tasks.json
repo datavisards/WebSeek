@@ -1,0 +1,3101 @@
+[
+  {
+    "task_id": "T001",
+    "task_category": "discovery",
+    "difficulty": "easy",
+    "goal_description": "Find and open a webpage offering the latest market research report on electric vehicles (EV) to support an upcoming academic study on sustainable transportation.",
+    "starting_url": "https://www.google.com",
+    "html_context": "<div class='g'><div class='rc'><div class='r'><a href='https://www.marketresearch.com/latest-reports-on-electric-vehicles' data-aid-id='aid-001'>Market Research Reports on Electric Vehicles</a></div><div class='s'><div class='st'>Explore comprehensive market research reports on electric vehicles, including industry trends, forecasts, and analysis.</div></div></div></div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched Google for 'latest electric vehicle market research reports'"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "openPage",
+        "parameters": {
+          "url": "https://www.marketresearch.com/latest-reports-on-electric-vehicles",
+          "description": "Market Research Reports on Electric Vehicles",
+          "openInBackground": false
+        }
+      }
+    ],
+    "expected_tools": 1
+  },
+  {
+    "task_id": "T002",
+    "task_category": "discovery",
+    "difficulty": "easy",
+    "goal_description": "Find and open a webpage providing a comprehensive comparison between the latest models of electric vehicles (EVs) to aid in purchase decision-making.",
+    "starting_url": "",
+    "html_context": "<div class='comparison-list' data-aid-id='aid-001'><h2 data-aid-id='aid-002'>2023 Electric Vehicle Models Comparison</h2><p data-aid-id='aid-003'>Compare features, range, and prices of the latest EV models.</p><ul data-aid-id='aid-004'><li data-aid-id='aid-005'>Tesla Model 3</li><li data-aid-id='aid-006'>Nissan Leaf</li><li data-aid-id='aid-007'>Chevrolet Bolt</li></ul></div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User expressed interest in purchasing an electric vehicle",
+      "User requested information on the latest EV models"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "openPage",
+        "parameters": {
+          "url": "https://www.edmunds.com/electric-car/articles/best-electric-cars/",
+          "description": "Open Edmunds to explore comprehensive comparisons of the latest electric vehicle models, including features, range, and prices.",
+          "openInBackground": false
+        }
+      }
+    ],
+    "expected_tools": 1
+  },
+  {
+    "task_id": "T003",
+    "task_category": "Extraction & Visualization",
+    "difficulty": "easy",
+    "page": "amazon_cameras",
+    "goal_description": "Identify and visualize the distribution of camera brands from the Amazon search results to understand which brands are most common.",
+    "starting_url": "https://www.amazon.com/s?k=digital+camera",
+    "html_context": "<div class='s-result-list'><div class='s-result-item' data-aid-id='aid-001'><h2 data-aid-id='aid-002'>Canon EOS R50 Mirrorless Camera</h2><span class='a-offscreen' data-aid-id='aid-003'>$679.00</span><span class='a-icon-star' data-aid-id='aid-004'>4.6 out of 5 stars</span><span data-aid-id='aid-005'>987 reviews</span><span data-aid-id='aid-006'>Canon</span><span data-aid-id='aid-007'>Prime</span></div><div class='s-result-item' data-aid-id='aid-008'><h2 data-aid-id='aid-009'>Sony Alpha a6400 Mirrorless Camera</h2><span class='a-offscreen' data-aid-id='aid-010'>$898.00</span><span class='a-icon-star' data-aid-id='aid-011'>4.7 out of 5 stars</span><span data-aid-id='aid-012'>1123 reviews</span><span data-aid-id='aid-013'>Sony</span><span data-aid-id='aid-014'>Prime</span></div>... [18 more products]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for digital cameras on Amazon",
+      "User interested in analyzing the brand distribution of listed cameras"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=digital+camera",
+          "pattern": ".s-result-item",
+          "maxItems": 20
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_data",
+          "chartType": "bar",
+          "xAxis": "Brand",
+          "title": "Camera Brand Distribution on Amazon"
+        }
+      }
+    ],
+    "expected_tools": 2
+  },
+  {
+    "task_id": "T004",
+    "task_category": "Extraction & Analysis",
+    "difficulty": "easy",
+    "page": "amazon_cameras",
+    "goal_description": "Extract the names and prices of digital cameras from Amazon search results, and identify the cheapest camera.",
+    "starting_url": "https://www.amazon.com/s?k=digital+camera",
+    "html_context": "<div class='s-result-list'><div class='s-result-item' data-aid-id='aid-001'><h2 data-aid-id='aid-002'>Canon EOS R50 Mirrorless Camera</h2><span class='a-price' data-aid-id='aid-003'><span class='a-offscreen'>$679.00</span></span><div class='a-row' data-aid-id='aid-004'><span class='a-icon-star' data-aid-id='aid-005'>4.6 out of 5 stars</span><span class='a-size-base' data-aid-id='aid-006'>1,234 reviews</span></div></div><div class='s-result-item' data-aid-id='aid-007'><h2 data-aid-id='aid-008'>Sony Alpha a6400 Mirrorless Camera</h2><span class='a-price' data-aid-id='aid-009'><span class='a-offscreen'>$898.00</span></span><div class='a-row' data-aid-id='aid-010'><span class='a-icon-star' data-aid-id='aid-011'>4.7 out of 5 stars</span><span class='a-size-base' data-aid-id='aid-012'>567 reviews</span></div></div>... [18 more products]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for 'digital camera' on Amazon"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=digital+camera",
+          "pattern": ".s-result-item",
+          "maxItems": 20
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_cameras",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Price"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_cameras",
+          "columnName": "Price",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "extracted_cameras",
+          "columnName": "Price",
+          "order": "asc"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T005",
+    "task_category": "Extraction & Analysis",
+    "difficulty": "Medium",
+    "page": "amazon_cameras",
+    "goal_description": "Extract camera products from Amazon search results, remove currency symbols and commas from the price column, identify and mark products with a 4.5 star rating and above as 'Highly Rated', and then create a scatter plot visualizing the relationship between price and review count.",
+    "starting_url": "https://www.amazon.com/s?k=digital+camera",
+    "html_context": "<div class='s-result-list'><div class='s-result-item' data-aid-id='aid-001'><h2 data-aid-id='aid-002'>Canon EOS R50 ($679.00, 4.6★, 1,200 reviews)</h2><span class='a-price' data-aid-id='aid-003'>$679.00</span><div class='a-row' data-aid-id='aid-004'><span class='a-icon-star' data-aid-id='aid-005'>4.6 out of 5 stars</span><span data-aid-id='aid-006'>1,200 reviews</span></div></div>... [19 more products]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to Amazon camera search page",
+      "User expressed interest in comparing camera prices and review volume"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=digital+camera",
+          "pattern": ".s-result-item",
+          "maxItems": 20
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_cameras",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Price"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_cameras",
+          "columnName": "Price",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_cameras",
+          "columnName": "Reviews",
+          "targetType": "numerical",
+          "cleaningPattern": "[^\\d]",
+          "replaceWith": ""
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_cameras",
+          "chartType": "scatter",
+          "xAxis": "Price",
+          "yAxis": "Reviews",
+          "title": "Price vs Reviews Scatter Plot"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T006",
+    "task_category": "extraction",
+    "difficulty": "medium",
+    "page": "amazon_cameras",
+    "goal_description": "Extract camera product details from Amazon search results, clean the price and rating columns, and compare them with eBay camera listings to identify cheaper options available on eBay.",
+    "starting_url": "https://www.amazon.com/s?k=digital+camera",
+    "html_context": "<div class='s-result-list'><div class='s-result-item' data-aid-id='aid-001'><h2 data-aid-id='aid-002'>Canon EOS R50 Mirrorless Camera</h2><span class='a-price' data-aid-id='aid-003'><span class='a-offscreen'>$679.00</span></span><div class='a-row a-size-small' data-aid-id='aid-004'><span class='a-icon-star' data-aid-id='aid-005'>4.6 out of 5 stars</span><span class='a-size-base' data-aid-id='aid-006'>987 reviews</span></div><img src='https://example.com/canon_eos_r50.jpg' data-aid-id='aid-007'></div>... [19 more products]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to Amazon camera search page",
+      "User expressed interest in comparing Amazon and eBay camera prices"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=digital+camera",
+          "pattern": ".s-result-item",
+          "maxItems": 20
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "cameras_amazon",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Price"
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "cameras_amazon",
+          "searchPattern": " out of 5 stars",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Rating"
+        }
+      },
+      {
+        "function": "mergeInstances",
+        "parameters": {
+          "sourceInstanceIds": [
+            "cameras_amazon",
+            "cameras_ebay"
+          ],
+          "mergeStrategy": "inner_join",
+          "joinColumns": {
+            "leftColumn": "Product Name",
+            "rightColumn": "Product Name"
+          },
+          "newInstanceName": "Price Comparison"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T007",
+    "task_category": "Cleaning",
+    "difficulty": "Medium",
+    "page": "amazon_cameras",
+    "goal_description": "Extract camera product details from the Amazon search page, clean the price and ratings columns to standard numerical formats, and create a visualization of the average price per brand.",
+    "starting_url": "https://www.amazon.com/s?k=digital+camera",
+    "html_context": "<div class='s-result-list'><div class='s-result-item' data-aid-id='aid-001'><span data-aid-id='aid-002'>Canon EOS R50</span><span class='a-price' data-aid-id='aid-003'>$679.00</span><span class='a-icon-star' data-aid-id='aid-004'>4.6 out of 5 stars</span><span data-aid-id='aid-005'>Canon</span><img src='prime_icon.png' data-aid-id='aid-006'/></div>... [19 more products]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for digital cameras on Amazon",
+      "User expressed interest in comparing camera prices by brand."
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=digital+camera",
+          "pattern": ".s-result-item",
+          "maxItems": 20
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "Table1",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Price"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "Table1",
+          "columnName": "Price",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "Table1",
+          "searchPattern": " out of 5 stars",
+          "replaceWith": "",
+          "useRegex": false,
+          "columnName": "Rating"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "Table1",
+          "columnName": "Rating",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "Table1",
+          "chartType": "bar",
+          "xAxis": "Brand",
+          "yAxis": "Price",
+          "title": "Average Price by Camera Brand"
+        }
+      }
+    ],
+    "expected_tools": 6
+  },
+  {
+    "task_id": "T008",
+    "task_category": "cleaning",
+    "difficulty": "medium",
+    "page": "amazon_cameras",
+    "goal_description": "Extract camera product information from Amazon, clean and format data for price comparison, and visualize the distribution of camera prices.",
+    "starting_url": "https://www.amazon.com/s?k=digital+camera",
+    "html_context": "<div class='s-result-list'><div class='s-result-item' data-aid-id='aid-001'><h2 data-aid-id='aid-002'>Canon EOS R50 ($679.00, 4.6★, 1,234 reviews)</h2><span data-aid-id='aid-003'>Prime</span></div><div class='s-result-item' data-aid-id='aid-004'><h2 data-aid-id='aid-005'>Sony Alpha a6400 ($898.00, 4.7★, 567 reviews)</h2></div>... [18 more products]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for 'digital camera' on Amazon",
+      "User applied filter for 4 stars and up ratings"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=digital+camera",
+          "pattern": ".s-result-item",
+          "maxItems": 20
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_products",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Price"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_products",
+          "columnName": "Price",
+          "targetType": "numerical",
+          "cleaningPattern": "",
+          "replaceWith": ""
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_products",
+          "chartType": "histogram",
+          "xAxis": "Price",
+          "yAxis": "",
+          "title": "Price Distribution of Cameras"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T009",
+    "task_category": "Visualization",
+    "difficulty": "Medium",
+    "page": "amazon_cameras",
+    "goal_description": "Create a bar chart visualization showing the top 10 camera brands by average rating on the Amazon camera search results page, after cleaning the rating and reviews data.",
+    "starting_url": "https://www.amazon.com/s?k=digital+camera",
+    "html_context": "<div class='s-result-list'><div class='s-result-item' data-asin='B09WPVBSHP' data-aid-id='aid-001'><h2 class='a-size-mini a-spacing-none a-color-base s-line-clamp-2' data-aid-id='aid-002'>Canon EOS R50 Mirrorless Camera</h2><span class='a-price' data-aid-id='aid-003'><span class='a-offscreen'>$679.00</span></span><div class='a-row a-size-small' data-aid-id='aid-004'><span class='a-icon-star' data-aid-id='aid-005'>4.6 out of 5 stars</span><span class='a-size-base' data-aid-id='aid-006'>1,234 reviews</span></div></div>... [19 more products]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to Amazon camera search results page",
+      "User expressed interest in comparing camera brands by rating"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=digital+camera",
+          "pattern": ".s-result-item",
+          "maxItems": 20
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_data",
+          "searchPattern": " out of 5 stars",
+          "replaceWith": "",
+          "useRegex": false,
+          "columnName": "Rating"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_data",
+          "columnName": "Rating",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_data",
+          "chartType": "bar",
+          "xAxis": "Brand",
+          "yAxis": "Rating",
+          "title": "Top 10 Camera Brands by Average Rating"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T010",
+    "task_category": "composite",
+    "difficulty": "hard",
+    "page": "amazon_cameras",
+    "goal_description": "Extract and compare camera products from Amazon and eBay based on price, rating, and availability of Prime shipping, then visualize the top 10 based on rating.",
+    "starting_url": "https://www.amazon.com/s?k=digital+camera",
+    "html_context": "<div class='s-result-list'><div class='s-result-item' data-asin='B09WPVBSHP' data-aid-id='aid-001'><h2 data-aid-id='aid-002'>Canon EOS R50 Mirrorless Camera</h2><span class='a-price' data-aid-id='aid-003'><span class='a-offscreen'>$679.00</span></span><div class='a-row a-size-small' data-aid-id='aid-004'><span class='a-icon-star' data-aid-id='aid-005'>4.6 out of 5 stars</span><span class='a-size-base' data-aid-id='aid-006'>987 reviews</span><span class='a-icon-prime' data-aid-id='aid-007'></span></div></div>... [19 more products]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User queried 'digital camera' on Amazon",
+      "User expressed interest in comparing Amazon and eBay camera listings"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=digital+camera",
+          "pattern": ".s-result-item",
+          "maxItems": 20
+        }
+      },
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=digital+camera",
+          "pattern": ".s-item",
+          "maxItems": 20
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "Amazon_Table",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Price"
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "eBay_Table",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Price"
+        }
+      },
+      {
+        "function": "mergeInstances",
+        "parameters": {
+          "sourceInstanceIds": [
+            "Amazon_Table",
+            "eBay_Table"
+          ],
+          "mergeStrategy": "union",
+          "newInstanceName": "Merged_Camera_Listings"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "Merged_Camera_Listings",
+          "columnName": "Price",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "Merged_Camera_Listings",
+          "columnName": "Rating",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "Merged_Camera_Listings",
+          "columnName": "Rating",
+          "order": "desc",
+          "secondarySort": {
+            "column": "Price",
+            "order": "asc"
+          }
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "Merged_Camera_Listings",
+          "chartType": "bar",
+          "xAxis": "Product Name",
+          "yAxis": "Rating",
+          "title": "Top 10 Rated Cameras on Amazon and eBay"
+        }
+      }
+    ],
+    "expected_tools": 9
+  },
+  {
+    "task_id": "T011",
+    "task_category": "Data Cleaning and Visualization",
+    "difficulty": "easy",
+    "page": "wikipedia_countries",
+    "goal_description": "Extract the population data from the Wikipedia list of countries by population, clean the population numbers to remove commas, and create a bar chart visualizing the top 10 most populous countries.",
+    "starting_url": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+    "html_context": "<table class='wikitable'><tr data-aid-id='aid-001'><th>Rank</th><th>Country</th><th>Population</th><th>Area (km²)</th><th>Density (per km²)</th><th>Growth Rate</th></tr><tr data-aid-id='aid-002'><td>1</td><td>China</td><td>1,411,750,000</td><td>9,596,961</td><td>147</td><td>+0.39%</td></tr><tr data-aid-id='aid-003'><td>2</td><td>India</td><td>1,425,775,850</td><td>3,287,263</td><td>433</td><td>+0.99%</td></tr>...<tr data-aid-id='aid-032'><td>30</td><td>Italy</td><td>60,317,116</td><td>301,340</td><td>200</td><td>-0.15%</td></tr></table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for global population data",
+      "User navigated to Wikipedia's list of countries by population"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+          "pattern": "table.wikitable tr",
+          "maxItems": 30
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "population_table",
+          "searchPattern": ",",
+          "replaceWith": "",
+          "useRegex": false,
+          "columnName": "Population"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "population_table",
+          "columnName": "Population",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "population_table",
+          "columnName": "Population",
+          "order": "desc"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "population_table",
+          "chartType": "bar",
+          "xAxis": "Country",
+          "yAxis": "Population",
+          "title": "Top 10 Most Populous Countries"
+        }
+      }
+    ],
+    "expected_tools": 5
+  },
+  {
+    "task_id": "T012",
+    "task_category": "extraction",
+    "difficulty": "easy",
+    "page": "wikipedia_countries",
+    "goal_description": "Extract the list of countries with a negative growth rate from the Wikipedia page on countries by population, clean the growth rate column to remove +/- symbols and the percentage sign, then sort by growth rate in descending order.",
+    "starting_url": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+    "html_context": "<table class='wikitable'><tr><th>Rank</th><th>Country</th><th>Population</th><th>Area (km²)</th><th>Density (per km²)</th><th>Growth Rate</th></tr><tr data-aid-id='aid-001'><td>1</td><td>China</td><td>1,411,750,000</td><td>9,596,961</td><td>147</td><td>-0.02%</td></tr><tr data-aid-id='aid-002'><td>2</td><td>India</td><td>1,425,775,850</td><td>3,287,263</td><td>434</td><td>+0.81%</td></tr>...<tr data-aid-id='aid-030'><td>30</td><td>Italy</td><td>60,317,116</td><td>301,340</td><td>200</td><td>-0.15%</td></tr></table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to Wikipedia list of countries by population page",
+      "User expressed interest in analyzing population growth trends"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "countries_table",
+          "searchPattern": "[+\\-%]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Growth Rate"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "countries_table",
+          "columnName": "Growth Rate",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "tableFilter",
+        "parameters": {
+          "instanceId": "countries_table",
+          "conditions": [
+            {
+              "column": "Growth Rate",
+              "operator": "<",
+              "value": 0
+            }
+          ],
+          "operator": "AND"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "countries_table",
+          "columnName": "Growth Rate",
+          "order": "desc"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T013",
+    "task_category": "Extraction & Wrangling",
+    "difficulty": "Medium",
+    "page": "wikipedia_countries",
+    "goal_description": "Extract the list of countries by population, clean the population and growth rate columns to remove commas, plus signs, minus signs, and percentage signs, then sort by growth rate in descending order.",
+    "starting_url": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+    "html_context": "<table class='wikitable'><tr><th>Rank</th><th>Country</th><th>Population</th><th>Area (km²)</th><th>Density (per km²)</th><th>Growth Rate</th></tr><tr data-aid-id='aid-001'><td data-aid-id='aid-002'>1</td><td data-aid-id='aid-003'>China</td><td data-aid-id='aid-004'>1,411,750,000</td><td data-aid-id='aid-005'>9,596,961</td><td data-aid-id='aid-006'>147</td><td data-aid-id='aid-007'>+0.39%</td></tr>...[29 more countries]</table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to Wikipedia list of countries by population",
+      "User expressed interest in sorting countries by growth rate"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+          "pattern": "table.wikitable tr",
+          "maxItems": 30
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "Table1",
+          "searchPattern": "[,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Population"
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "Table1",
+          "searchPattern": "[+\\-%]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Growth Rate"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "Table1",
+          "columnName": "Growth Rate",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "Table1",
+          "columnName": "Growth Rate",
+          "order": "desc"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T014",
+    "task_category": "Cleaning",
+    "difficulty": "Medium",
+    "page": "wikipedia_countries",
+    "goal_description": "Extract the list of countries by population, clean the population and growth rate columns to remove commas, plus, minus signs, and percent symbols, then visualize the cleaned data showing population growth rate for the top 10 most populous countries.",
+    "starting_url": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+    "html_context": "<table class='wikitable'><tr><th>Rank</th><th>Country</th><th>Population</th><th>Area (km²)</th><th>Density (per km²)</th><th>Growth Rate</th></tr><tr data-aid-id='aid-001'><td>1</td><td data-aid-id='aid-002'>China</td><td data-aid-id='aid-003'>1,411,750,000</td><td data-aid-id='aid-004'>9,596,961</td><td data-aid-id='aid-005'>147</td><td data-aid-id='aid-006'>-0.02%</td></tr><tr data-aid-id='aid-007'><td>2</td><td data-aid-id='aid-008'>India</td><td data-aid-id='aid-009'>1,425,775,850</td><td data-aid-id='aid-010'>3,287,263</td><td data-aid-id='aid-011'>435</td><td data-aid-id='aid-012'>+0.81%</td></tr>...[28 more countries]</table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to Wikipedia list of countries by population",
+      "User interested in analyzing population growth"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+          "pattern": "table.wikitable tr",
+          "maxItems": 30
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "ExtractedTable1",
+          "searchPattern": "[,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Population"
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "ExtractedTable1",
+          "searchPattern": "[+\\-%]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Growth Rate"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "ExtractedTable1",
+          "columnName": "Growth Rate",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "ExtractedTable1",
+          "columnName": "Population",
+          "order": "desc"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "ExtractedTable1",
+          "chartType": "bar",
+          "xAxis": "Country",
+          "yAxis": "Growth Rate",
+          "title": "Population Growth Rate for Top 10 Most Populous Countries"
+        }
+      }
+    ],
+    "expected_tools": 5
+  },
+  {
+    "task_id": "T015",
+    "task_category": "cleaning",
+    "difficulty": "medium",
+    "page": "wikipedia_countries",
+    "goal_description": "Extract and clean the list of countries by population from Wikipedia to compare growth rates and densities, removing all formatting from the numbers.",
+    "starting_url": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+    "html_context": "<table class='wikitable'><tr><th>Rank</th><th>Country</th><th>Population</th><th>Area (km²)</th><th>Density (per km²)</th><th>Growth Rate</th></tr><tr data-aid-id='aid-001'><td>1</td><td>China</td><td data-aid-id='aid-002'>1,411,750,000</td><td>9,596,961</td><td>147</td><td data-aid-id='aid-003'>+0.39%</td></tr><tr data-aid-id='aid-004'><td>2</td><td>India</td><td data-aid-id='aid-005'>1,425,775,850</td><td>3,287,263</td><td>433</td><td data-aid-id='aid-006'>+0.81%</td></tr>... </table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for list of countries by population on Wikipedia",
+      "User viewed table containing countries, populations, and growth rates"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+          "pattern": "table.wikitable tr",
+          "maxItems": 30
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "searchPattern": "[,|%|+]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Population"
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "searchPattern": "[,|%|+]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Growth Rate"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "columnName": "Population",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "columnName": "Growth Rate",
+          "targetType": "numerical"
+        }
+      }
+    ],
+    "expected_tools": 5
+  },
+  {
+    "task_id": "T016",
+    "task_category": "cleaning",
+    "difficulty": "medium",
+    "page": "wikipedia_countries",
+    "goal_description": "Extract the list of countries by population, clean the Population and Growth Rate columns to remove commas and symbols, then sort the countries by Growth Rate in descending order.",
+    "starting_url": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+    "html_context": "<table class='wikitable'><tr><th>Rank</th><th>Country</th><th>Population</th><th>Area (km²)</th><th>Density (per km²)</th><th>Growth Rate</th></tr><tr data-aid-id='aid-001'><td>1</td><td data-aid-id='aid-002'>China</td><td data-aid-id='aid-003'>1,439,323,776</td><td>9,596,961</td><td>150</td><td data-aid-id='aid-004'>+0.39%</td></tr><tr data-aid-id='aid-005'><td>2</td><td data-aid-id='aid-006'>India</td><td data-aid-id='aid-007'>1,380,004,385</td><td>3,287,263</td><td>420</td><td data-aid-id='aid-008'>+0.99%</td></tr></table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to Wikipedia list of countries by population",
+      "User expressed interest in analyzing population growth trends"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+          "pattern": "table.wikitable tr",
+          "maxItems": 30
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "searchPattern": "[,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Population"
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "searchPattern": "[+\\-%]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Growth Rate"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "columnName": "Growth Rate",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "columnName": "Growth Rate",
+          "order": "desc"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T017",
+    "task_category": "Visualization",
+    "difficulty": "Medium",
+    "page": "wikipedia_countries",
+    "goal_description": "Create a visualization comparing the population and area of the top 10 most populous countries to identify which has the highest population density.",
+    "starting_url": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+    "html_context": "<table class='wikitable'><tr><th>Rank</th><th>Country</th><th>Population</th><th>Area (km²)</th><th>Density (per km²)</th><th>Growth Rate</th></tr><tr data-aid-id='aid-001'><td>1</td><td>India</td><td>1,425,775,850</td><td>3,287,263</td><td></td><td>+0.81%</td></tr><tr data-aid-id='aid-002'><td>2</td><td>China</td><td>1,411,750,000</td><td>9,596,961</td><td></td><td>-0.02%</td></tr>...<tr data-aid-id='aid-010'><td>10</td><td>Mexico</td><td>126,014,024</td><td>1,964,375</td><td></td><td>+1.06%</td></tr></table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to Wikipedia list of countries by population",
+      "User expressed interest in comparing population density"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+          "pattern": "table.wikitable tr",
+          "maxItems": 10
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "searchPattern": "[,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Population"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "columnName": "Population",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "columnName": "Area (km²)",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_table",
+          "chartType": "scatter",
+          "xAxis": "Population",
+          "yAxis": "Area (km²)",
+          "title": "Population vs. Area of Top 10 Most Populous Countries"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T018",
+    "task_category": "visualization",
+    "difficulty": "medium",
+    "page": "wikipedia_countries",
+    "goal_description": "Create a bar chart visualizing the top 10 most populous countries, showing each country's population and growth rate after cleaning the data.",
+    "starting_url": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+    "html_context": "<table class='wikitable'><tr><th>Rank</th><th>Country</th><th>Population</th><th>Area (km²)</th><th>Density (per km²)</th><th>Growth Rate</th></tr><tr data-aid-id='aid-001'><td>1</td><td>India</td><td>1,425,775,850</td><td>3,287,263</td><td>433</td><td>+0.81%</td></tr><tr data-aid-id='aid-002'><td>2</td><td>China</td><td>1,411,750,000</td><td>9,596,961</td><td>147</td><td>-0.02%</td></tr>...</table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to Wikipedia list of countries by population page",
+      "User expressed interest in visualizing population growth"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://en.wikipedia.org/wiki/List_of_countries_by_population",
+          "pattern": "table.wikitable tr",
+          "maxItems": 10
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "searchPattern": "[,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Population"
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "searchPattern": "[+\\-%]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Growth Rate"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "columnName": "Population",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_table",
+          "columnName": "Growth Rate",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_table",
+          "chartType": "bar",
+          "xAxis": "Country",
+          "yAxis": "Population",
+          "title": "Top 10 Most Populous Countries and Their Growth Rates"
+        }
+      }
+    ],
+    "expected_tools": 6
+  },
+  {
+    "task_id": "T019",
+    "task_category": "extraction",
+    "difficulty": "easy",
+    "page": "ebay_cameras",
+    "goal_description": "Extract the titles and current bids of the first 10 used camera listings on eBay for a quick price comparison.",
+    "starting_url": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+    "html_context": "<div class='s-item-container'><div class='s-item' data-aid-id='aid-001'><h3 class='s-item__title' data-aid-id='aid-002'>Canon EOS 5D Mark IV</h3><span class='s-item__price' data-aid-id='aid-003'>$895.00</span></div><div class='s-item' data-aid-id='aid-004'><h3 class='s-item__title' data-aid-id='aid-005'>Sony A7 III</h3><span class='s-item__price' data-aid-id='aid-006'>$1,299.00</span></div>... [8 more listings]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for used cameras on eBay"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+          "pattern": ".s-item",
+          "maxItems": 10
+        }
+      }
+    ],
+    "expected_tools": 1
+  },
+  {
+    "task_id": "T020",
+    "task_category": "extraction",
+    "difficulty": "easy",
+    "page": "ebay_cameras",
+    "goal_description": "Extract the titles and current bid prices of used cameras listed on eBay to compare offerings.",
+    "starting_url": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+    "html_context": "<div class='s-item-container'><div class='s-item' data-aid-id='aid-001'><h3 class='s-item__title' data-aid-id='aid-002'>Canon EOS 5D Mark IV</h3><span class='s-item__price' data-aid-id='aid-003'>$895</span></div><div class='s-item' data-aid-id='aid-004'><h3 class='s-item__title' data-aid-id='aid-005'>Sony A7 III</h3><span class='s-item__price' data-aid-id='aid-006'>$1,299</span></div></div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for used cameras on eBay"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+          "pattern": ".s-item",
+          "maxItems": 15
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_cameras_table",
+          "columnName": "Current Bid ($XXX)",
+          "targetType": "numerical",
+          "cleaningPattern": "[\\$,]",
+          "replaceWith": ""
+        }
+      }
+    ],
+    "expected_tools": 2
+  },
+  {
+    "task_id": "T021",
+    "task_category": "cleaning",
+    "difficulty": "medium",
+    "page": "ebay_cameras",
+    "goal_description": "Prepare a cleaned and structured dataset of used camera listings from eBay for price comparison, ensuring consistent formatting for prices and conditions, and filling missing 'Buy It Now' prices with an estimated value based on similar items.",
+    "starting_url": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+    "html_context": "<div id='mainContent' data-aid-id='aid-main'><ul class='b-list__items_nofooter' data-aid-id='aid-list'><li class='s-item' data-aid-id='aid-001'><h3 class='s-item__title' data-aid-id='aid-002'>Canon EOS 5D Mark IV</h3><span class='s-item__price' data-aid-id='aid-003'>$895</span><span class='s-item__condition' data-aid-id='aid-004'>Used - Excellent</span></li><li class='s-item' data-aid-id='aid-005'><h3 class='s-item__title' data-aid-id='aid-006'>Sony A7 III</h3><span class='s-item__price' data-aid-id='aid-007'>$1,299 Buy Now</span><span class='s-item__condition' data-aid-id='aid-008'>Used - Good</span></li></ul></div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched eBay for used cameras",
+      "User noticed inconsistent price formats and missing Buy It Now options"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+          "pattern": ".s-item",
+          "maxItems": 15
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "ebay_cameras_table",
+          "searchPattern": "[$, Buy Now]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Buy It Now ($X,XXX)"
+        }
+      },
+      {
+        "function": "fillMissingValues",
+        "parameters": {
+          "instanceId": "ebay_cameras_table",
+          "columnName": "Buy It Now ($X,XXX)",
+          "strategy": "interpolate"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "ebay_cameras_table",
+          "columnName": "Current Bid ($XXX)",
+          "targetType": "numerical",
+          "cleaningPattern": "[$]",
+          "replaceWith": ""
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T022",
+    "task_category": "cleaning",
+    "difficulty": "medium",
+    "page": "ebay_cameras",
+    "goal_description": "Extract listings of used cameras from eBay, clean and standardize the price and condition columns, then join this data with Amazon camera listings for price comparison.",
+    "starting_url": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+    "html_context": "<div id='mainContent' data-aid-id='main'><div class='s-item__wrapper clearfix' data-aid-id='aid-001'><div class='s-item__title' data-aid-id='aid-002'>Canon EOS 5D Mark IV</div><div class='s-item__details clearfix' data-aid-id='aid-003'><span class='s-item__price' data-aid-id='aid-004'>$895</span><span class='s-item__condition' data-aid-id='aid-005'>Used - Excellent</span></div></div>... [14 more listings]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for used cameras on eBay",
+      "User expressed interest in comparing prices with Amazon listings"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+          "pattern": ".s-item__wrapper",
+          "maxItems": 15
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "ebay_cameras_table",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Current Bid"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "ebay_cameras_table",
+          "columnName": "Current Bid",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "mergeInstances",
+        "parameters": {
+          "sourceInstanceIds": [
+            "ebay_cameras_table",
+            "amazon_cameras_table"
+          ],
+          "mergeStrategy": "left_join",
+          "joinColumns": {
+            "leftColumn": "Title",
+            "rightColumn": "Product Name"
+          }
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T023",
+    "task_category": "cleaning",
+    "difficulty": "hard",
+    "page": "ebay_cameras",
+    "goal_description": "Extract used camera listings from eBay, clean data for price uniformity, fill missing 'Buy Now' prices based on average price, compare with Amazon listings to identify better deals, and visualize the price comparison.",
+    "starting_url": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+    "html_context": "<div class='s-item-container'><div class='s-item' data-aid-id='aid-001'><h2 data-aid-id='aid-002'>Canon EOS 5D Mark IV</h2><span class='current-bid' data-aid-id='aid-003'>$895</span><span class='buy-now' data-aid-id='aid-004'>$1,299</span><span class='condition' data-aid-id='aid-005'>Used - Excellent</span><span class='time-left' data-aid-id='aid-006'>2d 12h</span><span class='seller-rating' data-aid-id='aid-007'>98.4%</span></div>...</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for used cameras on eBay",
+      "User expressed interest in comparing prices with Amazon listings"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+          "pattern": ".s-item",
+          "maxItems": 15
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "ebay_cameras_table",
+          "columnName": "Current Bid",
+          "targetType": "numerical",
+          "cleaningPattern": "[\\$,]",
+          "replaceWith": ""
+        }
+      },
+      {
+        "function": "fillMissingValues",
+        "parameters": {
+          "instanceId": "ebay_cameras_table",
+          "columnName": "Buy Now",
+          "strategy": "mean"
+        }
+      },
+      {
+        "function": "mergeInstances",
+        "parameters": {
+          "sourceInstanceIds": [
+            "ebay_cameras_table",
+            "amazon_cameras_table"
+          ],
+          "mergeStrategy": "inner_join",
+          "joinColumns": {
+            "leftColumn": "Title",
+            "rightColumn": "Title"
+          },
+          "newInstanceName": "price_comparison"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "price_comparison",
+          "chartType": "bar",
+          "xAxis": "Title",
+          "yAxis": "Price",
+          "title": "Price Comparison between eBay and Amazon"
+        }
+      }
+    ],
+    "expected_tools": 5
+  },
+  {
+    "task_id": "T024",
+    "task_category": "cleaning",
+    "difficulty": "hard",
+    "page": "ebay_cameras",
+    "goal_description": "Extract camera listings from eBay, clean and standardize the data for price comparison, and merge it with Amazon camera listings for a comprehensive price analysis.",
+    "starting_url": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+    "html_context": "<div class='s-item-container'><div class='s-item' data-aid-id='aid-001'><h3 class='s-item__title' data-aid-id='aid-002'>Canon EOS 5D Mark IV</h3><span class='s-item__price' data-aid-id='aid-003'>$895</span><span class='s-item__condition' data-aid-id='aid-004'>Used - Excellent</span><span class='s-item__time-left' data-aid-id='aid-005'>3d 12h</span><span class='s-item__seller-rating' data-aid-id='aid-006'>99.1%</span></div>... [14 more listings]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for used cameras on eBay",
+      "User expressed intent to compare eBay and Amazon camera prices"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+          "pattern": ".s-item",
+          "maxItems": 15
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "ebay_cameras_table",
+          "columnName": "Current Bid",
+          "targetType": "numerical",
+          "cleaningPattern": "[$,]",
+          "replaceWith": ""
+        }
+      },
+      {
+        "function": "fillMissingValues",
+        "parameters": {
+          "instanceId": "ebay_cameras_table",
+          "columnName": "Buy It Now",
+          "strategy": "constant",
+          "constantValue": "Not Available"
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "ebay_cameras_table",
+          "searchPattern": "Used - ",
+          "replaceWith": "",
+          "useRegex": false,
+          "columnName": "Condition"
+        }
+      },
+      {
+        "function": "mergeInstances",
+        "parameters": {
+          "sourceInstanceIds": [
+            "ebay_cameras_table",
+            "amazon_cameras_table"
+          ],
+          "mergeStrategy": "union",
+          "newInstanceName": "Combined Camera Price Analysis"
+        }
+      }
+    ],
+    "expected_tools": 5
+  },
+  {
+    "task_id": "T025",
+    "task_category": "extraction",
+    "difficulty": "easy",
+    "page": "kaggle_datasets",
+    "goal_description": "Extract the top 5 climate datasets from Kaggle based on the number of downloads, then create a bar chart visualization showing each dataset's download count.",
+    "starting_url": "https://www.kaggle.com/datasets?search=climate",
+    "html_context": "<div class='search-results'><div class='dataset-item' data-aid-id='aid-001'><h2 data-aid-id='aid-002'>Global Temperature Dataset</h2><span data-aid-id='aid-003'>15.8 GB</span><span data-aid-id='aid-004'>45,678 downloads</span></div><div class='dataset-item' data-aid-id='aid-005'><h2 data-aid-id='aid-006'>Climate Change Indicators</h2><span data-aid-id='aid-007'>2.3 GB</span><span data-aid-id='aid-008'>23,456 downloads</span></div>... [10 more datasets] ...</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.kaggle.com/datasets?search=climate",
+          "pattern": ".dataset-item",
+          "maxItems": 5
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_datasets",
+          "chartType": "bar",
+          "xAxis": "Dataset Name",
+          "yAxis": "Downloads",
+          "title": "Top 5 Climate Datasets by Downloads"
+        }
+      }
+    ],
+    "expected_tools": 2
+  },
+  {
+    "task_id": "T026",
+    "task_category": "extraction",
+    "difficulty": "easy",
+    "page": "kaggle_datasets",
+    "goal_description": "Extract the dataset names and their corresponding download counts from the Kaggle climate dataset search results for comparison.",
+    "starting_url": "https://www.kaggle.com/datasets?search=climate",
+    "html_context": "<div class='search-results'><div class='dataset-item' data-aid-id='aid-001'><span class='dataset-name' data-aid-id='aid-002'>Global Temperature Dataset</span><span class='downloads' data-aid-id='aid-003'>45,678 downloads</span></div><div class='dataset-item' data-aid-id='aid-004'><span class='dataset-name' data-aid-id='aid-005'>Climate Change Indicators</span><span class='downloads' data-aid-id='aid-006'>23,456 downloads</span></div>... [10 more datasets]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for climate datasets on Kaggle"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.kaggle.com/datasets?search=climate",
+          "pattern": ".dataset-item",
+          "maxItems": 12
+        }
+      }
+    ],
+    "expected_tools": 1
+  },
+  {
+    "task_id": "T027",
+    "task_category": "cleaning",
+    "difficulty": "medium",
+    "page": "kaggle_datasets",
+    "goal_description": "Extract climate dataset information from Kaggle, convert dataset sizes to MB, clean up the update dates to a standard format, and finally, create a visualization showing the number of downloads by dataset size.",
+    "starting_url": "https://www.kaggle.com/datasets?search=climate",
+    "html_context": "<div class='search-results'><div class='dataset-item' data-aid-id='aid-001'><span class='dataset-name' data-aid-id='aid-002'>Global Temperature Dataset</span><span class='dataset-size' data-aid-id='aid-003'>15.8 GB</span><span class='dataset-downloads' data-aid-id='aid-004'>45,678</span><span class='dataset-update' data-aid-id='aid-005'>2 months ago</span></div><div class='dataset-item' data-aid-id='aid-006'><span class='dataset-name' data-aid-id='aid-007'>Climate Change Indicators</span><span class='dataset-size' data-aid-id='aid-008'>2.3 GB</span><span class='dataset-downloads' data-aid-id='aid-009'>23,456</span><span class='dataset-update' data-aid-id='aid-010'>1 week ago</span></div></div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for climate datasets on Kaggle"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.kaggle.com/datasets?search=climate",
+          "pattern": ".dataset-item",
+          "maxItems": 12
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_datasets",
+          "columnName": "Size",
+          "targetType": "numerical",
+          "cleaningPattern": "[A-Za-z\\s]",
+          "replaceWith": ""
+        }
+      },
+      {
+        "function": "formatColumn",
+        "parameters": {
+          "instanceId": "extracted_datasets",
+          "columnName": "Updated",
+          "formatPattern": "date:YYYY-MM-DD"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_datasets",
+          "chartType": "bar",
+          "xAxis": "Size",
+          "yAxis": "Downloads",
+          "title": "Downloads by Dataset Size"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T028",
+    "task_category": "cleaning",
+    "difficulty": "medium",
+    "page": "kaggle_datasets",
+    "goal_description": "Normalize the 'Size' column in the Kaggle climate dataset search results to MB, sort datasets by size from largest to smallest, and then create a visualization to compare the number of downloads by dataset size.",
+    "starting_url": "https://www.kaggle.com/datasets?search=climate",
+    "html_context": "<div class='search-results'><div class='dataset-item' data-aid-id='aid-001'><span class='name' data-aid-id='aid-002'>Global Temperature Dataset</span><span class='size' data-aid-id='aid-003'>15.8 GB</span><span class='downloads' data-aid-id='aid-004'>45,678</span></div><div class='dataset-item' data-aid-id='aid-005'><span class='name' data-aid-id='aid-006'>Climate Change Indicators</span><span class='size' data-aid-id='aid-007'>2.3 GB</span><span class='downloads' data-aid-id='aid-008'>23,456</span></div>... [10 more datasets]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for climate datasets on Kaggle",
+      "User expressed interest in comparing datasets by size and downloads"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.kaggle.com/datasets?search=climate",
+          "pattern": ".dataset-item",
+          "maxItems": 12
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_datasets",
+          "columnName": "Size",
+          "targetType": "numerical",
+          "cleaningPattern": "[A-Za-z\\s]",
+          "replaceWith": ""
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "extracted_datasets",
+          "columnName": "Size",
+          "order": "desc"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_datasets",
+          "chartType": "scatter",
+          "xAxis": "Size",
+          "yAxis": "Downloads",
+          "title": "Dataset Size vs Downloads"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T029",
+    "task_category": "Visualization",
+    "difficulty": "Medium",
+    "page": "kaggle_datasets",
+    "goal_description": "Identify the most downloaded climate dataset on Kaggle. Normalize the size units to MB, sort datasets based on the number of downloads, and create a bar chart visualization to compare the download numbers.",
+    "starting_url": "https://www.kaggle.com/datasets?search=climate",
+    "html_context": "<div class='search-results'><div class='dataset-item' data-aid-id='aid-001'><h2 data-aid-id='aid-002'>Global Temperature Dataset</h2><span data-aid-id='aid-003'>15.8 GB</span><span data-aid-id='aid-004'>45,678 downloads</span></div><div class='dataset-item' data-aid-id='aid-005'><h2 data-aid-id='aid-006'>Climate Change Indicators</h2><span data-aid-id='aid-007'>2.3 GB</span><span data-aid-id='aid-008'>23,456 downloads</span></div>...</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for climate datasets on Kaggle"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.kaggle.com/datasets?search=climate",
+          "pattern": ".dataset-item",
+          "maxItems": 12
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "climate_datasets",
+          "columnName": "Size",
+          "targetType": "numerical",
+          "cleaningPattern": "[A-Za-z\\s]",
+          "replaceWith": ""
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "climate_datasets",
+          "columnName": "Downloads",
+          "order": "desc"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "climate_datasets",
+          "chartType": "bar",
+          "xAxis": "Dataset Name",
+          "yAxis": "Downloads",
+          "title": "Climate Datasets by Downloads"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T030",
+    "task_category": "Visualization",
+    "difficulty": "Medium",
+    "page": "kaggle_datasets",
+    "goal_description": "Identify the top 5 most downloaded climate datasets from Kaggle, convert their sizes to a unified unit (MB), and visualize the comparison of their sizes and download counts.",
+    "starting_url": "https://www.kaggle.com/datasets?search=climate",
+    "html_context": "<div class='search-results'><div class='dataset-item' data-aid-id='aid-001'><div class='dataset-title' data-aid-id='aid-002'>Global Temperature Dataset</div><div class='dataset-size' data-aid-id='aid-003'>15.8 GB</div><div class='dataset-downloads' data-aid-id='aid-004'>45,678</div></div><div class='dataset-item' data-aid-id='aid-005'>...</div></div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for climate datasets on Kaggle",
+      "User expressed interest in comparing dataset sizes and download popularity"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.kaggle.com/datasets?search=climate",
+          "pattern": ".dataset-item",
+          "maxItems": 5
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_datasets",
+          "columnName": "Size",
+          "targetType": "numerical",
+          "cleaningPattern": "[^\\d.]",
+          "replaceWith": ""
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_datasets",
+          "columnName": "Downloads",
+          "targetType": "numerical",
+          "cleaningPattern": ",",
+          "replaceWith": ""
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_datasets",
+          "chartType": "bar",
+          "xAxis": "Dataset Name",
+          "yAxis": "Size",
+          "title": "Top 5 Climate Datasets by Size and Downloads"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T031",
+    "task_category": "extraction",
+    "difficulty": "easy",
+    "page": "github_repos",
+    "goal_description": "Extract the top 10 repositories for data analysis from GitHub, focusing on repositories with more than 10k stars. Clean the stars column to remove the 'k' suffix and convert it to a full numeric value.",
+    "starting_url": "https://github.com/search?q=data+analysis",
+    "html_context": "<div class='repo-list'><div class='repo-item' data-aid-id='aid-001'><h3 data-aid-id='aid-002'>pandas-dev/pandas</h3><span data-aid-id='aid-003'>42.3k⭐</span></div><div class='repo-item' data-aid-id='aid-004'><h3 data-aid-id='aid-005'>apache/superset</h3><span data-aid-id='aid-006'>58.9k⭐</span></div>... [8 more repositories]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for data analysis on GitHub"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://github.com/search?q=data+analysis",
+          "pattern": ".repo-item",
+          "maxItems": 10
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "github_repos_table",
+          "searchPattern": "k",
+          "replaceWith": "000",
+          "useRegex": false,
+          "columnName": "Stars"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "github_repos_table",
+          "columnName": "Stars",
+          "targetType": "numerical"
+        }
+      }
+    ],
+    "expected_tools": 3
+  },
+  {
+    "task_id": "T032",
+    "task_category": "extraction",
+    "difficulty": "easy",
+    "page": "github_repos",
+    "goal_description": "Extract the names and star counts of Python repositories related to data analysis from GitHub search results, and then sort them by star count in descending order.",
+    "starting_url": "https://github.com/search?q=data+analysis",
+    "html_context": "<div class='repo-list'><div class='repo-list-item' data-aid-id='aid-001'><h3><a href='/pandas-dev/pandas'>pandas-dev/pandas</a></h3><div data-aid-id='aid-002'><a aria-label='Stars' href='/pandas-dev/pandas/stargazers'>42.3k⭐</a></div></div><div class='repo-list-item' data-aid-id='aid-003'><h3><a href='/apache/superset'>apache/superset</a></h3><div data-aid-id='aid-004'><a aria-label='Stars' href='/apache/superset/stargazers'>58.9k⭐</a></div></div>... [8 more repositories]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for 'data analysis' on GitHub"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://github.com/search?q=data+analysis",
+          "pattern": ".repo-list-item",
+          "maxItems": 10
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_repos",
+          "searchPattern": "k",
+          "replaceWith": "000",
+          "useRegex": false,
+          "columnName": "Stars"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_repos",
+          "columnName": "Stars",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "extracted_repos",
+          "columnName": "Stars",
+          "order": "desc"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T033",
+    "task_category": "cleaning",
+    "difficulty": "medium",
+    "page": "github_repos",
+    "goal_description": "Extract the top 10 GitHub repositories for data analysis, clean the stars column to convert from 'k' format to a full number, and sort them by stars in descending order to determine the most popular repositories.",
+    "starting_url": "https://github.com/search?q=data+analysis",
+    "html_context": "<div id='repo_list'><div class='repo' data-aid-id='aid-001'><span class='name' data-aid-id='aid-002'>pandas-dev/pandas</span><span class='stars' data-aid-id='aid-003'>42.3k⭐</span><span class='forks' data-aid-id='aid-004'>17.8k</span><span class='language' data-aid-id='aid-005'>Python</span><span class='updated' data-aid-id='aid-006'>Updated 3 days ago</span></div><div class='repo' data-aid-id='aid-007'>...9 more repositories...</div></div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for 'data analysis' on GitHub",
+      "User examined the list of repositories"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://github.com/search?q=data+analysis",
+          "pattern": ".repo",
+          "maxItems": 10
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "ExtractedRepoList",
+          "searchPattern": "k⭐",
+          "replaceWith": "00",
+          "useRegex": false,
+          "columnName": "Stars"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "ExtractedRepoList",
+          "columnName": "Stars",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "ExtractedRepoList",
+          "columnName": "Stars",
+          "order": "desc"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T034",
+    "task_category": "cleaning",
+    "difficulty": "medium",
+    "page": "github_repos",
+    "goal_description": "Identify and clean the data of the top 10 GitHub repositories for data analysis by star rating, converting 'k' in star counts to actual numbers, sorting them by stars in descending order, and visualizing the relationship between stars and forks.",
+    "starting_url": "https://github.com/search?q=data+analysis",
+    "html_context": "<div class='repo-list'><div class='repo-item' data-aid-id='aid-001'><h3 data-aid-id='aid-002'>pandas-dev/pandas</h3><span data-aid-id='aid-003'>42.3k⭐</span><span data-aid-id='aid-004'>17.8k forks</span><span data-aid-id='aid-005'>Python</span><p data-aid-id='aid-006'>Flexible and powerful data analysis / manipulation library for Python</p><span data-aid-id='aid-007'>Updated 3 days ago</span></div>... [9 more repos]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for data analysis repositories on GitHub",
+      "User scrolled through the repository list"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://github.com/search?q=data+analysis",
+          "pattern": ".repo-item",
+          "maxItems": 10
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "repo_table",
+          "searchPattern": "k",
+          "replaceWith": "000",
+          "useRegex": false,
+          "columnName": "Stars"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "repo_table",
+          "columnName": "Stars",
+          "targetType": "numerical",
+          "cleaningPattern": "[^\\d]",
+          "replaceWith": ""
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "repo_table",
+          "columnName": "Stars",
+          "order": "desc"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "repo_table",
+          "chartType": "scatter",
+          "xAxis": "Stars",
+          "yAxis": "Forks",
+          "title": "Star vs Forks comparison of top data analysis repos"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T035",
+    "task_category": "composite",
+    "difficulty": "hard",
+    "page": "github_repos",
+    "goal_description": "Identify the top 5 most starred Data Analysis repositories on GitHub, convert their stars from the 'k' format to numerical, sort them by stars in descending order, and create a visualization of stars vs. repository name.",
+    "starting_url": "https://github.com/search?q=data+analysis",
+    "html_context": "<div class='repo-list'><div class='repo-item' data-aid-id='aid-001'><h3><a data-aid-id='aid-002'>pandas-dev/pandas</a></h3><div class='stars' data-aid-id='aid-003'>42.3k⭐</div></div><div class='repo-item' data-aid-id='aid-004'><h3><a data-aid-id='aid-005'>apache/superset</a></h3><div class='stars' data-aid-id='aid-006'>58.9k⭐</div></div>...[8 more repositories]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User queried GitHub for data analysis repositories",
+      "User viewed the list of repositories"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://github.com/search?q=data+analysis",
+          "pattern": ".repo-item",
+          "maxItems": 10
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "ExtractedRepos",
+          "searchPattern": "k",
+          "replaceWith": "000",
+          "useRegex": false,
+          "columnName": "Stars"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "ExtractedRepos",
+          "columnName": "Stars",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "ExtractedRepos",
+          "columnName": "Stars",
+          "order": "desc"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "ExtractedRepos",
+          "chartType": "bar",
+          "xAxis": "Repo Name",
+          "yAxis": "Stars",
+          "title": "Top 5 Most Starred Data Analysis Repositories on GitHub"
+        }
+      }
+    ],
+    "expected_tools": 5
+  },
+  {
+    "task_id": "T036",
+    "task_category": "composite",
+    "difficulty": "hard",
+    "page": "github_repos",
+    "goal_description": "Identify and analyze the top 5 most starred Python repositories for data analysis on GitHub, including cleaning the stars count, converting it to a numerical format for proper comparison, and visualizing the comparison of stars and forks to assist in deciding which repository might provide the most valuable insights or frameworks for a data analysis project.",
+    "starting_url": "https://github.com/search?q=data+analysis",
+    "html_context": "<div class='repo-list'><div class='repo-item' data-aid-id='aid-001'><h3><a href='/pandas-dev/pandas'>pandas-dev/pandas</a></h3><div data-aid-id='aid-002'>42.3k⭐</div><div data-aid-id='aid-003'>17.8k forks</div><div data-aid-id='aid-004'>Python</div></div><div class='repo-item' data-aid-id='aid-005'><h3><a href='/apache/superset'>apache/superset</a></h3><div data-aid-id='aid-006'>58.9k⭐</div><div data-aid-id='aid-007'>12.3k forks</div><div data-aid-id='aid-008'>TypeScript, Python</div></div>...[more items]...</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for data analysis repositories on GitHub",
+      "User expressed interest in Python projects"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://github.com/search?q=data+analysis",
+          "pattern": ".repo-item",
+          "maxItems": 50
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_repos",
+          "searchPattern": "k",
+          "replaceWith": "000",
+          "useRegex": false,
+          "columnName": "Stars"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_repos",
+          "columnName": "Stars",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "tableFilter",
+        "parameters": {
+          "instanceId": "extracted_repos",
+          "conditions": [
+            {
+              "column": "Language",
+              "operator": "equals",
+              "value": "Python"
+            }
+          ],
+          "operator": "AND"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "filtered_repos",
+          "columnName": "Stars",
+          "order": "desc"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "filtered_repos",
+          "chartType": "bar",
+          "xAxis": "Repo Name",
+          "yAxis": "Stars",
+          "title": "Top 5 Python Repositories by Stars on GitHub"
+        }
+      }
+    ],
+    "expected_tools": 6
+  },
+  {
+    "task_id": "T037",
+    "task_category": "extraction",
+    "difficulty": "easy",
+    "page": "imdb_movies",
+    "goal_description": "Extract the top 5 movies from the IMDb top 30 list, including their Rank, Title, and Rating, and visualize this data in a bar chart showing the ratings.",
+    "starting_url": "https://www.imdb.com/chart/top",
+    "html_context": "<table class='chart full-width' data-aid-id='aid-001'><tr data-aid-id='aid-002'><td class='titleColumn'>1. <a href='/title/tt0111161/'>The Shawshank Redemption</a> (1994)</td><td class='ratingColumn imdbRating'><strong title='9.3 based on 2,876,543 user ratings'>9.3</strong></td></tr><tr data-aid-id='aid-003'><td class='titleColumn'>2. <a href='/title/tt0068646/'>The Godfather</a> (1972)</td><td class='ratingColumn imdbRating'><strong title='9.2 based on 2,045,678 user ratings'>9.2</strong></td></tr>... [25 more movies]</table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User visited IMDb top 30 movies page"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.imdb.com/chart/top",
+          "pattern": "tr",
+          "maxItems": 5
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_movies",
+          "chartType": "bar",
+          "xAxis": "Title",
+          "yAxis": "Rating",
+          "title": "Top 5 IMDb Movies by Rating"
+        }
+      }
+    ],
+    "expected_tools": 2
+  },
+  {
+    "task_id": "T038",
+    "task_category": "extraction",
+    "difficulty": "easy",
+    "page": "imdb_movies",
+    "goal_description": "Extract the top 5 movies by rating from the IMDb chart, including their rank, title, year, and rating, then visualize this data in a bar chart showing each movie's rating.",
+    "starting_url": "https://www.imdb.com/chart/top",
+    "html_context": "<table class='chart full-width' data-caller-name='chart-top250movie'><tbody><tr data-aid-id='aid-001'><td class='titleColumn'>1. <a href='/title/tt0111161/'>The Shawshank Redemption</a> <span class='secondaryInfo'>(1994)</span></td><td class='ratingColumn imdbRating'><strong title='9.3 based on 2,876,543 votes'>9.3</strong></td></tr><tr data-aid-id='aid-002'><td class='titleColumn'>2. <a href='/title/tt0068646/'>The Godfather</a> <span class='secondaryInfo'>(1972)</span></td><td class='ratingColumn imdbRating'><strong title='9.2 based on 2,045,678 votes'>9.2</strong></td></tr><tr data-aid-id='aid-003'>...</tr></tbody></table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to IMDb Top 250 page"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.imdb.com/chart/top",
+          "pattern": "tr",
+          "maxItems": 5
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_movies",
+          "chartType": "bar",
+          "xAxis": "Title",
+          "yAxis": "Rating",
+          "title": "Top 5 IMDb Movies by Rating"
+        }
+      }
+    ],
+    "expected_tools": 2
+  },
+  {
+    "task_id": "T039",
+    "task_category": "Data Analysis",
+    "difficulty": "medium",
+    "page": "imdb_movies",
+    "goal_description": "Identify the top 5 rated movies from the 1990s on IMDb, extract their titles, years, and ratings, then create a visualization showing their ratings.",
+    "starting_url": "https://www.imdb.com/chart/top",
+    "html_context": "<table class='chart full-width' data-aid-id='aid-001'><tr data-aid-id='aid-002'><td class='titleColumn'>1. <a href='/title/tt0111161/'>The Shawshank Redemption</a> (1994)</td><td class='ratingColumn imdbRating'><strong>9.3</strong></td></tr><tr data-aid-id='aid-003'><td class='titleColumn'>2. <a href='/title/tt0068646/'>The Godfather</a> (1972)</td><td class='ratingColumn imdbRating'><strong>9.2</strong></td></tr>...[28 more movies]</table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.imdb.com/chart/top",
+          "pattern": "table.chart.full-width tr",
+          "maxItems": 30
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "imdb_table",
+          "columnName": "Year",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "tableFilter",
+        "parameters": {
+          "instanceId": "imdb_table",
+          "conditions": [
+            {
+              "column": "Year",
+              "operator": ">=",
+              "value": 1990
+            },
+            {
+              "column": "Year",
+              "operator": "<=",
+              "value": 1999
+            }
+          ],
+          "operator": "AND"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "imdb_table",
+          "columnName": "Rating",
+          "order": "desc"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "imdb_table",
+          "chartType": "bar",
+          "xAxis": "Title",
+          "yAxis": "Rating",
+          "title": "Top 5 Rated Movies of the 1990s"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T040",
+    "task_category": "Extraction & Analysis",
+    "difficulty": "medium",
+    "page": "imdb_movies",
+    "goal_description": "Extract the top 30 movies from IMDb, split genres into separate columns, then create a visualization showing the average rating per genre.",
+    "starting_url": "https://www.imdb.com/chart/top",
+    "html_context": "<table class='chart full-width' data-aid-id='aid-100'><tr data-aid-id='aid-101'><td class='titleColumn'><a href='/title/tt0111161/'>The Shawshank Redemption</a> (1994)</td><td class='ratingColumn imdbRating'><strong title='9.3 based on 2,876,543 user ratings'>9.3</strong></td><td class='genreColumn' data-aid-id='aid-102'>Drama</td></tr><tr data-aid-id='aid-103'><td class='titleColumn'><a href='/title/tt0068646/'>The Godfather</a> (1972)</td><td class='ratingColumn imdbRating'><strong title='9.2 based on 2,045,678 user ratings'>9.2</strong></td><td class='genreColumn' data-aid-id='aid-104'>Drama, Crime</td></tr>...<tr data-aid-id='aid-129'><td class='titleColumn'><a href='/title/tt0102926/'>The Silence of the Lambs</a> (1991)</td><td class='ratingColumn imdbRating'><strong title='8.6 based on 1,256,743 user ratings'>8.6</strong></td><td class='genreColumn' data-aid-id='aid-130'>Crime, Drama, Thriller</td></tr></table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to IMDb top movies page",
+      "User browsed through the top 30 movies list"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.imdb.com/chart/top",
+          "pattern": "tr",
+          "maxItems": 30
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_movies",
+          "searchPattern": ",",
+          "replaceWith": "|",
+          "useRegex": false,
+          "columnName": "Genre"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "extracted_movies",
+          "columnName": "Rating",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_movies",
+          "chartType": "bar",
+          "xAxis": "Genre",
+          "yAxis": "Rating",
+          "title": "Average Rating per Genre"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T041",
+    "task_category": "cleaning",
+    "difficulty": "medium",
+    "page": "imdb_movies",
+    "goal_description": "Extract the top 30 movies from IMDb, clean the Votes column by removing commas, split the Genre column into separate rows for each genre, and create a visualization of the average rating per genre.",
+    "starting_url": "https://www.imdb.com/chart/top",
+    "html_context": "<table><tr data-aid-id='aid-001'><td>1</td><td>The Shawshank Redemption</td><td>1994</td><td>9.3</td><td>2,876,543 votes</td><td>Frank Darabont</td><td>Drama, Crime</td></tr><tr data-aid-id='aid-002'><td>2</td><td>The Godfather</td><td>1972</td><td>9.2</td><td>2,045,678 votes</td><td>Francis Ford Coppola</td><td>Crime, Drama</td></tr>...<tr data-aid-id='aid-030'><td>30</td><td>Fight Club</td><td>1999</td><td>8.8</td><td>1,878,645 votes</td><td>David Fincher</td><td>Drama</td></tr></table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to IMDb Top 30 movies page",
+      "User expressed interest in analyzing movie genres and ratings"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.imdb.com/chart/top",
+          "pattern": "tr",
+          "maxItems": 30
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "movies_table",
+          "searchPattern": ",",
+          "replaceWith": "",
+          "useRegex": false,
+          "columnName": "Votes"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "movies_table",
+          "columnName": "Votes",
+          "targetType": "numerical",
+          "cleaningPattern": "",
+          "replaceWith": ""
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "movies_table",
+          "searchPattern": " votes",
+          "replaceWith": "",
+          "useRegex": false,
+          "columnName": "Votes"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "movies_table",
+          "chartType": "bar",
+          "xAxis": "Genre",
+          "yAxis": "Rating",
+          "title": "Average Rating by Genre"
+        }
+      }
+    ],
+    "expected_tools": 5
+  },
+  {
+    "task_id": "T042",
+    "task_category": "cleaning",
+    "difficulty": "medium",
+    "page": "imdb_movies",
+    "goal_description": "Extract IMDb top 30 movies information, clean the Votes column to remove commas, split the Genre column into separate genre columns, and finally sort the movies by Rating in descending order.",
+    "starting_url": "https://www.imdb.com/chart/top",
+    "html_context": "<table class='chart full-width' data-aid-id='aid-001'><tr data-aid-id='aid-002'><td class='titleColumn'>1. <a href='/title/tt0111161/'>The Shawshank Redemption</a> <span class='secondaryInfo'>(1994)</span></td><td class='ratingColumn imdbRating'><strong title='9.3 based on 2,876,543 user ratings'>9.3</strong></td><td class='ratingColumn'><div data-aid-id='aid-003'>2,876,543</div></td><td data-aid-id='aid-004'>Frank Darabont</td><td data-aid-id='aid-005'>Drama, Crime</td></tr>...[29 more movies]</table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to IMDb Top 30 movies page",
+      "User started data extraction task"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.imdb.com/chart/top",
+          "pattern": "tr",
+          "maxItems": 30
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "imdb_movies_table",
+          "searchPattern": ",",
+          "replaceWith": "",
+          "useRegex": false,
+          "columnName": "Votes"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "imdb_movies_table",
+          "columnName": "Votes",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "imdb_movies_table",
+          "columnName": "Rating",
+          "order": "desc"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T043",
+    "task_category": "visualization",
+    "difficulty": "medium",
+    "page": "imdb_movies",
+    "goal_description": "Identify the top 5 genres with the highest average ratings from the top 30 IMDb movies, create a bar chart visualization of these genres with their average ratings.",
+    "starting_url": "https://www.imdb.com/chart/top",
+    "html_context": "<div class='chart full-width' data-aid-id='aid-001'><table class='chart full-width'><tbody><tr data-aid-id='aid-002'><td class='titleColumn'>1. <a href='/title/tt0111161/'>The Shawshank Redemption</a><span class='secondaryInfo'>(1994)</span></td><td class='ratingColumn'><strong title='9.3 based on 2,876,543 user ratings'>9.3</strong></td><td class='ratingColumn'><span name='nv' data-value='2876543'>2,876,543</span></td><td class='genreColumn' data-aid-id='aid-003'>Drama</td></tr>...[29 more movies]</tbody></table></div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to IMDb top 30 movies page",
+      "User expressed interest in analyzing movie genres by rating"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.imdb.com/chart/top",
+          "pattern": "tr",
+          "maxItems": 30
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "extracted_movies",
+          "searchPattern": ",",
+          "replaceWith": "|",
+          "useRegex": false,
+          "columnName": "Genre"
+        }
+      },
+      {
+        "function": "addComputedColumn",
+        "parameters": {
+          "instanceId": "extracted_movies",
+          "formula": "split('|')",
+          "newColumnName": "Split Genres"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "extracted_movies",
+          "chartType": "bar",
+          "xAxis": "Split Genres",
+          "yAxis": "Rating",
+          "title": "Top 5 Genres by Average Rating"
+        }
+      }
+    ],
+    "expected_tools": 4
+  },
+  {
+    "task_id": "T044",
+    "task_category": "Visualization",
+    "difficulty": "Medium",
+    "page": "imdb_movies",
+    "goal_description": "Identify the genre distribution among the top 30 IMDb movies, split genres for movies with multiple listings, and visualize the count of movies per genre.",
+    "starting_url": "https://www.imdb.com/chart/top",
+    "html_context": "<table class='chart full-width' data-aid-id='aid-001'><tr data-aid-id='aid-002'><td class='titleColumn'>1. <a href='/title/tt0111161/'>The Shawshank Redemption</a> (1994)</td><td class='ratingColumn'>9.3</td><td class='secondaryInfo'>(2,876,543 votes)</td><td>Frank Darabont</td><td> Drama, Crime</td></tr><tr data-aid-id='aid-003'><td class='titleColumn'>2. <a href='/title/tt0068646/'>The Godfather</a> (1972)</td><td class='ratingColumn'>9.2</td><td class='secondaryInfo'>(2,045,678 votes)</td><td>Francis Ford Coppola</td><td> Drama, Crime</td></tr> ... </table>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to IMDb top movies page",
+      "User expressed interest in analyzing movie genres"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.imdb.com/chart/top",
+          "pattern": "tr",
+          "maxItems": 30
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "movies_table",
+          "searchPattern": ", ",
+          "replaceWith": "\\n",
+          "useRegex": false,
+          "columnName": "Genre"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "movies_table",
+          "chartType": "bar",
+          "xAxis": "Genre",
+          "title": "Genre Distribution Among Top 30 IMDb Movies"
+        }
+      }
+    ],
+    "expected_tools": 3
+  },
+  {
+    "task_id": "T045",
+    "task_category": "cross-page",
+    "difficulty": "hard",
+    "page": "amazon_cameras+ebay_cameras",
+    "goal_description": "Identify the best priced camera available across Amazon and eBay for a specific brand, ensuring it meets a minimum rating and condition, then organize this data into a table for comparison.",
+    "starting_url": "https://www.amazon.com/s?k=cameras",
+    "html_context": "<div class='s-result-list'><div class='s-result-item' data-aid-id='aid-001'><h2 data-aid-id='aid-002'>Canon EOS R50 Mirrorless Camera</h2><span class='a-price' data-aid-id='aid-003'><span class='a-offscreen'>$679.00</span></span><div class='a-row a-size-small' data-aid-id='aid-004'><span class='a-icon-star' data-aid-id='aid-005'>4.6 out of 5 stars</span></div><span class='a-declarative' data-aid-id='aid-006'><a aria-label='Amazon Prime' data-aid-id='aid-007'></a></span></div>... [19 more products]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for Canon cameras on Amazon",
+      "User opened eBay in a new tab and searched for used Canon cameras"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=canon+cameras",
+          "pattern": ".s-result-item",
+          "maxItems": 20
+        }
+      },
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=used+canon+cameras",
+          "pattern": ".s-item",
+          "maxItems": 15
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "Table1",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Price"
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "Table2",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Current Bid"
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "Table2",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Buy It Now"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "Table1",
+          "columnName": "Price",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "Table2",
+          "columnName": "Current Bid",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "Table2",
+          "columnName": "Buy It Now",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "mergeInstances",
+        "parameters": {
+          "sourceInstanceIds": [
+            "Table1",
+            "Table2"
+          ],
+          "mergeStrategy": "inner_join",
+          "joinColumns": {
+            "leftColumn": "Product Name",
+            "rightColumn": "Title"
+          },
+          "newInstanceName": "Canon Cameras Comparison"
+        }
+      }
+    ],
+    "expected_tools": 9
+  },
+  {
+    "task_id": "T046",
+    "task_category": "cross-page",
+    "difficulty": "hard",
+    "goal_description": "Compare camera products from Amazon and eBay based on Price, Rating, and Availability to identify the best deals for purchase. Prepare a report summarizing the comparison.",
+    "starting_url": "https://www.amazon.com/s?k=camera",
+    "html_context": "<div class='s-result-list'><div class='s-result-item' data-asin='B09WPVBSHP' data-aid-id='aid-001'><h2 data-aid-id='aid-002'>Canon EOS R50 Mirrorless Camera</h2><span class='a-price' data-aid-id='aid-003'><span class='a-offscreen'>$679.00</span></span><div class='a-row' data-aid-id='aid-004'><span class='a-icon-star' data-aid-id='aid-005'>4.6 out of 5 stars</span><span data-aid-id='aid-006'>1200 Reviews</span></div><img src='https://example.com/image.jpg' data-aid-id='aid-007'/><a href='#' data-aid-id='aid-008'>See Prime badge</a></div>...</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for cameras on Amazon",
+      "User opened eBay in a new tab and searched for used cameras"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "openPage",
+        "parameters": {
+          "url": "https://www.amazon.com/s?k=camera",
+          "description": "Amazon search results for new cameras",
+          "openInBackground": false
+        }
+      },
+      {
+        "function": "openPage",
+        "parameters": {
+          "url": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+          "description": "eBay search results for used cameras",
+          "openInBackground": true
+        }
+      },
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=camera",
+          "pattern": ".s-result-item",
+          "maxItems": 20
+        }
+      },
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+          "pattern": ".s-item",
+          "maxItems": 15
+        }
+      },
+      {
+        "function": "mergeInstances",
+        "parameters": {
+          "sourceInstanceIds": [
+            "Amazon_Products",
+            "Ebay_Products"
+          ],
+          "mergeStrategy": "inner_join",
+          "joinColumns": {
+            "leftColumn": "Product Name",
+            "rightColumn": "Title"
+          },
+          "newInstanceName": "Camera_Comparison"
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "Camera_Comparison",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Price"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "Camera_Comparison",
+          "columnName": "Price",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "Camera_Comparison",
+          "chartType": "bar",
+          "xAxis": "Product Name",
+          "yAxis": "Price",
+          "title": "Price Comparison between Amazon and eBay Cameras"
+        }
+      }
+    ],
+    "expected_tools": 8
+  },
+  {
+    "task_id": "T047",
+    "task_category": "Cross-Page",
+    "difficulty": "Hard",
+    "goal_description": "Identify and compare camera products available on Amazon and eBay to find the best deals under $500, considering both price and rating. Extract relevant data, clean and normalize it, then create a combined, sorted list highlighting the top 10 deals.",
+    "starting_url": "https://www.amazon.com/s?k=camera",
+    "html_context": "<div class='s-result-list'><div class='s-result-item' data-asin='B09WPVBSHP' data-aid-id='aid-001'><h2 data-aid-id='aid-002'>Canon EOS R50 Mirrorless Camera</h2><span class='a-price' data-aid-id='aid-003'><span class='a-offscreen'>$679.00</span></span><div class='a-row a-size-small' data-aid-id='aid-004'><span class='a-declarative' data-aid-id='aid-005'><a class='a-popover-trigger a-declarative' href='#'><i class='a-icon a-icon-star a-star-4-5' data-aid-id='aid-006'></i><span class='a-icon-alt' data-aid-id='aid-007'>4.6 out of 5 stars</span></a></span><span class='a-size-small a-color-secondary' data-aid-id='aid-008'>1,234 reviews</span></div></div>... [19 more products]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User navigated to Amazon camera search page",
+      "User expressed interest in comparing camera prices and ratings under $500"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "openPage",
+        "parameters": {
+          "url": "https://www.amazon.com/s?k=camera",
+          "description": "Amazon camera search results",
+          "openInBackground": false
+        }
+      },
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=camera",
+          "pattern": ".s-result-item",
+          "maxItems": 20
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "Table1",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Price"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "Table1",
+          "columnName": "Price",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "openPage",
+        "parameters": {
+          "url": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+          "description": "eBay used camera listings",
+          "openInBackground": false
+        }
+      },
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+          "pattern": ".s-item",
+          "maxItems": 15
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "Table2",
+          "searchPattern": "[$,]",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Price"
+        }
+      },
+      {
+        "function": "convertColumnType",
+        "parameters": {
+          "instanceId": "Table2",
+          "columnName": "Price",
+          "targetType": "numerical"
+        }
+      },
+      {
+        "function": "mergeInstances",
+        "parameters": {
+          "sourceInstanceIds": [
+            "Table1",
+            "Table2"
+          ],
+          "mergeStrategy": "union",
+          "newInstanceName": "Combined Camera Deals"
+        }
+      },
+      {
+        "function": "tableFilter",
+        "parameters": {
+          "instanceId": "Combined Camera Deals",
+          "conditions": [
+            {
+              "column": "Price",
+              "operator": "<=",
+              "value": 500
+            }
+          ],
+          "operator": "AND"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "Combined Camera Deals",
+          "columnName": "Price",
+          "order": "asc"
+        }
+      }
+    ],
+    "expected_tools": 11
+  },
+  {
+    "task_id": "T048",
+    "task_category": "Data Integration and Analysis",
+    "difficulty": "hard",
+    "goal_description": "Compare average camera prices and ratings from eBay and Amazon to identify which platform offers better value for money for a given camera model.",
+    "starting_url": "https://ebay.com/search",
+    "html_context": "<div class='search-results'><div class='product-item' data-aid-id='aid-101'><h2 data-aid-id='aid-102'>Nikon D3500 DSLR Camera</h2><div class='price' data-aid-id='aid-103'>$449.99</div><div class='rating' data-aid-id='aid-104'>4.5</div></div><div class='product-item' data-aid-id='aid-105'><h2 data-aid-id='aid-106'>Canon EOS Rebel T7 DSLR Camera</h2><div class='price' data-aid-id='aid-107'>$399.99</div><div class='rating' data-aid-id='aid-108'>4.7</div></div></div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User initiated comparison between eBay and Amazon camera prices and ratings",
+      "User opened eBay search page"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "openPage",
+        "parameters": {
+          "url": "https://amazon.com/s?k=dslr+camera",
+          "description": "Open Amazon to compare prices and ratings for DSLR cameras",
+          "openInBackground": true
+        }
+      },
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://ebay.com/search",
+          "pattern": ".product-item",
+          "maxItems": 50
+        }
+      },
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://amazon.com/s?k=dslr+camera",
+          "pattern": ".s-result-item",
+          "maxItems": 50
+        }
+      },
+      {
+        "function": "mergeInstances",
+        "parameters": {
+          "sourceInstanceIds": [
+            "ebay_cameras",
+            "amazon_cameras"
+          ],
+          "mergeStrategy": "inner_join",
+          "joinColumns": {
+            "leftColumn": "Model",
+            "rightColumn": "Model"
+          },
+          "newInstanceName": "Camera Price Comparison"
+        }
+      },
+      {
+        "function": "addComputedColumn",
+        "parameters": {
+          "instanceId": "Camera Price Comparison",
+          "formula": "(AmazonPrice + EbayPrice) / 2",
+          "newColumnName": "Average Price"
+        }
+      },
+      {
+        "function": "addComputedColumn",
+        "parameters": {
+          "instanceId": "Camera Price Comparison",
+          "formula": "(AmazonRating + EbayRating) / 2",
+          "newColumnName": "Average Rating"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "Camera Price Comparison",
+          "columnName": "Average Price",
+          "order": "asc"
+        }
+      }
+    ],
+    "expected_tools": 7
+  },
+  {
+    "task_id": "T049",
+    "task_category": "cross-page",
+    "difficulty": "hard",
+    "goal_description": "Compare camera prices and ratings from eBay and Amazon, identify the top 10 cheapest cameras that have a rating of 4 stars or above, and visualize this data in a scatter plot with price as the X-axis and rating as the Y-axis.",
+    "starting_url": "https://www.ebay.com/sch/i.html?_nkw=camera",
+    "html_context": "<div class='s-item-container'><div class='s-item' data-aid-id='aid-001'><h3 data-aid-id='aid-002'>Nikon D3500 DSLR Camera</h3><span class='s-item__price' data-aid-id='aid-003'>$449.99</span><div class='x-star-rating' data-aid-id='aid-004'>4.5 out of 5 stars</div></div>... [20 more products]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User searched for cameras on eBay",
+      "User browsed camera listings on Amazon"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "openPage",
+        "parameters": {
+          "url": "https://www.amazon.com/s?k=camera",
+          "description": "Amazon search results for cameras",
+          "openInBackground": true
+        }
+      },
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=camera",
+          "pattern": ".s-item",
+          "maxItems": 50
+        }
+      },
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=camera",
+          "pattern": ".s-result-item",
+          "maxItems": 50
+        }
+      },
+      {
+        "function": "mergeInstances",
+        "parameters": {
+          "sourceInstanceIds": [
+            "ebay_cameras",
+            "amazon_cameras"
+          ],
+          "mergeStrategy": "append",
+          "newInstanceName": "Combined Camera Listings"
+        }
+      },
+      {
+        "function": "tableFilter",
+        "parameters": {
+          "instanceId": "Combined Camera Listings",
+          "conditions": [
+            {
+              "column": "Rating",
+              "operator": ">=",
+              "value": 4
+            }
+          ],
+          "operator": "AND"
+        }
+      },
+      {
+        "function": "tableSort",
+        "parameters": {
+          "instanceId": "Combined Camera Listings",
+          "columnName": "Price",
+          "order": "asc"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "Combined Camera Listings",
+          "chartType": "scatter",
+          "xAxis": "Price",
+          "yAxis": "Rating",
+          "title": "Top 10 Cheapest Cameras with 4+ Stars Rating"
+        }
+      }
+    ]
+  },
+  {
+    "task_id": "T050",
+    "task_category": "Data Comparison & Analysis",
+    "difficulty": "hard",
+    "goal_description": "Compare average camera prices and rating scores between eBay and Amazon listings to determine which platform offers better value for money on camera purchases.",
+    "starting_url": "https://www.ebay.com/sch/i.html?_nkw=camera",
+    "html_context": "<div class='s-item-container'><div class='s-item' data-aid-id='aid-001'><h3 data-aid-id='aid-002'>Nikon D3500 DSLR Camera</h3><span class='s-item__price' data-aid-id='aid-003'>$459.99</span><div class='x-star-rating' data-aid-id='aid-004'><span data-aid-id='aid-005'>4.5 out of 5 stars</span></div></div>... [more items]</div>",
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User opened eBay search result page for cameras",
+      "User expressed interest in comparing prices and ratings with Amazon"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "selectElements",
+        "parameters": {
+          "selector": ".s-item",
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=camera"
+        }
+      },
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=camera",
+          "pattern": ".s-item",
+          "maxItems": 50
+        }
+      },
+      {
+        "function": "inferSchema",
+        "parameters": {
+          "pageUrl": "https://www.ebay.com/sch/i.html?_nkw=camera",
+          "targetElement": ".s-item-container"
+        }
+      },
+      {
+        "function": "selectElements",
+        "parameters": {
+          "selector": ".s-result-item",
+          "pageUrl": "https://www.amazon.com/s?k=camera"
+        }
+      },
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=camera",
+          "pattern": ".s-result-item",
+          "maxItems": 50
+        }
+      },
+      {
+        "function": "mergeInstances",
+        "parameters": {
+          "sourceInstanceIds": [
+            "ebay_cameras",
+            "amazon_cameras"
+          ],
+          "mergeStrategy": "union",
+          "newInstanceName": "Camera Price and Rating Comparison"
+        }
+      },
+      {
+        "function": "createVisualization",
+        "parameters": {
+          "sourceInstanceId": "Camera Price and Rating Comparison",
+          "chartType": "scatter",
+          "xAxis": "Price",
+          "yAxis": "Rating",
+          "title": "Camera Price vs Rating on eBay vs Amazon"
+        }
+      }
+    ],
+    "expected_complexity": 7,
+    "requires_html_analysis": true,
+    "requires_instance_analysis": true,
+    "notes": "This task evaluates the AI system's ability to extract, compare, and analyze data from multiple web pages, and visualize the comparison for decision-making."
+  }
+]

@@ -24,11 +24,13 @@ export interface MacroToolParameter {
 
 /**
  * Available macro tools for suggestion application
+ * Aligned with Table 3 in the paper
  */
 export const MACRO_TOOLS: MacroTool[] = [
+  // === DISCOVERY ===
   {
     name: "openPage",
-    description: "Opens a webpage in a new browser tab. Use this for suggesting useful websites, documentation, or resources related to the user's current work.",
+    description: "Opens a webpage in a new browser tab for suggesting useful data sources related to the user's current work.",
     parameters: [
       {
         name: "url",
@@ -60,9 +62,153 @@ export const MACRO_TOOLS: MacroTool[] = [
       "Avoid opening multiple tabs to the same domain simultaneously"
     ]
   },
+  
+  // === DATA EXTRACTION & WRANGLING ===
+  {
+    name: "selectElements",
+    description: "Automatically identifies and selects relevant DOM elements on webpages for data extraction.",
+    parameters: [
+      {
+        name: "selector",
+        type: "string",
+        description: "CSS selector or pattern to identify elements",
+        required: true
+      },
+      {
+        name: "pageUrl",
+        type: "string",
+        description: "URL of the page to select elements from",
+        required: true
+      }
+    ],
+    examples: [
+      'selectElements(".product-card", "https://amazon.com/s?k=camera")',
+      'selectElements("[data-testid=\'product-item\']", "https://ebay.com/search")'
+    ],
+    constraints: [
+      "Page must be currently loaded or accessible",
+      "Selector should match multiple similar elements"
+    ]
+  },
+  {
+    name: "inferSchema",
+    description: "Analyzes webpage structure and infers data schema for structured extraction from tables and lists.",
+    parameters: [
+      {
+        name: "pageUrl",
+        type: "string",
+        description: "URL of the page to analyze",
+        required: true
+      },
+      {
+        name: "targetElement",
+        type: "string",
+        description: "Selector for the target table or list element",
+        required: true
+      }
+    ],
+    examples: [
+      'inferSchema("https://wikipedia.org/wiki/List_of_countries", "table.wikitable")',
+      'inferSchema("https://amazon.com/s?k=laptop", ".s-result-list")'
+    ],
+    constraints: [
+      "Target element should contain structured data",
+      "Schema inference works best with tables and consistent lists"
+    ]
+  },
+  {
+    name: "extractBatch",
+    description: "Extracts multiple similar data entries from web pages in batch operations using pattern recognition.",
+    parameters: [
+      {
+        name: "pageUrl",
+        type: "string",
+        description: "URL of the page to extract from",
+        required: true
+      },
+      {
+        name: "pattern",
+        type: "string",
+        description: "Pattern or selector to identify similar items",
+        required: true
+      },
+      {
+        name: "maxItems",
+        type: "number",
+        description: "Maximum number of items to extract",
+        required: false,
+        defaultValue: 50
+      }
+    ],
+    examples: [
+      'extractBatch("https://amazon.com/s?k=camera", ".s-result-item", 20)',
+      'extractBatch("https://wikipedia.org/wiki/List_of_cities", "table tr", 100)'
+    ],
+    constraints: [
+      "Pattern should match multiple similar elements",
+      "Extraction preserves data relationships and structure"
+    ]
+  },
+  {
+    name: "updateInstance",
+    description: "Updates the specified instance with new values. Used for row/column autocomplete.",
+    parameters: [
+      {
+        name: "instanceId",
+        type: "string",
+        description: "The ID of the instance to update",
+        required: true
+      },
+      {
+        name: "newInstance",
+        type: "object",
+        description: "The new instance data (complete Instance object)",
+        required: true
+      }
+    ],
+    examples: [
+      'updateInstance("Table1", {...updatedTableData})'
+    ],
+    constraints: [
+      "Instance must exist in the workspace",
+      "New instance must be valid for the instance type"
+    ]
+  },
+  {
+    name: "addComputedColumn",
+    description: "Creates new columns based on formulas or calculations derived from existing columns.",
+    parameters: [
+      {
+        name: "instanceId",
+        type: "string",
+        description: "The ID of the table instance",
+        required: true
+      },
+      {
+        name: "formula",
+        type: "string",
+        description: "Formula or expression to compute new column values (e.g., 'A + B', 'A * 0.1')",
+        required: true
+      },
+      {
+        name: "newColumnName",
+        type: "string",
+        description: "Name for the new computed column",
+        required: true
+      }
+    ],
+    examples: [
+      'addComputedColumn("Table1", "B * C", "Total Price")',
+      'addComputedColumn("Table1", "A * 0.1", "Tax Amount")'
+    ],
+    constraints: [
+      "Formula must reference valid column names",
+      "Computation must be valid for the data types"
+    ]
+  },
   {
     name: "tableSort",
-    description: "Applies sorting to one or more table instances in the workspace. Use this for suggesting data organization improvements.",
+    description: "Applies sorting to organize data in table instances.",
     parameters: [
       {
         name: "instanceId",
@@ -104,7 +250,7 @@ export const MACRO_TOOLS: MacroTool[] = [
   },
   {
     name: "tableFilter",
-    description: "Applies filtering to table instances to show/hide rows based on criteria. Use this for suggesting data refinement.",
+    description: "Applies filtering to show/hide rows based on criteria for data refinement and interactive exploration.",
     parameters: [
       {
         name: "instanceId",
@@ -138,129 +284,77 @@ export const MACRO_TOOLS: MacroTool[] = [
       "Filter conditions should result in meaningful subset of data"
     ]
   },
+  
+  // === DATA PROFILING & CLEANING ===
   {
-    name: "createVisualization",
-    description: "Creates a new visualization instance based on existing table data. Use this for suggesting data exploration improvements.",
-    parameters: [
-      {
-        name: "sourceInstanceId",
-        type: "string",
-        description: "The ID of the table instance to visualize",
-        required: true
-      },
-      {
-        name: "chartType",
-        type: "string",
-        description: "Type of visualization to create",
-        required: true,
-        options: ["bar", "line", "scatter", "pie", "histogram", "heatmap"]
-      },
-      {
-        name: "xAxis",
-        type: "string",
-        description: "Column name for X-axis",
-        required: true
-      },
-      {
-        name: "yAxis",
-        type: "string",
-        description: "Column name for Y-axis (not required for pie charts)",
-        required: false
-      },
-      {
-        name: "title",
-        type: "string",
-        description: "Title for the visualization",
-        required: false
-      }
-    ],
-    examples: [
-      'createVisualization("Table1", "bar", "A", "B", "Data Analysis")',
-      'createVisualization("Table2", "scatter", "B", "C", "Correlation Analysis")'
-    ],
-    constraints: [
-      "Source table must exist and contain data",
-      "Specified columns must exist in the source table",
-      "Chart type should be appropriate for the data types"
-    ]
-  },
-  {
-    name: "exportData",
-    description: "Exports table or visualization data in various formats. Use this for suggesting data sharing and backup.",
+    name: "renameColumn",
+    description: "Renames columns for entity resolution and normalization. Standardizes entity names across datasets.",
     parameters: [
       {
         name: "instanceId",
         type: "string",
-        description: "The ID of the instance to export",
+        description: "The ID of the table instance containing the column to rename",
         required: true
       },
       {
-        name: "format",
+        name: "oldColumnName",
         type: "string",
-        description: "Export format",
-        required: true,
-        options: ["csv", "json", "xlsx", "png", "svg"]
+        description: "The current name of the column to rename",
+        required: true
       },
       {
-        name: "filename",
+        name: "newColumnName",
         type: "string",
-        description: "Desired filename (without extension)",
-        required: false
-      },
-      {
-        name: "includeHeaders",
-        type: "boolean",
-        description: "Whether to include column headers (for table exports)",
-        required: false,
-        defaultValue: true
+        description: "The new name for the column",
+        required: true
       }
     ],
     examples: [
-      'exportData("Table1", "csv", "exported_data")',
-      'exportData("chart_456", "png", "sales_visualization")'
+      'renameColumn("Table1", "A", "Product Name")',
+      'renameColumn("Table2", "B", "Price")'
     ],
     constraints: [
-      "Instance must exist in the workspace",
-      "Export format should be appropriate for the instance type",
-      "Filename should be valid for the target file system"
+      "Instance must exist and be a table type",
+      "Old column name must exist in the specified table",
+      "New column name should be descriptive and unique within the table"
     ]
   },
   {
-    name: "duplicateInstance",
-    description: "Creates a copy of an existing instance for experimentation or backup. Use this for suggesting workflow improvements.",
+    name: "formatColumn",
+    description: "Formats column values for entity resolution and normalization. Standardizes data formats across datasets.",
     parameters: [
       {
-        name: "sourceInstanceId",
+        name: "instanceId",
         type: "string",
-        description: "The ID of the instance to duplicate",
+        description: "The ID of the table instance",
         required: true
       },
       {
-        name: "newName",
+        name: "columnName",
         type: "string",
-        description: "Name for the new instance",
-        required: false
+        description: "The name of the column to format",
+        required: true
       },
       {
-        name: "modifications",
-        type: "object",
-        description: "Optional modifications to apply to the duplicate",
-        required: false
+        name: "formatPattern",
+        type: "string",
+        description: "Format pattern to apply (e.g., 'uppercase', 'lowercase', 'titlecase', 'date:YYYY-MM-DD')",
+        required: true
       }
     ],
     examples: [
-      'duplicateInstance("Table1", "Backup of Table1")',
-      'duplicateInstance("chart_456", "Modified Analysis", {"title": "Updated Chart Title"})'
+      'formatColumn("Table1", "A", "uppercase")',
+      'formatColumn("Table2", "Date", "date:YYYY-MM-DD")'
     ],
     constraints: [
-      "Source instance must exist in the workspace",
-      "New name should be descriptive and unique",
-      "Modifications should be valid for the instance type"
+      "Instance must exist and be a table type",
+      "Column name must exist in the specified table",
+      "Format pattern must be valid"
     ]
   },
   {
     name: "searchAndReplace",
-    description: "Performs find and replace operations across text-based instances. Supports both literal text replacement and regex patterns for advanced text manipulation.",
+    description: "Removes extraneous characters. Performs find and replace operations with support for regex patterns for advanced text manipulation.",
     parameters: [
       {
         name: "instanceId",
@@ -308,7 +402,7 @@ export const MACRO_TOOLS: MacroTool[] = [
   },
   {
     name: "mergeInstances",
-    description: "Combines multiple table instances into one. Supports union (append rows) and various join operations with flexible column mapping.",
+    description: "Joins tables. Combines multiple table instances using union, inner join, left join, or right join operations with flexible column mapping.",
     parameters: [
       {
         name: "sourceInstanceIds",
@@ -351,43 +445,8 @@ export const MACRO_TOOLS: MacroTool[] = [
     ]
   },
   {
-    name: "renameColumn",
-    description: "Renames a column in a table instance. Useful for standardizing column names before merging or improving data readability.",
-    parameters: [
-      {
-        name: "instanceId",
-        type: "string",
-        description: "The ID of the table instance containing the column to rename",
-        required: true
-      },
-      {
-        name: "oldColumnName",
-        type: "string",
-        description: "The current name of the column to rename (must be exact column name like 'A', 'B', 'C')",
-        required: true
-      },
-      {
-        name: "newColumnName",
-        type: "string",
-        description: "The new name for the column",
-        required: true
-      }
-    ],
-    examples: [
-      'renameColumn("Table1", "A", "Product Name")',
-      'renameColumn("Table2", "B", "Price")',
-      'renameColumn("Table1", "C", "Date")'
-    ],
-    constraints: [
-      "Instance must exist and be a table type",
-      "Old column name must exist in the specified table",
-      "New column name should be descriptive and unique within the table",
-      "Cannot rename to an existing column name"
-    ]
-  },
-  {
     name: "convertColumnType",
-    description: "Converts a table column from one data type to another. Essential for enabling operations like sorting or filtering on incorrectly typed data (e.g., converting '$99.99' strings to numbers).",
+    description: "Data type correction. Converts table columns between data types (e.g., converting currency strings to numbers) with optional cleaning patterns.",
     parameters: [
       {
         name: "instanceId",
@@ -436,7 +495,7 @@ export const MACRO_TOOLS: MacroTool[] = [
   },
   {
     name: "fillMissingValues",
-    description: "Fills missing or empty cells in table columns using various imputation strategies. Useful for completing datasets with gaps.",
+    description: "Fills missing or empty cells using strategies like mean, median, mode, interpolation, or constant values.",
     parameters: [
       {
         name: "instanceId",
@@ -486,6 +545,55 @@ export const MACRO_TOOLS: MacroTool[] = [
       "Strategy 'constant' requires constantValue parameter",
       "At least 10% of column values should be non-missing for reliable imputation",
       "Missing value percentage should be between 10%-80% for meaningful imputation"
+    ]
+  },
+  
+  // === DATA MODELING & VISUALIZATION ===
+  {
+    name: "createVisualization",
+    description: "Creates new visualization instances (bar, line, scatterplot, and histograms). Auto-generates or suggests alternative charts.",
+    parameters: [
+      {
+        name: "sourceInstanceId",
+        type: "string",
+        description: "The ID of the table instance to visualize",
+        required: true
+      },
+      {
+        name: "chartType",
+        type: "string",
+        description: "Type of visualization to create",
+        required: true,
+        options: ["bar", "line", "scatter", "histogram"]
+      },
+      {
+        name: "xAxis",
+        type: "string",
+        description: "Column name for X-axis",
+        required: true
+      },
+      {
+        name: "yAxis",
+        type: "string",
+        description: "Column name for Y-axis (not required for histograms)",
+        required: false
+      },
+      {
+        name: "title",
+        type: "string",
+        description: "Title for the visualization",
+        required: false
+      }
+    ],
+    examples: [
+      'createVisualization("Table1", "bar", "A", "B", "Sales by Region")',
+      'createVisualization("Table2", "scatter", "B", "C", "Price vs Rating")',
+      'createVisualization("Table3", "histogram", "A", null, "Distribution")'
+    ],
+    constraints: [
+      "Source table must exist and contain data",
+      "Specified columns must exist in the source table",
+      "Chart type should be appropriate for the data types"
     ]
   }
 ];

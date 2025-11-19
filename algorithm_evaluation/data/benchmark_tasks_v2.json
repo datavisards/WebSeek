@@ -1,0 +1,100 @@
+[
+  {
+    "task_id": "T001",
+    "task_category": "discovery",
+    "difficulty": "easy",
+    "goal_description": "Navigate from Amazon camera listings to eBay used camera listings to compare prices.",
+    "source_pages": [
+      "amazon_cameras"
+    ],
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "Opened page: Amazon Camera Search"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "openPage",
+        "parameters": {
+          "url": "https://www.ebay.com/sch/i.html?_nkw=used+camera",
+          "description": "eBay used camera listings",
+          "openInBackground": false
+        }
+      }
+    ],
+    "expected_tools": 1
+  },
+  {
+    "task_id": "T002",
+    "task_category": "discovery",
+    "difficulty": "easy",
+    "goal_description": "Navigate from LinkedIn job postings for data scientists to Indeed salary data for compensation analysis.",
+    "source_pages": [
+      "linkedin_jobs"
+    ],
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "Opened page: LinkedIn Job Postings"
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "openPage",
+        "parameters": {
+          "url": "indeed_salaries",
+          "description": "Navigate to Indeed Salary Data for Compensation Analysis",
+          "openInBackground": false
+        }
+      }
+    ],
+    "expected_tools": 1
+  },
+  {
+    "task_id": "T003",
+    "task_category": "extraction",
+    "difficulty": "easy",
+    "page": "amazon_cameras",
+    "goal_description": "Extract the list of camera products from Amazon, including product name and price, and clean the price format.",
+    "source_pages": [
+      "amazon_cameras"
+    ],
+    "initial_canvas_state": {
+      "instances": [],
+      "focus_instance_id": null
+    },
+    "conversation_history": [],
+    "recent_logs": [
+      "User opened WebSeek tool."
+    ],
+    "golden_tool_sequence": [
+      {
+        "function": "extractBatch",
+        "parameters": {
+          "pageUrl": "https://www.amazon.com/s?k=digital+camera",
+          "pattern": {
+            "Product Name": "div.sg-col-4-of-12 span.a-text-normal",
+            "Price": "span.a-price > span.a-offscreen"
+          },
+          "maxItems": 20
+        }
+      },
+      {
+        "function": "searchAndReplace",
+        "parameters": {
+          "instanceId": "ProductList",
+          "searchPattern": "\\$,",
+          "replaceWith": "",
+          "useRegex": true,
+          "columnName": "Price"
+        }
+      }
+    ],
+    "expected_tools": 2
+  }
+]
