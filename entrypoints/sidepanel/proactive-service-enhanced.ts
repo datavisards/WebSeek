@@ -68,6 +68,17 @@ class EnhancedProactiveService {
   private onSuggestionAccepted: ((suggestion: ProactiveSuggestion) => void) | null = null;
   private onGenerationStateChanged: ((isGenerating: boolean) => void) | null = null;
 
+  // Latency tracking for evaluation
+  private latencyRecords: Array<{
+    timestamp: number;
+    type: 'micro' | 'macro';
+    modality: 'in-situ' | 'peripheral';
+    latencyMs: number;
+    suggestionCount: number;
+    success: boolean;
+    aborted: boolean;
+  }> = [];
+
   constructor() {
     this.resetSession();
     this.initializeEnhancedSystem();
@@ -916,6 +927,12 @@ class EnhancedProactiveService {
   ) {
     console.log('[EnhancedProactiveService] 🔬 Starting micro suggestions for rules:', microRules.map(r => r.id));
     
+    // Start latency measurement
+    const startTime = performance.now();
+    let suggestionCount = 0;
+    let success = false;
+    let aborted = false;
+    
     // Defensive coding: Check if current active tab is in htmlContext
     if (this.currentContext.currentPageInfo && this.currentContext.currentPageInfo.pageId) {
       const currentPageInContext = currentHtmlContexts[this.currentContext.currentPageInfo.pageId];
@@ -975,6 +992,7 @@ class EnhancedProactiveService {
       // Check if generation was cancelled
       if (this.currentGenerationController?.signal.aborted) {
         console.log('[EnhancedProactiveService] Micro suggestion generation was cancelled');
+        aborted = true;
         return;
       }
 
@@ -988,12 +1006,15 @@ class EnhancedProactiveService {
           if (this.hasStateChangedSinceGeneration()) {
             console.log('[EnhancedProactiveService] State changed during micro suggestion generation - aborting display');
             console.log('[EnhancedProactiveService] Aborted suggestions:', microSuggestions.map(s => ({ id: s.id, message: s.message })));
+            aborted = true;
             return;
           }
           
           // Add to current suggestions
           this.addSuggestions(microSuggestions);
           this.suggestionCount += microSuggestions.length;
+          suggestionCount = microSuggestions.length;
+          success = true;
           
           // Display micro suggestions immediately and independently
           console.log('[EnhancedProactiveService] Displaying micro suggestions independently');
@@ -1007,7 +1028,29 @@ class EnhancedProactiveService {
       }
     } catch (error) {
       console.error('[EnhancedProactiveService] Error in micro suggestion generation:', error);
+      aborted = error instanceof DOMException && error.name === 'AbortError';
     } finally {
+      // Record latency measurement
+      const endTime = performance.now();
+      const latencyMs = endTime - startTime;
+      
+      this.latencyRecords.push({
+        timestamp: Date.now(),
+        type: 'micro',
+        modality: 'in-situ',
+        latencyMs,
+        suggestionCount,
+        success,
+        aborted
+      });
+      
+      console.log('[EnhancedProactiveService] 🔬 Micro suggestion latency:', {
+        latencyMs: latencyMs.toFixed(2),
+        suggestionCount,
+        success,
+        aborted
+      });
+      
       // Reset micro generation state
       console.log('[EnhancedProactiveService] 🔬 Micro generation finished - setting state to FALSE');
       this.isGeneratingMicro = false;
@@ -1101,6 +1144,12 @@ class EnhancedProactiveService {
   ) {
     console.log('[EnhancedProactiveService] Generating macro suggestions for rules:', macroRules.map(r => r.id));
     
+    // Start latency measurement
+    const startTime = performance.now();
+    let suggestionCount = 0;
+    let success = false;
+    let aborted = false;
+    
     // Defensive coding: Check if current active tab is in htmlContext
     if (this.currentContext.currentPageInfo && this.currentContext.currentPageInfo.pageId) {
       const currentPageInContext = currentHtmlContexts[this.currentContext.currentPageInfo.pageId];
@@ -1155,6 +1204,7 @@ class EnhancedProactiveService {
       // Check if generation was cancelled
       if (this.currentGenerationController?.signal.aborted) {
         console.log('[EnhancedProactiveService] Macro suggestion generation was cancelled');
+        aborted = true;
         return;
       }
 
@@ -1168,6 +1218,7 @@ class EnhancedProactiveService {
           if (this.hasStateChangedSinceGeneration()) {
             console.log('[EnhancedProactiveService] State changed during macro suggestion generation - aborting display');
             console.log('[EnhancedProactiveService] Aborted suggestions:', macroSuggestions.map(s => ({ id: s.id, message: s.message })));
+            aborted = true;
             return;
           }
           
@@ -1179,6 +1230,8 @@ class EnhancedProactiveService {
           // Add to current suggestions
           this.addSuggestions(macroSuggestions);
           this.suggestionCount += macroSuggestions.length;
+          suggestionCount = macroSuggestions.length;
+          success = true;
           
           // Display macro suggestions immediately and independently
           console.log('[EnhancedProactiveService] Displaying macro suggestions independently');
@@ -1192,6 +1245,28 @@ class EnhancedProactiveService {
       }
     } catch (error) {
       console.error('[EnhancedProactiveService] Error in macro suggestion generation:', error);
+      aborted = error instanceof DOMException && error.name === 'AbortError';
+    } finally {
+      // Record latency measurement
+      const endTime = performance.now();
+      const latencyMs = endTime - startTime;
+      
+      this.latencyRecords.push({
+        timestamp: Date.now(),
+        type: 'macro',
+        modality: 'peripheral',
+        latencyMs,
+        suggestionCount,
+        success,
+        aborted
+      });
+      
+      console.log('[EnhancedProactiveService] 🔭 Macro suggestion latency:', {
+        latencyMs: latencyMs.toFixed(2),
+        suggestionCount,
+        success,
+        aborted
+      });
     }
   }
 
@@ -2119,6 +2194,9 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
     console.log('[EnhancedProactiveService] Handling suggestion acceptance:', suggestion.id);
     
     try {
+      // Capture state before application for logging
+      const stateBefore = this.captureFullState();
+      
       // First, remove from current suggestions to prevent double-processing
       const initialCount = this.currentSuggestions.length;
       this.currentSuggestions = this.currentSuggestions.filter(s => s.id !== suggestion.id);
@@ -2178,6 +2256,12 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
           this.onSuggestionsUpdated(this.currentSuggestions);
         }
       }, 10); // Small delay to prevent React DOM conflicts
+      
+      // Log combined before/after (with a small delay to ensure state is updated)
+      setTimeout(async () => {
+        const stateAfter = this.captureFullState();
+        await this.logSuggestionApplicationCombined(suggestion, stateBefore, stateAfter);
+      }, 50);
       
     } catch (error) {
       console.error('[EnhancedProactiveService] Error handling suggestion acceptance:', error);
@@ -2484,6 +2568,12 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
    * Handle debounced rule triggers
    */
   private async handleDebouncedRuleTrigger(rule: any) {
+    // Start latency tracking
+    const startTime = performance.now();
+    let suggestionCount = 0;
+    let success = false;
+    let aborted = false;
+    
     try {
       console.log('[EnhancedProactiveService] Processing debounced rule:', rule.id, 'scope:', rule.scope);
       
@@ -2566,6 +2656,8 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
           
           this.addSuggestions(suggestions);
           this.suggestionCount += suggestions.length;
+          suggestionCount = suggestions.length;
+          success = true;
           
           console.log('[EnhancedProactiveService] Generated', suggestions.length, 'AI-driven suggestions for debounced rule:', rule.id);
           
@@ -2585,6 +2677,33 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
       }
     } catch (error) {
       console.error('[EnhancedProactiveService] Error handling debounced rule:', error);
+      aborted = error instanceof DOMException && error.name === 'AbortError';
+    } finally {
+      // Record latency measurement
+      const endTime = performance.now();
+      const latencyMs = endTime - startTime;
+      
+      // Determine type based on scope
+      const type = (rule.scope === 'micro') ? 'micro' : 'macro';
+      const modality = (rule.scope === 'micro') ? 'in-situ' : 'peripheral';
+      
+      this.latencyRecords.push({
+        timestamp: Date.now(),
+        type,
+        modality,
+        latencyMs,
+        suggestionCount,
+        success,
+        aborted
+      });
+      
+      console.log(`[EnhancedProactiveService] 🔭 Debounced rule (${type}) latency:`, {
+        latencyMs: latencyMs.toFixed(2),
+        suggestionCount,
+        success,
+        aborted,
+        ruleId: rule.id
+      });
     }
   }
 
@@ -2630,6 +2749,233 @@ Analyze the context and provide intelligent suggestions based on the satisfied r
    */
   getUIController() {
     return suggestionUIController;
+  }
+
+  /**
+   * Get latency records for evaluation
+   */
+  getLatencyRecords() {
+    return [...this.latencyRecords];
+  }
+
+  /**
+   * Get latency statistics separated by type
+   */
+  getLatencyStatistics() {
+    const microRecords = this.latencyRecords.filter(r => r.type === 'micro' && r.success && !r.aborted);
+    const macroRecords = this.latencyRecords.filter(r => r.type === 'macro' && r.success && !r.aborted);
+    
+    const calculateStats = (records: typeof this.latencyRecords) => {
+      if (records.length === 0) {
+        return {
+          count: 0,
+          avgLatencyMs: 0,
+          minLatencyMs: 0,
+          maxLatencyMs: 0,
+          medianLatencyMs: 0,
+          totalSuggestions: 0
+        };
+      }
+      
+      const latencies = records.map(r => r.latencyMs).sort((a, b) => a - b);
+      const totalSuggestions = records.reduce((sum, r) => sum + r.suggestionCount, 0);
+      
+      return {
+        count: records.length,
+        avgLatencyMs: latencies.reduce((a, b) => a + b, 0) / latencies.length,
+        minLatencyMs: latencies[0],
+        maxLatencyMs: latencies[latencies.length - 1],
+        medianLatencyMs: latencies[Math.floor(latencies.length / 2)],
+        totalSuggestions
+      };
+    };
+    
+    return {
+      micro: {
+        ...calculateStats(microRecords),
+        type: 'micro',
+        modality: 'in-situ' as const
+      },
+      macro: {
+        ...calculateStats(macroRecords),
+        type: 'macro',
+        modality: 'peripheral' as const
+      },
+      overall: {
+        totalGenerations: this.latencyRecords.length,
+        successfulGenerations: this.latencyRecords.filter(r => r.success).length,
+        abortedGenerations: this.latencyRecords.filter(r => r.aborted).length,
+        allRecords: this.latencyRecords
+      }
+    };
+  }
+
+  /**
+   * Reset latency records (useful for starting a new test session)
+   */
+  resetLatencyRecords() {
+    this.latencyRecords = [];
+    console.log('[EnhancedProactiveService] Latency records reset');
+  }
+
+  /**
+   * Capture full state for logging
+   */
+  private captureFullState() {
+    return {
+      timestamp: new Date().toISOString(),
+      instances: JSON.parse(JSON.stringify(this.currentContext.instances || [])),
+      messages: JSON.parse(JSON.stringify(this.currentContext.messages || [])),
+      htmlContexts: Object.keys(this.currentContext.htmlContexts || {}),
+      logs: [...(this.currentContext.logs || [])].slice(-50), // Last 50 logs
+      editingTableId: this.currentContext.editingTableId,
+      currentPageInfo: this.currentContext.currentPageInfo,
+      suggestions: JSON.parse(JSON.stringify(this.currentSuggestions))
+    };
+  }
+
+  /**
+   * Log suggestion application to file
+   */
+  private async logSuggestionApplication(
+    suggestion: ProactiveSuggestion,
+    state: any,
+    phase: 'before' | 'after'
+  ) {
+    try {
+      const timestamp = Date.now();
+      const suggestionType = suggestion.scope === 'micro' ? 'micro' : 'macro';
+      const logData = {
+        timestamp: new Date(timestamp).toISOString(),
+        phase,
+        suggestionId: suggestion.id,
+        suggestionType,
+        suggestionModality: suggestion.modality,
+        suggestion: {
+          id: suggestion.id,
+          message: suggestion.message,
+          scope: suggestion.scope,
+          modality: suggestion.modality,
+          priority: suggestion.priority,
+          confidence: suggestion.confidence,
+          category: suggestion.category,
+          ruleIds: (suggestion as any).ruleIds,
+          instances: suggestion.instances,
+          toolCall: (suggestion as any).toolCall,
+          toolSequence: (suggestion as any).toolSequence
+        },
+        state
+      };
+
+      // Send to console for debugging
+      console.log(`[SuggestionApplicationLog] ${phase.toUpperCase()} - ${suggestionType} suggestion:`, {
+        suggestionId: suggestion.id,
+        message: suggestion.message.slice(0, 100),
+        instanceCount: state.instances?.length || 0
+      });
+
+      // Download log file
+      const filename = `suggestion_${suggestionType}_${phase}_${timestamp}.json`;
+      const blob = new Blob([JSON.stringify(logData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      console.log(`[SuggestionApplicationLog] Saved ${phase} log to ${filename}`);
+    } catch (error) {
+      console.error('[SuggestionApplicationLog] Error logging suggestion application:', error);
+    }
+  }
+
+  /**
+   * Log combined before/after comparison for suggestion application
+   */
+  private async logSuggestionApplicationCombined(
+    suggestion: ProactiveSuggestion,
+    stateBefore: any,
+    stateAfter: any
+  ) {
+    try {
+      console.log('[EnhancedProactiveService] logSuggestionApplicationCombined called:', {
+        suggestionId: suggestion.id,
+        category: suggestion.category,
+        scope: suggestion.scope,
+        hasToolCall: !!(suggestion as any).toolCall,
+        hasToolSequence: !!(suggestion as any).toolSequence,
+        hasInstances: suggestion.instances?.length || 0
+      });
+      
+      const timestamp = Date.now();
+      const suggestionType = suggestion.scope === 'micro' ? 'micro' : 'macro';
+      const logData = {
+        timestamp: new Date(timestamp).toISOString(),
+        suggestionId: suggestion.id,
+        suggestionType,
+        suggestionModality: suggestion.modality,
+        suggestion: {
+          id: suggestion.id,
+          message: suggestion.message,
+          scope: suggestion.scope,
+          modality: suggestion.modality,
+          priority: suggestion.priority,
+          confidence: suggestion.confidence,
+          category: suggestion.category,
+          ruleIds: (suggestion as any).ruleIds,
+          instances: suggestion.instances,
+          toolCall: (suggestion as any).toolCall,
+          toolSequence: (suggestion as any).toolSequence
+        },
+        stateBefore,
+        stateAfter,
+        changes: {
+          instanceCountBefore: stateBefore.instances?.length || 0,
+          instanceCountAfter: stateAfter.instances?.length || 0,
+          instanceCountDelta: (stateAfter.instances?.length || 0) - (stateBefore.instances?.length || 0),
+          messageCountBefore: stateBefore.messages?.length || 0,
+          messageCountAfter: stateAfter.messages?.length || 0,
+          messageCountDelta: (stateAfter.messages?.length || 0) - (stateBefore.messages?.length || 0)
+        }
+      };
+
+      // Send to console for debugging
+      console.log(`[SuggestionApplicationLog] COMBINED - ${suggestionType} suggestion:`, {
+        suggestionId: suggestion.id,
+        message: suggestion.message.slice(0, 100),
+        changes: logData.changes
+      });
+
+      // Download log file
+      const filename = `suggestion_${suggestionType}_combined_${timestamp}.json`;
+      console.log('[EnhancedProactiveService] Preparing download:', filename);
+      
+      const blob = new Blob([JSON.stringify(logData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      
+      // Ensure the link is added to the DOM before clicking
+      document.body.appendChild(a);
+      console.log('[EnhancedProactiveService] Triggering download click');
+      a.click();
+      
+      // Clean up after a delay to ensure download starts
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        console.log('[EnhancedProactiveService] Download cleanup completed');
+      }, 100);
+
+      console.log(`[SuggestionApplicationLog] Saved combined log to ${filename}`);
+    } catch (error) {
+      console.error('[SuggestionApplicationLog] Error logging combined suggestion application:', error);
+      console.error('[SuggestionApplicationLog] Error details:', error);
+    }
   }
 
   // Cleanup

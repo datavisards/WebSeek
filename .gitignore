@@ -27,3 +27,6 @@ web-ext.config.ts
 
 # Ignore .env file
 .env
+
+# Algorithm Evaluation
+algorithm_evaluation/*

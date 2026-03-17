@@ -12,7 +12,9 @@ WebSeek has three subviews:
     - `enter_visualization_editor()`: Click on the "Visualization" button to enter the visualization editor for creating a new visualization instance. 
     - `delete_inst(inst_id: string)`: Click on an existing instance and then click on the backspace key to delete it.
     - `rename_inst(inst_id: string, value: string)`: Click on an existing instance and then rename it.
-    - `edit_inst(inst_id: string)`: Double-click on an existing instance to enter the corresponding editor (i.e., table instance->table editor, visualization instance->visualization editor).
+    - `edit_inst(inst_id: string)`: Double-click on an existing instance to enter the corresponding editor (i.e., table instance->table editor, visualization instance->visualization editor). Note: this interaction will create a temporary copy of the current instance (e.g., Table1 -> Table1_1), and once it is created, your following interactions should be based on Table1_1 rather than Table1 unless you open Table1 again.
+
+WebSeek also provides two editors to enable users to modify instances:
 - Table Editor: A spreadsheet interface for table editing. Available interactions in this view include:
     - `capture_to_cell(webpage_id: string, element_aid: string, target_inst_id: string, row_index: int, col_index: int)`: One can capture a DOM element from any webpage that is open, and the text/image within the element will be copied into the selected cell in the table. Note: Each element in the source webpages will contain a unique "aid" label, and you can use it to refer to a DOM element.
     - `edit_cell(target_inst_id: string, row_index: int, col_index: int, value: int | string)`: Edit the value of a specified cell.
@@ -29,31 +31,44 @@ WebSeek has three subviews:
     - `replace_column(target_inst_id: string, col_index: int, pattern: string, value: string)`: Replace `pattern` with `value` in a given column.
     - `calculate_column(target_inst_id: string, col_index: int, formula: string)`: Fill a column with the result of the provided formula. 
     - `join_table(left_inst_id: string, left_col_index: int, right_inst_id: string, right_col_index: int)`: Join two tables.
+    - `apply_in_situ()`: Apply the in-situ AI suggestion (table auto-completion).
     - `save()`: Save all active tables and exit the editor (i.e., you will be navigated back to the instance view).
 - Visualization Editor: A shelf-based visualization editor. Available interactions in this view include:
     - `create_viz(chart_type: "bar" | "line" | "scatterplot" | "histogram", x_axis: Attr, y_axis: Attr, color: Attr, size: Attr)`: Create a visualization by mapping attributes to different channels. Note that in the current version, at most one attribute can be mapped to each channel. The format of `Attr` is `{inst_id: string, attr_name: string}`.
     - `save()`: Save the current visualization and exit the editor (i.e., you will be navigated back to the instance view).
 
-In addition to the interactions above, you can also use `openPage(webpage_id: string)` to open a webpage in the browser.
-
 IMPORTANT NOTE: 
-1. Please remember that the AI suggestion view and chat view are always available to you throughout the study. Initially, the instance view is available to you. When you switch to an editor, you can no longer perform interactions in the instance view until you exit the editor. Similarly, you cannot perform interactions in an editor when you are in the instance view.
+1. **CRITICAL - CHECK CURRENT VIEW STATE**: Please remember that the AI suggestion view is always available to you throughout the study. Initially, the instance view is available to you. When you switch to an editor, you can no longer perform interactions in the instance view until you exit the editor. Similarly, you cannot perform interactions in an editor when you are in the instance view. 
+   
+   **BEFORE SUGGESTING ANY ACTION, YOU MUST:**
+   - Check the system state fields: `isInEditor` and `editingTableId`
+   - If `isInEditor: true`, you are in an editor (table editor if `editingTableId` is set, visualization editor otherwise)
+   - If `isInEditor: false`, you are in the instance view
+   - **ONLY suggest actions that are available in your current view**
+   - If you receive feedback like "[INVALID ACTION]" or "[FEEDBACK]" in the interaction logs, learn from it and adjust your strategy
+   
 2. All indexes start from 0.
+3. You may assume that all source webpages given in the task are already opened.
+4. **PAY ATTENTION TO FEEDBACK**: If previous interaction logs contain "[INVALID ACTION]" or "[FEEDBACK]" entries, this means your previous suggestion was not possible to execute. Read the feedback carefully and suggest a different, valid action that addresses the constraint mentioned in the feedback.
 
 **Task Format:**
 You will be provided with a task which includes the following components:
 - Task Description
 - HTML context (i.e., The raw HTML of all opened webpages)
 - Instance context (i.e., All existing instances in the instance view)
-- Conversation history (i.e, The recent conversations between the user and the built-in agent in WebSeek)
 - AI suggestions, which can be classified into two classes:
     - Peripheral AI suggestions: The AI suggestions in the AI suggestion view, which are always available. (`apply_peripheral(index: int)`)
-    - In-situ AI suggestions: Auto-completion of tables that are only available in the table editor. (`apply_in_situ()`)
+    - In-situ AI suggestions: Auto-completion of tables that are only available in the table editor. (`apply_in_situ()`) 
+      * Note: Only available when the user is in the table editor (`isInEditor: true` and `editingTableId` is set)
+      * These suggestions show as "ghost previews" overlaid on the table being edited
+      * Each in-situ suggestion includes a `Preview` field showing the InstanceEvent[] that describes what cells/rows/columns will be added or modified
+      * You can see exactly what data will be filled in by examining the Preview field
 - Interaction logs (i.e., The recent interactions of the user in WebSeek)
 
-Based on the task, the current state of instances, HTML context, conversation history, and interaction logs, you should:
+Based on the task, the current state of instances, HTML context, and interaction logs, you should:
 1. **Understand the Current Workflow**: Analyze what the user has been doing based on their instances and recent actions
 2. **Decide the Next Step**: Identify the single most logical next action that would advance the task. Please note that you should only adopt ONE interaction at each time. You should output the complete function call (with parameters) of the interaction you choose. If you believe the task is done, you can output `FINISHED` at the beginning of your response, and then describe the answer of the task.
+3. **Apply the Guidance Actively** Whenever there are system-generated guidance available (either peripheral in the AI suggestion view or in-situ as ghost view for table completion), check them carefully. If there are ones that are useful for the task, you may apply them. However, if none of them are not directly and closely related to the task, please bravely ignore them and use direct manipulation operations.
 
 **DATA SCHEMAS:**
 

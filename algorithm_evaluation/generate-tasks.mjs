@@ -4,7 +4,7 @@
  * 
  * CHANGES FROM V2:
  * - Removed all system state fields (html_context, initial_canvas_state, conversation_history, recent_logs)
- * - Each task is just: task_id, description, difficulty, source_pages, golden_tool_sequence
+ * - Each task is just: task_id, description, difficulty, source_pages
  * - Users start from scratch for each task
  * - Focuses on task definition and expected tool usage only
  */
@@ -37,7 +37,7 @@ if (!OPENROUTER_API_KEY) {
   process.exit(1);
 }
 
-// Define the 20 controlled webpages (same as v2)
+// Define the 20 controlled webpages
 const CONTROLLED_WEBPAGES = [
   {
     id: 'amazon_cameras',
@@ -221,7 +221,7 @@ const CONTROLLED_WEBPAGES = [
   }
 ];
 
-// WebSeek tool catalog (same as v2 for golden sequences)
+// WebSeek tool catalog
 const WEBSEEK_TOOLS = [
   {
     name: 'openPage',
@@ -412,38 +412,35 @@ async function generateTasks(count, difficulty, attempt = 1) {
   console.log(`\n=== Generating ${count} ${difficulty} tasks (attempt ${attempt}) ===`);
 
   const toolList = WEBSEEK_TOOLS.map(t => `- ${t.name}: ${t.description}`).join('\n');
-  const webpageList = CONTROLLED_WEBPAGES.map(w => 
+  const webpageList = CONTROLLED_WEBPAGES.map(w =>
     `- ${w.id}: ${w.description}\n  Data: ${w.dataStructure}\n  Issues: ${w.dataIssues}`
   ).join('\n\n');
 
   const difficultyGuide = {
     easy: `
 **Easy Task Requirements:**
-- Use 1 source webpage
-- 3-5 tool operations
-- Simple extraction + basic transformation
-- Examples: Extract product table, filter by rating, sort by price
-- Golden sequence: openPage → extractBatch → tableFilter → tableSort
+- **Webpages:** Exactly 1 source webpage  
+- **Operations:** ≤4 column- or cell-based operations (e.g., filtering, sorting, basic parsing)  
+- **Visualization:** None  
+- **Examples:** Extract a product table; filter by rating ≥4; sort by price; rename one column
 `,
     medium: `
 **Medium Task Requirements:**
-- Use 1-2 source webpages
-- 5-8 tool operations
-- Multi-step transformations, data cleaning, may include visualization
-- Examples: Extract data, clean prices, convert types, create chart
-- Golden sequence: openPage → extractBatch → searchAndReplace → convertColumnType → tableFilter → createVisualization
+- **Webpages:** 1–2 source webpages  
+- **Operations:** 5+ column- or cell-based operations **or**  
+- **Visualization:** Includes at least one chart or plot (even with ≤5 operations)  
+- **Examples:** Scrape product specs from one site, clean inconsistent prices, convert units, add derived columns, and generate a bar chart
 `,
     hard: `
 **Hard Task Requirements:**
-- Use 2+ source webpages
-- 8-12 tool operations
-- Complex workflows: multi-page merging, advanced cleaning, computed columns
-- Examples: Merge Amazon + eBay cameras, standardize formats, calculate metrics, visualize
-- Golden sequence: openPage (×2) → extractBatch (×2) → searchAndReplace (×2) → convertColumnType (×2) → mergeInstances → addComputedColumn → createVisualization
+- **Webpages:** 2+ distinct source webpages  
+- **Operations:** ≥5 column- or cell-based operations  
+- **Visualization:** Includes at least one visualization  
+- **Examples:** Merge tables, reconcile naming differences, compare multiple attributes, handle missing data, and visualize comparisons
 `
   };
 
-  const systemPrompt = `You are an expert task designer for WebSeek, a web data extraction and analysis tool.
+  const systemPrompt = `You are an expert task designer for data synthesis.
 
 Generate EXACTLY ${count} realistic ${difficulty}-difficulty benchmark tasks. This is critical - you must generate exactly ${count} tasks, no more, no less.
 
@@ -458,25 +455,14 @@ ${difficultyGuide[difficulty]}
 **Task Format (JSON):**
 {
   "description": "Clear, specific task description",
-  "source_pages": ["webpage_id1", "webpage_id2"],
-  "golden_tool_sequence": [
-    {"tool": "openPage", "parameters": {"url": "webpage_id"}},
-    {"tool": "extractBatch", "parameters": {"selector": "product-card"}},
-    {"tool": "tableFilter", "parameters": {"column": "Rating", "operator": ">", "value": 4.0}}
-  ]
+  "source_pages": ["webpage_id1", "webpage_id2"]
 }
 
 **CRITICAL RULES:**
-1. DO NOT include "task_id" or "difficulty" fields - these will be added automatically
-2. source_pages MUST contain only webpage IDs from the controlled list (e.g., ["amazon_cameras", "ebay_cameras"])
-3. Users start from SCRATCH - no pre-existing state, no context, no logs
-4. golden_tool_sequence should be the expected optimal tool usage to complete the task
-5. Task descriptions should be natural language (what user wants to accomplish)
-6. Tasks should leverage the data issues listed for each webpage (e.g., clean prices, convert units)
-7. You are generating ${difficulty} tasks, so follow these complexity guidelines:
-   - Easy: Single page, 3-5 tools, simple operations
-   - Medium: 1-2 pages, 5-8 tools, cleaning + viz
-   - Hard: 2+ pages, 8-12 tools, merging + complex transformations
+1. source_pages MUST contain only webpage IDs from the controlled list (e.g., ["amazon_cameras", "ebay_cameras"])
+2. Task descriptions should be natural language (what user wants to accomplish)
+3. Tasks should leverage the data issues listed for each webpage (e.g., clean prices, convert units)
+4. The available tools listed above will be used to help the user accomplish the tasks. Users will have access to basic data manipulation and visualization functionalities, as well system-generated proactive guidance based on the above tools. Please make sure these tools can be of use for the tasks you generate so that users are likely to actively use the guidance based on them. 
 
 **Output Format:**
 Return a JSON array of ${count} task objects. ONLY return the JSON array, no other text.`;
@@ -488,9 +474,9 @@ Return a JSON array of ${count} task objects. ONLY return the JSON array, no oth
 
   console.log(`Calling OpenRouter API (model: ${MODEL})...`);
   const response = await callOpenRouter(messages);
-  
+
   const content = response.choices[0].message.content.trim();
-  
+
   // Extract JSON array from markdown code blocks if present
   let jsonText = content;
   const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
@@ -500,7 +486,7 @@ Return a JSON array of ${count} task objects. ONLY return the JSON array, no oth
 
   const tasks = JSON.parse(jsonText);
   console.log(`✓ Generated ${tasks.length} ${difficulty} tasks`);
-  
+
   // If we didn't get enough tasks, generate more to fill the gap
   if (tasks.length < count && attempt < 3) {
     const remaining = count - tasks.length;
@@ -508,7 +494,7 @@ Return a JSON array of ${count} task objects. ONLY return the JSON array, no oth
     const moreTasks = await generateTasks(remaining, difficulty, attempt + 1);
     return [...tasks, ...moreTasks];
   }
-  
+
   return tasks;
 }
 
@@ -550,11 +536,11 @@ async function main() {
 
   // Post-process and validate tasks
   console.log('\n=== Post-processing tasks ===');
-  
+
   // Track which difficulty batch each task came from
   let taskIndex = 0;
   const processedTasks = [];
-  
+
   // Process tasks by difficulty batch
   if (isPreview) {
     const distribution = {
@@ -562,7 +548,7 @@ async function main() {
       medium: Math.ceil(previewLimit * 0.4),
       hard: Math.max(1, previewLimit - Math.ceil(previewLimit * 0.4) * 2)
     };
-    
+
     let currentIndex = 0;
     for (const [difficulty, count] of Object.entries(distribution)) {
       if (count > 0) {
@@ -589,13 +575,13 @@ async function main() {
       currentIndex += actualCount;
     }
   }
-  
+
   allTasks = processedTasks;
 
   function processTask(task, index, difficulty) {
     // Add standardized task_id
     task.task_id = `task_${String(index + 1).padStart(3, '0')}`;
-    
+
     // Add difficulty tag
     task.difficulty = difficulty;
 
@@ -605,14 +591,9 @@ async function main() {
     }
 
     // Validate source_pages contain only controlled webpage IDs
-    task.source_pages = task.source_pages.filter(id => 
+    task.source_pages = task.source_pages.filter(id =>
       CONTROLLED_WEBPAGES.find(w => w.id === id)
     );
-
-    // Ensure golden_tool_sequence exists
-    if (!task.golden_tool_sequence || !Array.isArray(task.golden_tool_sequence)) {
-      task.golden_tool_sequence = [];
-    }
 
     return task;
   }
@@ -635,15 +616,13 @@ async function main() {
     easy: allTasks.filter(t => t.difficulty === 'easy').length,
     medium: allTasks.filter(t => t.difficulty === 'medium').length,
     hard: allTasks.filter(t => t.difficulty === 'hard').length,
-    avg_source_pages: (allTasks.reduce((sum, t) => sum + t.source_pages.length, 0) / allTasks.length).toFixed(2),
-    avg_tools: (allTasks.reduce((sum, t) => sum + t.golden_tool_sequence.length, 0) / allTasks.length).toFixed(2)
+    avg_source_pages: (allTasks.reduce((sum, t) => sum + t.source_pages.length, 0) / allTasks.length).toFixed(2)
   };
 
   console.log('\n=== Summary ===');
   console.log(`Total tasks: ${summary.total}`);
   console.log(`Easy: ${summary.easy}, Medium: ${summary.medium}, Hard: ${summary.hard}`);
   console.log(`Avg source pages per task: ${summary.avg_source_pages}`);
-  console.log(`Avg tools per task: ${summary.avg_tools}`);
 
   if (isPreview) {
     console.log('\n📋 Sample tasks:');
@@ -651,7 +630,6 @@ async function main() {
       console.log(`\n${task.task_id} (${task.difficulty}):`);
       console.log(`  Description: ${task.description}`);
       console.log(`  Source pages: ${task.source_pages.join(', ')}`);
-      console.log(`  Tools: ${task.golden_tool_sequence.length} operations`);
     });
   }
 }

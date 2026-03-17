@@ -17,6 +17,130 @@ import WorkspaceNameModal from './components/WorkspaceNameModal.tsx';
 import { updateInstances } from './utils';
 import { globalUndoManager } from './global-undo-manager';
 import { systemLogger } from './system-logger';
+import { TestingExportButton } from './testing-export.tsx';
+
+// Helper function for logging macro suggestion applications
+const logMacroSuggestionApplication = async (
+  suggestion: ProactiveSuggestion,
+  state: any,
+  phase: 'before' | 'after'
+) => {
+  try {
+    const timestamp = Date.now();
+    const suggestionType = suggestion.scope === 'micro' ? 'micro' : 'macro';
+    const logData = {
+      timestamp: new Date(timestamp).toISOString(),
+      phase,
+      suggestionId: suggestion.id,
+      suggestionType,
+      suggestionModality: suggestion.modality,
+      suggestion: {
+        id: suggestion.id,
+        message: suggestion.message,
+        scope: suggestion.scope,
+        modality: suggestion.modality,
+        priority: suggestion.priority,
+        confidence: suggestion.confidence,
+        category: suggestion.category,
+        ruleIds: (suggestion as any).ruleIds,
+        instances: suggestion.instances,
+        toolCall: (suggestion as any).toolCall,
+        toolSequence: (suggestion as any).toolSequence
+      },
+      state
+    };
+
+    console.log(`[SuggestionApplicationLog] ${phase.toUpperCase()} - ${suggestionType} suggestion:`, {
+      suggestionId: suggestion.id,
+      message: suggestion.message.slice(0, 100),
+      instanceCount: state.instances?.length || 0
+    });
+
+    const filename = `suggestion_${suggestionType}_${phase}_${timestamp}.json`;
+    const blob = new Blob([JSON.stringify(logData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    console.log(`[SuggestionApplicationLog] Saved ${phase} log to ${filename}`);
+  } catch (error) {
+    console.error('[SuggestionApplicationLog] Error logging suggestion application:', error);
+  }
+};
+
+// Helper function for logging combined before/after comparison
+const logMacroSuggestionApplicationCombined = async (
+  suggestion: ProactiveSuggestion,
+  stateBefore: any,
+  stateAfter: any
+) => {
+  try {
+    const timestamp = Date.now();
+    const suggestionType = suggestion.scope === 'micro' ? 'micro' : 'macro';
+    const logData = {
+      timestamp: new Date(timestamp).toISOString(),
+      suggestionId: suggestion.id,
+      suggestionType,
+      suggestionModality: suggestion.modality,
+      suggestion: {
+        id: suggestion.id,
+        message: suggestion.message,
+        scope: suggestion.scope,
+        modality: suggestion.modality,
+        priority: suggestion.priority,
+        confidence: suggestion.confidence,
+        category: suggestion.category,
+        ruleIds: (suggestion as any).ruleIds,
+        instances: suggestion.instances,
+        toolCall: (suggestion as any).toolCall,
+        toolSequence: (suggestion as any).toolSequence
+      },
+      stateBefore,
+      stateAfter,
+      changes: {
+        instanceCountBefore: stateBefore.instances?.length || 0,
+        instanceCountAfter: stateAfter.instances?.length || 0,
+        instanceCountDelta: (stateAfter.instances?.length || 0) - (stateBefore.instances?.length || 0),
+        messageCountBefore: stateBefore.messages?.length || 0,
+        messageCountAfter: stateAfter.messages?.length || 0,
+        messageCountDelta: (stateAfter.messages?.length || 0) - (stateBefore.messages?.length || 0)
+      }
+    };
+
+    console.log(`[SuggestionApplicationLog] COMBINED - ${suggestionType} suggestion:`, {
+      suggestionId: suggestion.id,
+      message: suggestion.message.slice(0, 100),
+      changes: logData.changes
+    });
+
+    const filename = `suggestion_${suggestionType}_combined_${timestamp}.json`;
+    console.log(`[SuggestionApplicationLog] Preparing download: ${filename}`);
+    const blob = new Blob([JSON.stringify(logData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    console.log(`[SuggestionApplicationLog] Triggering download click for ${filename}`);
+    a.click();
+    
+    // Delay cleanup to give browser time to start the download
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      console.log(`[SuggestionApplicationLog] Download cleanup completed for ${filename}`);
+    }, 100);
+
+    console.log(`[SuggestionApplicationLog] Saved combined log to ${filename}`);
+  } catch (error) {
+    console.error('[SuggestionApplicationLog] Error logging combined suggestion application:', error);
+  }
+};
 
 const SidePanel = () => {
   console.log('[SidePanel] Component mounting/re-mounting');
@@ -1153,6 +1277,23 @@ const SidePanel = () => {
   const handleExecuteTool = useCallback(async (toolCall: { function: string; parameters: any }, suggestionId: string) => {
     console.log('[SidePanel] Executing tool:', toolCall, 'for suggestion:', suggestionId);
     
+    // Find the suggestion and capture state before for logging
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    let stateBefore: any = null;
+    
+    if (suggestion) {
+      stateBefore = {
+        timestamp: new Date().toISOString(),
+        instances: JSON.parse(JSON.stringify(instances)),
+        messages: JSON.parse(JSON.stringify(messages)),
+        htmlContexts: Object.keys(htmlContext),
+        logs: [...logs].slice(-50),
+        editingTableId: editingTableId,
+        currentPageInfo: currentPageInfo,
+        suggestions: JSON.parse(JSON.stringify(suggestions))
+      };
+    }
+    
     // Special handling for createVisualization when in table editor mode
     if (toolCall.function === 'createVisualization' && editingTableId) {
       console.log('[SidePanel] createVisualization requested while in table editor, checking for confirmation');
@@ -1262,6 +1403,26 @@ const SidePanel = () => {
         
         // Small delay to ensure suggestion dismissal is processed before log triggers new generation
         await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Log combined before/after state
+        if (suggestion && stateBefore) {
+          const stateAfter = {
+            timestamp: new Date().toISOString(),
+            instances: JSON.parse(JSON.stringify(instances)),
+            messages: JSON.parse(JSON.stringify(messages)),
+            htmlContexts: Object.keys(htmlContext),
+            logs: [...logs].slice(-50),
+            editingTableId: editingTableId,
+            currentPageInfo: currentPageInfo,
+            suggestions: JSON.parse(JSON.stringify(suggestions))
+          };
+          await logMacroSuggestionApplicationCombined(suggestion, stateBefore, stateAfter);
+        } else {
+          console.error('[SidePanel] Cannot log suggestion application - missing:', {
+            hasSuggestion: !!suggestion,
+            hasStateBefore: !!stateBefore
+          });
+        }
         
         // Special handling for createVisualization: auto-save table and switch to visualization editor
         if (toolCall.function === 'createVisualization' && editingTableId && result.result?.newInstanceId) {
@@ -1396,11 +1557,30 @@ const SidePanel = () => {
     console.log('[SidePanel] ⚡ Tool sequence goal:', toolSequence.goal);
     console.log('[SidePanel] ⚡ Number of steps:', toolSequence.steps.length);
     
+    // Find the suggestion and capture state before for logging
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    let stateBefore: any = null;
+    let updatedInstances: Instance[] | null = null; // Track the updated instances
+    
+    if (suggestion) {
+      stateBefore = {
+        timestamp: new Date().toISOString(),
+        instances: JSON.parse(JSON.stringify(instances)),
+        messages: JSON.parse(JSON.stringify(messages)),
+        htmlContexts: Object.keys(htmlContext),
+        logs: [...logs].slice(-50),
+        editingTableId: editingTableId,
+        currentPageInfo: currentPageInfo,
+        suggestions: JSON.parse(JSON.stringify(suggestions))
+      };
+    }
+    
     try {
       const { executeCompositeSuggestion } = await import('./macro-tool-executor');
       
       // Create a wrapper for recordableSetInstances that provides proper undo descriptions
       const wrappedUpdateInstances = (newInstances: Instance[]) => {
+        updatedInstances = newInstances; // Capture the updated instances
         const description = `Execute composite suggestion: ${toolSequence.goal}`;
         recordableSetInstances(newInstances, description);
         
@@ -1440,6 +1620,32 @@ const SidePanel = () => {
         
         // Small delay to ensure suggestion dismissal is processed before log triggers new generation
         await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Log combined before/after state
+        if (suggestion && stateBefore) {
+          // Use updatedInstances if available, otherwise fall back to current instances
+          const finalInstances = updatedInstances || instances;
+          if (!updatedInstances) {
+            console.warn('[SidePanel] updatedInstances is null in tool sequence, using current instances for state logging');
+          }
+          const stateAfter = {
+            timestamp: new Date().toISOString(),
+            instances: JSON.parse(JSON.stringify(finalInstances)),
+            messages: JSON.parse(JSON.stringify(messages)),
+            htmlContexts: Object.keys(htmlContext),
+            logs: [...logs].slice(-50),
+            editingTableId: editingTableId,
+            currentPageInfo: currentPageInfo,
+            suggestions: JSON.parse(JSON.stringify(suggestions))
+          };
+          await logMacroSuggestionApplicationCombined(suggestion, stateBefore, stateAfter);
+        } else {
+          console.error('[SidePanel] Cannot log tool sequence application - missing:', {
+            hasSuggestion: !!suggestion,
+            hasStateBefore: !!stateBefore,
+            hasUpdatedInstances: !!updatedInstances
+          });
+        }
         
         // Add log for the successful execution with comprehensive details
         addLog(`Applied suggestion - ${result.message}`, {
@@ -1631,6 +1837,21 @@ const SidePanel = () => {
         onCancel={handleCancelWorkspaceNaming}
         onSkip={handleSkipWorkspaceNaming}
       />
+      
+      {/* Testing Export Button - only show in development */}
+      {import.meta.env.DEV && (
+        <TestingExportButton
+          instances={instances}
+          htmlContext={htmlContext}
+          messages={messages}
+          logs={logs}
+          suggestions={suggestions}
+          currentPageInfo={currentPageInfo}
+          isInEditor={isInEditor}
+          editingTableId={editingTableId}
+          proactiveService={proactiveService}
+        />
+      )}
     </div>
   );
 };

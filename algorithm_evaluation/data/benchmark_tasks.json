@@ -1,2467 +1,410 @@
 [
   {
-    "description": "Extract all camera products from Amazon and sort them by price in ascending order.",
+    "description": "Extract all camera products from Amazon, clean the price format, and sort them by price in ascending order.",
     "source_pages": [
       "amazon_cameras"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "amazon_cameras"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "product-listing"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Price",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "Price",
-          "order": "asc"
-        }
-      }
     ],
     "task_id": "task_001",
     "difficulty": "easy"
   },
   {
-    "description": "List all used camera listings from eBay and filter out those with a 'Buy It Now' option.",
+    "description": "Filter eBay used camera listings to show only items with a 'Buy It Now' price, then sort these listings by 'Current Bid' in descending order.",
     "source_pages": [
       "ebay_cameras"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "ebay_cameras"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "listing-card"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Buy It Now",
-          "operator": "exists"
-        }
-      }
     ],
     "task_id": "task_002",
     "difficulty": "easy"
   },
   {
-    "description": "Identify and list countries with a negative population growth rate from Wikipedia.",
+    "description": "From the Wikipedia list of countries by population, extract the data and convert the growth rate to absolute numbers without symbols, then filter for countries with a positive growth rate.",
     "source_pages": [
       "wikipedia_countries"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "wikipedia_countries"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "country-row"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Growth Rate",
-          "operator": "<",
-          "value": 0
-        }
-      }
     ],
     "task_id": "task_003",
     "difficulty": "easy"
   },
   {
-    "description": "Extract the top 10 IMDb movies and sort them by the number of votes they received.",
+    "description": "List the top 30 IMDb movies, split the 'Genre' column to only show the primary genre, and then filter the list to display only 'Drama' movies.",
     "source_pages": [
       "imdb_movies"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "imdb_movies"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "movie-listing"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Votes",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "Votes",
-          "order": "desc"
-        }
-      }
     ],
     "task_id": "task_004",
     "difficulty": "easy"
   },
   {
-    "description": "List all climate datasets from Kaggle that have been updated in the last 6 months.",
+    "description": "Normalize the dataset sizes on Kaggle to megabytes (MB), then sort the datasets by size in descending order.",
     "source_pages": [
       "kaggle_datasets"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "kaggle_datasets"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "dataset-card"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Updated",
-          "operator": "<=",
-          "value": "6 months ago"
-        }
-      }
     ],
     "task_id": "task_005",
     "difficulty": "easy"
   },
   {
-    "description": "Find and list GitHub data analysis repositories that have been updated in the past month.",
+    "description": "Extract GitHub data analysis repositories, convert 'Stars' from the k format to a number, and filter to show only repositories with more than 100 stars.",
     "source_pages": [
       "github_repos"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "github_repos"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "repo-listing"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Updated",
-          "operator": "<=",
-          "value": "1 month ago"
-        }
-      }
     ],
     "task_id": "task_006",
     "difficulty": "easy"
   },
   {
-    "description": "Identify and list the top 5 trending Twitter topics based on the number of tweets.",
+    "description": "From Twitter trending topics, remove the K suffix from the Tweets column and sort by Tweets in descending order.",
     "source_pages": [
       "twitter_trending"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "twitter_trending"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "trending-topic"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Tweets",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "Tweets",
-          "order": "desc"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Rank",
-          "operator": "<=",
-          "value": 5
-        }
-      }
     ],
     "task_id": "task_007",
     "difficulty": "easy"
   },
   {
-    "description": "Extract and list Reddit data science hot posts with more than 100 upvotes.",
+    "description": "List Reddit r/datascience hot posts, convert 'Upvotes' from the k format to a number, and filter for posts with more than 1k upvotes.",
     "source_pages": [
       "reddit_posts"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "reddit_posts"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "post-card"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Upvotes",
-          "operator": ">",
-          "value": 100
-        }
-      }
     ],
     "task_id": "task_008",
     "difficulty": "easy"
   },
   {
-    "description": "Filter LinkedIn data analyst job postings for senior-level positions only.",
+    "description": "Filter LinkedIn data analyst job postings to show only 'Senior' level positions and sort by the number of applicants in descending order.",
     "source_pages": [
       "linkedin_jobs"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "linkedin_jobs"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "job-listing"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Level",
-          "operator": "=",
-          "value": "Senior"
-        }
-      }
     ],
     "task_id": "task_009",
     "difficulty": "easy"
   },
   {
-    "description": "List Stack Overflow Python questions with more than 1000 views.",
+    "description": "Sort Stack Overflow Python questions by 'Votes' in descending order, then filter to show questions with more than 100 votes.",
     "source_pages": [
       "stackoverflow_questions"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "stackoverflow_questions"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "question-card"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Views",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Views",
-          "operator": ">",
-          "value": 1000
-        }
-      }
     ],
     "task_id": "task_010",
     "difficulty": "easy"
   },
   {
-    "description": "Sort major city weather forecasts by humidity levels in ascending order.",
+    "description": "Convert the temperature in Weather.com major city forecasts to Celsius, then filter to display only cities with a temperature below 20°C.",
     "source_pages": [
       "weather_cities"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "weather_cities"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "weather-card"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Humidity",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "Humidity",
-          "order": "asc"
-        }
-      }
     ],
     "task_id": "task_011",
     "difficulty": "easy"
   },
   {
-    "description": "Find Zillow home listings with at least 3 bedrooms and 2 bathrooms.",
+    "description": "Extract Zillow home listings, remove the '$' and commas from the price, and sort by price in ascending order.",
     "source_pages": [
       "zillow_homes"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "zillow_homes"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "home-card"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Beds",
-          "operator": ">=",
-          "value": 3
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Baths",
-          "operator": ">=",
-          "value": 2
-        }
-      }
     ],
     "task_id": "task_012",
     "difficulty": "easy"
   },
   {
-    "description": "List Google Finance stocks with a positive change in price.",
+    "description": "List Google Finance stock prices, remove the $ and % symbols from the 'Change%' column, and filter for stocks with a positive change.",
     "source_pages": [
       "google_finance"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "google_finance"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "stock-card"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Change",
-          "operator": ">",
-          "value": 0
-        }
-      }
     ],
     "task_id": "task_013",
     "difficulty": "easy"
   },
   {
-    "description": "Extract ESPN NBA team standings and sort by wins in descending order.",
+    "description": "From ESPN NBA team standings, convert 'Win%' from decimal to percentage format and filter to show only teams with a win rate above 50%.",
     "source_pages": [
       "espn_nba"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "espn_nba"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "team-card"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "W",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "W",
-          "order": "desc"
-        }
-      }
     ],
     "task_id": "task_014",
     "difficulty": "easy"
   },
   {
-    "description": "List all Booking.com hotels with a rating of 8.0 or higher.",
+    "description": "List Booking.com hotel search results, convert 'Distance' to kilometers, and filter for hotels within 5 km from the center.",
     "source_pages": [
       "booking_hotels"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "booking_hotels"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "hotel-listing"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Rating",
-          "operator": ">=",
-          "value": 8
-        }
-      }
     ],
     "task_id": "task_015",
     "difficulty": "easy"
   },
   {
-    "description": "Find Yelp restaurants that offer delivery services.",
+    "description": "Normalize the 'Price' column in Yelp restaurant listings from $ to $$$$ to a numerical range (1-4), then filter for restaurants with a price range of 2 or less.",
     "source_pages": [
       "yelp_restaurants"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "yelp_restaurants"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "restaurant-listing"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Delivery",
-          "operator": "=",
-          "value": "Yes"
-        }
-      }
     ],
     "task_id": "task_016",
     "difficulty": "easy"
   },
   {
-    "description": "Extract the top 10 cryptocurrencies by market cap from CoinMarketCap.",
+    "description": "Convert 'Market Cap' in CoinMarketCap top cryptocurrencies from B/M suffixes to numeric billions and millions, then sort by market cap in descending order.",
     "source_pages": [
       "coinmarketcap"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "coinmarketcap"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "crypto-card"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Market Cap",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "Market Cap",
-          "order": "desc"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Rank",
-          "operator": "<=",
-          "value": 10
-        }
-      }
     ],
     "task_id": "task_017",
     "difficulty": "easy"
   },
   {
-    "description": "List Goodreads bestselling books with a rating higher than 4.5.",
+    "description": "Extract the list of Goodreads bestselling books, split the 'Genre' column to show only the primary genre, and filter for 'Fantasy' books.",
     "source_pages": [
       "goodreads_books"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "goodreads_books"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "book-card"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Rating",
-          "operator": ">",
-          "value": 4.5
-        }
-      }
     ],
     "task_id": "task_018",
     "difficulty": "easy"
   },
   {
-    "description": "Identify Crunchbase AI startups that were founded after 2015.",
+    "description": "List Crunchbase AI startup funding, convert 'Funding' from M/B to numeric millions and billions, and filter for startups with at least $100 million in funding.",
     "source_pages": [
       "crunchbase_startups"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "crunchbase_startups"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "startup-listing"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Founded",
-          "operator": ">",
-          "value": 2015
-        }
-      }
     ],
     "task_id": "task_019",
     "difficulty": "easy"
   },
   {
-    "description": "Extract Product Hunt's featured products with more than 500 upvotes.",
+    "description": "From Product Hunt featured products, filter for products with more than 500 upvotes and sort them by the number of comments in descending order.",
     "source_pages": [
       "producthunt_products"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "producthunt_products"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "product-card"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Upvotes",
-          "operator": ">",
-          "value": 500
-        }
-      }
     ],
     "task_id": "task_020",
     "difficulty": "easy"
   },
   {
-    "description": "Extract and compare the average rating of prime vs non-prime camera products on Amazon.",
+    "description": "Extract camera product listings from Amazon and eBay, clean the price formats to remove symbols and letters, merge the listings into a single table, and create a bar chart comparing the price by brand.",
     "source_pages": [
-      "amazon_cameras"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "amazon_cameras"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "product-listing"
-        }
-      },
-      {
-        "tool": "addComputedColumn",
-        "parameters": {
-          "name": "Prime Eligible",
-          "formula": "IF(Prime = '', 'No', 'Yes')"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Rating",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "bar-chart",
-          "columns": [
-            "Prime Eligible",
-            "Rating"
-          ]
-        }
-      }
+      "amazon_cameras",
+      "ebay_cameras"
     ],
     "task_id": "task_021",
     "difficulty": "medium"
   },
   {
-    "description": "Identify and list the top 5 most downloaded climate datasets from Kaggle, including their size in MB.",
+    "description": "Extract population and area data for countries from Wikipedia, calculate the population density by dividing the population by the area for each country, and produce a scatter plot of population vs. density.",
     "source_pages": [
-      "kaggle_datasets"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "kaggle_datasets"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "dataset-listing"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Size",
-          "search": "GB",
-          "replace": "000"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Size",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "Downloads",
-          "order": "desc"
-        }
-      },
-      {
-        "tool": "createTable",
-        "parameters": {
-          "columns": [
-            "Dataset Name",
-            "Size"
-          ]
-        }
-      }
+      "wikipedia_countries"
     ],
     "task_id": "task_022",
     "difficulty": "medium"
   },
   {
-    "description": "Extract the top 10 cryptocurrencies by market cap and create a pie chart of their market cap distribution.",
+    "description": "Extract movie data from IMDb, split the genre column into separate rows for each genre, count the number of movies per genre, and display this information in a bar chart.",
     "source_pages": [
-      "coinmarketcap"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "coinmarketcap"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "crypto-listing"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Market Cap",
-          "search": "B",
-          "replace": "000"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Market Cap",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "Market Cap",
-          "order": "desc"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "pie-chart",
-          "columns": [
-            "Name",
-            "Market Cap"
-          ]
-        }
-      }
+      "imdb_movies"
     ],
     "task_id": "task_023",
     "difficulty": "medium"
   },
   {
-    "description": "Compare the number of high-rated (4.0 and above) books by genre from Goodreads.",
+    "description": "Extract climate dataset information from Kaggle, standardize size units to megabytes, and create a bar chart of dataset sizes.",
     "source_pages": [
-      "goodreads_books"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "goodreads_books"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "book-listing"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Rating",
-          "operator": ">",
-          "value": 4
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Rating",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "bar-chart",
-          "columns": [
-            "Genre",
-            "Title"
-          ]
-        }
-      }
+      "kaggle_datasets"
     ],
     "task_id": "task_024",
     "difficulty": "medium"
   },
   {
-    "description": "List used cameras from eBay with a 'Buy It Now' price lower than $500, sorted by condition.",
+    "description": "Extract data analysis repositories from GitHub, clean the stars column to convert the k suffix to a numeric multiplier, and rank the repositories by stars in a descending order table.",
     "source_pages": [
-      "ebay_cameras"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "ebay_cameras"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "listing"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Buy It Now",
-          "search": "$",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Buy It Now",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Buy It Now",
-          "operator": "<",
-          "value": 500
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "Condition",
-          "order": "asc"
-        }
-      }
+      "github_repos"
     ],
     "task_id": "task_025",
     "difficulty": "medium"
   },
   {
-    "description": "Analyze the trend of stock prices and volume for technology companies from Google Finance.",
+    "description": "Extract trending topics from Twitter, normalize the Tweets column to remove the K suffix and convert to a number, and create a bar chart showing the tweets for the topic topics.",
     "source_pages": [
-      "google_finance"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "google_finance"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "stock-listing"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Volume",
-          "search": "M",
-          "replace": "000000"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Volume",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Company",
-          "operator": "contains",
-          "value": "Technology"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "line-chart",
-          "columns": [
-            "Company",
-            "Price",
-            "Volume"
-          ]
-        }
-      }
+      "twitter_trending"
     ],
     "task_id": "task_026",
     "difficulty": "medium"
   },
   {
-    "description": "Identify Reddit data science posts with more than 1000 upvotes and at least 100 comments.",
+    "description": "Extract hot posts from Reddit, clean the Upvotes column by removing the k suffix and converting to a number, and create a bar chart to show the posts and comments.",
     "source_pages": [
       "reddit_posts"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "reddit_posts"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "post-listing"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Upvotes",
-          "search": "k",
-          "replace": "000"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Upvotes",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Upvotes",
-          "operator": ">",
-          "value": 1000
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Comments",
-          "operator": ">",
-          "value": 100
-        }
-      }
     ],
     "task_id": "task_027",
     "difficulty": "medium"
   },
   {
-    "description": "Extract and visualize the growth rate of countries with a population density less than 50 per km² from Wikipedia.",
+    "description": "Extract data analyst job postings from LinkedIn, calculate the days since each job was posted from the relative dates, and generate a line graph showing the trend of job postings over the last month.",
     "source_pages": [
-      "wikipedia_countries"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "wikipedia_countries"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "country-listing"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Density",
-          "search": "per km²",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Density",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Density",
-          "operator": "<",
-          "value": 50
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "bar-chart",
-          "columns": [
-            "Country",
-            "Growth Rate"
-          ]
-        }
-      }
+      "linkedin_jobs"
     ],
     "task_id": "task_028",
     "difficulty": "medium"
   },
   {
-    "description": "List and sort LinkedIn data analyst job postings by number of applicants in descending order.",
+    "description": "Extract Python questions from Stack Overflow, split the Tags column into separate rows for each tag, count the number of questions per tag, and visualize this in a bar chart.",
     "source_pages": [
-      "linkedin_jobs"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "linkedin_jobs"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "job-posting"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Applicants",
-          "search": " applicants",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Applicants",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "Applicants",
-          "order": "desc"
-        }
-      }
+      "stackoverflow_questions"
     ],
     "task_id": "task_029",
     "difficulty": "medium"
   },
   {
-    "description": "Create a chart showing the temperature and humidity for cities with 'Cloudy' or 'Rain' conditions.",
+    "description": "Extract major city weather forecasts from Weather.com, convert temperature to Celsius where needed, and create a chart showing the temperature of each day.",
     "source_pages": [
       "weather_cities"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "weather_cities"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "weather-forecast"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Condition",
-          "operator": "in",
-          "value": [
-            "Cloudy",
-            "Rain"
-          ]
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "scatter-chart",
-          "columns": [
-            "City",
-            "Temperature",
-            "Humidity"
-          ]
-        }
-      }
     ],
     "task_id": "task_030",
     "difficulty": "medium"
   },
   {
-    "description": "Extract the titles and ratings of IMDb movies directed by 'Christopher Nolan' and visualize their rating distribution.",
+    "description": "Extract home listings from Zillow, clean the price format to remove symbols and commas, convert square footage to square meters, and generate a scatter plot of price vs. square meters.",
     "source_pages": [
-      "imdb_movies"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "imdb_movies"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "movie-listing"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Director",
-          "operator": "=",
-          "value": "Christopher Nolan"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Rating",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "histogram",
-          "columns": [
-            "Title",
-            "Rating"
-          ]
-        }
-      }
+      "zillow_homes"
     ],
     "task_id": "task_031",
     "difficulty": "medium"
   },
   {
-    "description": "Analyze the win percentage of NBA teams with more than 50 wins, showcasing their win-loss record.",
+    "description": "Extract stock prices from Google Finance, clean the Change% column to remove symbols and convert to a number, and create a line chart showing the daily percentage change for selected stocks.",
     "source_pages": [
-      "espn_nba"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "espn_nba"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "team-standings"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "W",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "W",
-          "operator": ">",
-          "value": 50
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "bar-chart",
-          "columns": [
-            "Team",
-            "Win%",
-            "W",
-            "L"
-          ]
-        }
-      }
+      "google_finance"
     ],
     "task_id": "task_032",
     "difficulty": "medium"
   },
   {
-    "description": "Filter Stack Overflow Python questions with more than 500 views and visualize the count of answers.",
+    "description": "Extract NBA team standings from ESPN, clean the Win% column to convert from decimal to percentage, and produce a bar chart ranking teams by wins.",
     "source_pages": [
-      "stackoverflow_questions"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "stackoverflow_questions"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "question-listing"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Views",
-          "search": "k",
-          "replace": "000"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Views",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Views",
-          "operator": ">",
-          "value": 500
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "bar-chart",
-          "columns": [
-            "Title",
-            "Answers"
-          ]
-        }
-      }
+      "espn_nba"
     ],
     "task_id": "task_033",
     "difficulty": "medium"
   },
   {
-    "description": "Extract and visualize the average price of Yelp restaurants with at least 100 reviews, by category.",
+    "description": "Extract hotel search results from Booking.com, clean the Reviews column to remove the word 'reviews' and convert to a number, and create a histogram of hotel ratings.",
     "source_pages": [
-      "yelp_restaurants"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "yelp_restaurants"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "restaurant-listing"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Reviews",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Reviews",
-          "operator": ">",
-          "value": 100
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "bar-chart",
-          "columns": [
-            "Category",
-            "Price"
-          ]
-        }
-      }
+      "booking_hotels"
     ],
     "task_id": "task_034",
     "difficulty": "medium"
   },
   {
-    "description": "List the Zillow home listings with at least 3 bedrooms and 2 bathrooms, sorted by price in ascending order.",
+    "description": "Extract restaurant listings from Yelp, normalize the Price column to a numerical value (e.g., $ = 1, $$ = 2), and generate a histogram showing the distribution of restaurants by price range.",
     "source_pages": [
-      "zillow_homes"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "zillow_homes"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "home-listing"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Price",
-          "search": "$",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Price",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Beds",
-          "operator": ">=",
-          "value": 3
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Baths",
-          "operator": ">=",
-          "value": 2
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "Price",
-          "order": "asc"
-        }
-      }
+      "yelp_restaurants"
     ],
     "task_id": "task_035",
     "difficulty": "medium"
   },
   {
-    "description": "Identify the top 5 GitHub repositories for data analysis, ranked by stars.",
+    "description": "Extract cryptocurrency data from CoinMarketCap, clean the Market Cap column to convert B and M suffixes to numeric multipliers and create a visualization of market cap distribution among the top cryptocurrencies.",
     "source_pages": [
-      "github_repos"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "github_repos"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "repo-listing"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Stars",
-          "search": "k",
-          "replace": "000"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Stars",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "Stars",
-          "order": "desc"
-        }
-      },
-      {
-        "tool": "createTable",
-        "parameters": {
-          "columns": [
-            "Repo Name",
-            "Stars"
-          ]
-        }
-      }
+      "coinmarketcap"
     ],
     "task_id": "task_036",
     "difficulty": "medium"
   },
   {
-    "description": "Create a scatter plot of used camera listings on eBay by current bid and time left, only for cameras in 'Like New' condition.",
+    "description": "Extract bestselling book data from Goodreads, extract the first genre in the Genre column for each item, calculate the average rating per genre, and visualize this in a bar chart.",
     "source_pages": [
-      "ebay_cameras"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "ebay_cameras"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "listing"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Condition",
-          "operator": "=",
-          "value": "Used - Like New"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Current Bid",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "scatter-chart",
-          "columns": [
-            "Current Bid",
-            "Time Left"
-          ]
-        }
-      }
+      "goodreads_books"
     ],
     "task_id": "task_037",
     "difficulty": "medium"
   },
   {
-    "description": "List Booking.com hotels with a rating over 8.0, sorted by distance from city center in ascending order.",
+    "description": "Extract AI startup funding data from Crunchbase, standardize funding amounts to millions of dollars, and create a bar chart showing the top 5 startups by funding.",
     "source_pages": [
-      "booking_hotels"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "booking_hotels"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "hotel-listing"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Rating",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Rating",
-          "operator": ">",
-          "value": 8
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Distance",
-          "search": " mi from center",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Distance",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "Distance",
-          "order": "asc"
-        }
-      }
+      "crunchbase_startups"
     ],
     "task_id": "task_038",
     "difficulty": "medium"
   },
   {
-    "description": "Compare the average prices of used cameras between eBay and Amazon. For eBay, use the 'Buy It Now' prices and for Amazon, use the listed prices. Filter out any listings without a price or with a price of $0. Finally, create a bar chart comparing the average prices on both platforms.",
+    "description": "Extract featured product data from Product Hunt, convert the Upvotes column from natural language to numbers, and generate a bar chart of the top 10 products by upvotes.",
     "source_pages": [
-      "ebay_cameras",
-      "amazon_cameras"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "ebay_cameras"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "product-card"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Buy It Now",
-          "find": "$",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Buy It Now",
-          "find": ",",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Buy It Now",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Buy It Now",
-          "operator": ">",
-          "value": 0
-        }
-      },
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "amazon_cameras"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "product-card"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Price",
-          "find": "$",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Price",
-          "find": ",",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Price",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Price",
-          "operator": ">",
-          "value": 0
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "barChart",
-          "xAxis": [
-            "eBay",
-            "Amazon"
-          ],
-          "yAxis": "averagePrice"
-        }
-      }
+      "producthunt_products"
     ],
     "task_id": "task_039",
     "difficulty": "medium"
   },
   {
-    "description": "Identify the top 5 most popular GitHub data analysis repositories based on stars. Clean the 'Stars' column to convert it from the 'k' format to a full numeric value, then sort the repositories by stars in descending order. Finally, create a table listing these top 5 repositories with their Repo Name, Stars, and Language.",
+    "description": "Combine job postings from LinkedIn and Stack Overflow questions to identify trends in data analyst skills demand, convert relative dates to absolute, and create a timeline visualization of job postings and Python question frequency over time.",
     "source_pages": [
-      "github_repos"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "github_repos"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "repo-card"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Stars",
-          "find": "k",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Stars",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "addComputedColumn",
-        "parameters": {
-          "newColumn": "TrueStars",
-          "formula": "Stars * 1000"
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "TrueStars",
-          "order": "desc"
-        }
-      },
-      {
-        "tool": "createTable",
-        "parameters": {
-          "columns": [
-            "Repo Name",
-            "TrueStars",
-            "Language"
-          ]
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Rank",
-          "operator": "<=",
-          "value": 5
-        }
-      }
+      "linkedin_jobs",
+      "stackoverflow_questions"
     ],
     "task_id": "task_040",
     "difficulty": "medium"
   },
   {
-    "description": "Merge camera listings from Amazon and eBay, standardize price formats, and create a visualization of average price by brand.",
+    "description": "Merge camera listings from Amazon and eBay, standardize price formats, and identify the top 10 most expensive cameras combined from both platforms. Visualize the price of top 10 cameras by brand.",
     "source_pages": [
       "amazon_cameras",
       "ebay_cameras"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "amazon_cameras"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "product-card"
-        }
-      },
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "ebay_cameras"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "product-listing"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Price",
-          "find": "$",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Price",
-          "find": ",",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Price",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "mergeInstances",
-        "parameters": {}
-      },
-      {
-        "tool": "addComputedColumn",
-        "parameters": {
-          "name": "Average Price",
-          "formula": "mean(Price)"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "bar",
-          "xColumn": "Brand",
-          "yColumn": "Average Price"
-        }
-      }
     ],
     "task_id": "task_041",
     "difficulty": "hard"
   },
   {
-    "description": "Compare the growth rate of countries from Wikipedia by population density, clean data formats, and visualize the top 10.",
+    "description": "Compare the population density of countries from Wikipedia with their growth rates. Clean the data, calculate the average growth rate for countries with a density above the median, and create a scatter plot of density vs growth rate.",
     "source_pages": [
       "wikipedia_countries"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "wikipedia_countries"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "country-row"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Density",
-          "find": " per km²",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Density",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Growth Rate",
-          "find": "%",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Growth Rate",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "tableSort",
-        "parameters": {
-          "column": "Density",
-          "order": "desc"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Rank",
-          "operator": "<=",
-          "value": 10
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "scatter",
-          "xColumn": "Density",
-          "yColumn": "Growth Rate"
-        }
-      }
     ],
     "task_id": "task_042",
     "difficulty": "hard"
   },
   {
-    "description": "Aggregate top IMDb movies and Goodreads bestselling books by year, visualize the count of top-rated (above 4.0) movies and books per year.",
+    "description": "Merge the IMDb movies dataset with the Goodreads bestselling books dataset, standardize the rating formats, separate genres for movies, and visualize the distribution of ratings across books and movies.",
     "source_pages": [
       "imdb_movies",
       "goodreads_books"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "imdb_movies"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "movie-listing"
-        }
-      },
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "goodreads_books"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "book-listing"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Rating",
-          "operator": ">",
-          "value": 4
-        }
-      },
-      {
-        "tool": "mergeInstances",
-        "parameters": {}
-      },
-      {
-        "tool": "addComputedColumn",
-        "parameters": {
-          "name": "Year",
-          "formula": "extract(Year)"
-        }
-      },
-      {
-        "tool": "addComputedColumn",
-        "parameters": {
-          "name": "Content Count",
-          "formula": "count(Year)"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "line",
-          "xColumn": "Year",
-          "yColumn": "Content Count"
-        }
-      }
     ],
     "task_id": "task_043",
     "difficulty": "hard"
   },
   {
-    "description": "Create a comprehensive dataset of data analysis GitHub repositories and Kaggle datasets, focusing on Python language, including a calculation of popularity metrics.",
+    "description": "Combine GitHub data analysis repositories with Stack Overflow Python questions to identify trends in data analysis topics. Clean and standardize the data, including converting 'k' suffix to numeric, and visualize the top repos with the most stars.",
     "source_pages": [
       "github_repos",
-      "kaggle_datasets"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "github_repos"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "repo-card"
-        }
-      },
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "kaggle_datasets"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "dataset-card"
-        }
-      },
-      {
-        "tool": "tableFilter",
-        "parameters": {
-          "column": "Language",
-          "operator": "=",
-          "value": "Python"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Stars",
-          "find": "k",
-          "replace": "000"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Stars",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "mergeInstances",
-        "parameters": {}
-      },
-      {
-        "tool": "addComputedColumn",
-        "parameters": {
-          "name": "Popularity",
-          "formula": "Stars + Downloads"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "bar",
-          "xColumn": "Repo Name",
-          "yColumn": "Popularity"
-        }
-      }
+      "stackoverflow_questions"
     ],
     "task_id": "task_044",
     "difficulty": "hard"
   },
   {
-    "description": "Analyze stock market trends from Google Finance by cleaning data formats and visualizing the change in stock prices and volume over time.",
+    "description": "Analyze trends in the job market using LinkedIn data analyst job postings and Crunchbase AI startup funding. Standardize the dates and funding amounts, and create visualizations analyzing the the number of job postings and the amount of funding in the AI sector.",
     "source_pages": [
-      "google_finance"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "google_finance"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "stock-card"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Change",
-          "find": "$",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Change",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Volume",
-          "find": "M",
-          "replace": "000000"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Volume",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "addComputedColumn",
-        "parameters": {
-          "name": "Volatility",
-          "formula": "abs(Change)"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "line",
-          "xColumn": "Ticker",
-          "yColumn": "Volatility"
-        }
-      }
+      "linkedin_jobs",
+      "crunchbase_startups"
     ],
     "task_id": "task_045",
     "difficulty": "hard"
   },
   {
-    "description": "Merge job postings from LinkedIn with trending technologies on Twitter to identify market demand, clean data, and visualize job counts by technology.",
+    "description": "Compare climate dataset downloads and sizes from Kaggle with the popularity (upvotes) of Reddit r/datascience posts. Clean and standardize dataset sizes and post upvotes, and create charts to visualize dataset popularity on Kaggle and the discussion popularity on Reddit respectively.",
     "source_pages": [
-      "linkedin_jobs",
-      "twitter_trending"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "linkedin_jobs"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "job-card"
-        }
-      },
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "twitter_trending"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "trend-card"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Applicants",
-          "find": " applicants",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Applicants",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "mergeInstances",
-        "parameters": {}
-      },
-      {
-        "tool": "addComputedColumn",
-        "parameters": {
-          "name": "Demand",
-          "formula": "Applicants * Tweets"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "bar",
-          "xColumn": "Category",
-          "yColumn": "Demand"
-        }
-      }
+      "kaggle_datasets",
+      "reddit_posts"
     ],
     "task_id": "task_046",
     "difficulty": "hard"
   },
   {
-    "description": "Create a combined dataset of cryptocurrencies and stock prices, clean formatting issues, and calculate a new 'market momentum' metric for analysis.",
+    "description": "Extract weather forecasts from Weather.com and stock prices from Google Finance. Clean and standardize temperature and stock change formats, and visualize the data for analysis respectively.",
     "source_pages": [
-      "coinmarketcap",
+      "weather_cities",
       "google_finance"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "coinmarketcap"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "crypto-card"
-        }
-      },
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "google_finance"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "stock-card"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Market Cap",
-          "find": "B",
-          "replace": "000000000"
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Market Cap",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "mergeInstances",
-        "parameters": {}
-      },
-      {
-        "tool": "addComputedColumn",
-        "parameters": {
-          "name": "Market Momentum",
-          "formula": "(Price * Volume) / Market Cap"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "scatter",
-          "xColumn": "Name",
-          "yColumn": "Market Momentum"
-        }
-      }
     ],
     "task_id": "task_047",
     "difficulty": "hard"
   },
   {
-    "description": "Analyze and visualize the correlation between the weather conditions and popularity of restaurants on Yelp in major cities.",
+    "description": "Extract and analyze the performance of NBA teams from ESPN. Standardize and clean the data, particularly win percentages and streak, and create a visualization to compare the win rates of western and eastern cities.",
     "source_pages": [
-      "weather_cities",
-      "yelp_restaurants"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "weather_cities"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "weather-card"
-        }
-      },
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "yelp_restaurants"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "restaurant-card"
-        }
-      },
-      {
-        "tool": "mergeInstances",
-        "parameters": {}
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Temperature",
-          "find": "°F",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Temperature",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "addComputedColumn",
-        "parameters": {
-          "name": "Popularity Index",
-          "formula": "(Rating * Reviews) / 100"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "scatter",
-          "xColumn": "City",
-          "yColumn": "Popularity Index"
-        }
-      }
+      "espn_nba"
     ],
     "task_id": "task_048",
     "difficulty": "hard"
   },
   {
-    "description": "Merge real estate listings from Zillow with local weather data, clean and prepare data for analysis, and identify correlations between weather conditions and home prices.",
+    "description": "Merge and compare cryptocurrency data from CoinMarketCap with stock prices from Google Finance. Clean data to standardize price and percentage change formats, and visualize which investment type (cryptocurrencies vs stocks) was more volatile over the past week.",
     "source_pages": [
-      "zillow_homes",
-      "weather_cities"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "zillow_homes"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "home-card"
-        }
-      },
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "weather_cities"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "weather-card"
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Price",
-          "find": "$",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "searchAndReplace",
-        "parameters": {
-          "column": "Price",
-          "find": ",",
-          "replace": ""
-        }
-      },
-      {
-        "tool": "convertColumnType",
-        "parameters": {
-          "column": "Price",
-          "newType": "number"
-        }
-      },
-      {
-        "tool": "mergeInstances",
-        "parameters": {}
-      },
-      {
-        "tool": "addComputedColumn",
-        "parameters": {
-          "name": "Weather Impact Score",
-          "formula": "Price / (Temperature + Precipitation)"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "scatter",
-          "xColumn": "Address",
-          "yColumn": "Weather Impact Score"
-        }
-      }
+      "coinmarketcap",
+      "google_finance"
     ],
     "task_id": "task_049",
     "difficulty": "hard"
   },
   {
-    "description": "Combine hotel ratings from Booking.com with Yelp restaurant ratings in tourist cities, clean data, and create an index for tourist satisfaction.",
+    "description": "Combine hotel ratings and prices from Booking.com with restaurant ratings and price ranges from Yelp for major cities. Standardize ratings and price formats, and create a combined 'city attractiveness' index based on average hotel and restaurant ratings. Visualize the top 5 cities with the highest attractiveness index.",
     "source_pages": [
       "booking_hotels",
       "yelp_restaurants"
-    ],
-    "golden_tool_sequence": [
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "booking_hotels"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "hotel-card"
-        }
-      },
-      {
-        "tool": "openPage",
-        "parameters": {
-          "url": "yelp_restaurants"
-        }
-      },
-      {
-        "tool": "extractBatch",
-        "parameters": {
-          "selector": "restaurant-card"
-        }
-      },
-      {
-        "tool": "mergeInstances",
-        "parameters": {}
-      },
-      {
-        "tool": "addComputedColumn",
-        "parameters": {
-          "name": "Tourist Satisfaction Index",
-          "formula": "(Hotel Rating + Restaurant Rating) / 2"
-        }
-      },
-      {
-        "tool": "createVisualization",
-        "parameters": {
-          "type": "bar",
-          "xColumn": "City",
-          "yColumn": "Tourist Satisfaction Index"
-        }
-      }
     ],
     "task_id": "task_050",
     "difficulty": "hard"
