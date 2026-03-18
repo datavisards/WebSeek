@@ -123,7 +123,7 @@ Save your work at any point:
 Basic extraction and editing work with just the OpenRouter key. The backend is needed for snapshots and the server-side chart rendering fallback.
 
 **Which LLM models are supported?**
-Any model available on OpenRouter. The default is `google/gemini-2.0-flash-001`. You can change it in Settings.
+Any model available on OpenRouter. The default is `google/gemini-2.5-flash`. You can change it in Settings.
 
 **Is my data sent anywhere?**
 Only the LLM prompt (which may include page content and table data) is sent to OpenRouter. No data is stored by Anthropic or OpenRouter beyond their standard API logging policies.

@@ -23,8 +23,8 @@ export interface ApiSettings {
 
 const DEFAULT_API_SETTINGS: ApiSettings = {
     apiKey: import.meta.env.WXT_OPENROUTER_KEY || '',
-    baseURL: 'https://openrouter.ai/api/v1',
-    model: 'google/gemini-2.5-flash',
+    baseURL: import.meta.env.VITE_OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+    model: import.meta.env.VITE_LLM_MODEL || 'google/gemini-2.5-flash',
 };
 
 export function getApiSettings(): ApiSettings {
