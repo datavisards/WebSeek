@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { Message, Instance, ChatType } from '../types';
 import { chatWithAgent } from '../api-selector';
 import { generateInstanceContext, detectMarkdown, renderMarkdown, generateId, updateInstances } from '../utils';
+import { pruneHtmlContext } from '../context-filter';
 import { proactiveService } from '../proactive-service-enhanced';
 import { systemLogger } from '../system-logger';
 import './chattab.css';
@@ -260,7 +261,7 @@ const ChatTab: React.FC<ChatTabProps> = ({
                 conversationHistory,
                 textContext,
                 imageContext,
-                htmlContext,
+                pruneHtmlContext(htmlContext, currentInstances),
                 logs,
                 applicationContext
             );

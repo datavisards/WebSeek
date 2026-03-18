@@ -18,9 +18,11 @@ import { useInputHandlers } from './useInputHandlers';
 import SnapshotStatusIndicator from './SnapshotStatusIndicator';
 import VisualizationRenderer from './visualizationrenderer';
 import './instanceview.css';
+import FirstTimeBanner from './FirstTimeBanner';
 import { message } from 'vega-lite/types_unstable/log/index.js';
 import { chatWithAgent } from '../api-selector';
 import { ProactiveSuggestion } from '../types';
+import { pruneHtmlContext, getReferencedPageIds } from '../context-filter';
 import { proactiveService } from '../proactive-service-enhanced';
 
 // Props interface for the component
@@ -403,6 +405,21 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           newX = instanceX + deltaX;
           newWidth = instanceWidth - deltaX;
           newHeight = instanceHeight + deltaY;
+          break;
+        // Edge handles
+        case 'right':
+          newWidth = instanceWidth + deltaX;
+          break;
+        case 'left':
+          newX = instanceX + deltaX;
+          newWidth = instanceWidth - deltaX;
+          break;
+        case 'bottom':
+          newHeight = instanceHeight + deltaY;
+          break;
+        case 'top':
+          newY = instanceY + deltaY;
+          newHeight = instanceHeight - deltaY;
           break;
       }
 
@@ -923,19 +940,22 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     let port = browser.runtime.connect({ name: 'side-panel' });
     bgPort.current = port;
     port.onMessage.addListener((msg) => {
-      // Handle HTML content via pageId - fetch asynchronously
+      // Handle HTML content via pageId - lazy fetch (only if referenced or already cached)
       if (msg.pageURL && msg.pageId) {
-        fetchHTMLContent(msg.pageId, msg.pageURL);
+        const alreadyCached = !!htmlContextRef.current?.[msg.pageId];
+        const referencedIds = getReferencedPageIds(instancesRef.current);
+        if (alreadyCached || referencedIds.has(msg.pageId)) {
+          fetchHTMLContent(msg.pageId, msg.pageURL);
+        }
+        // Otherwise skip: no instance references this page yet, avoid context bloat
       }
 
       // Handle messages (msg.action, etc.)
       if (msg.action === 'element_selected') {
         handleElementSelected(msg);
       } else if (msg.action === 'snapshot_ready') {
-        // Handle snapshot completion - this is when real pageId becomes available
+        // Handle snapshot completion - user is actively capturing; always fetch
         if (msg.pageId && msg.url) {
-          
-          // Fetch HTML content for the pageId
           fetchHTMLContent(msg.pageId, msg.url);
         }
       } else if (msg.action === 'screenshot_finished') {
@@ -2490,7 +2510,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         // If using LLM, we need to generate the context first
         const { imageContext, textContext } = await generateInstanceContext(targetInstances);
         // let result = await parseLogWithAgent(logs, textContext, imageContext, htmlContext, instance.id);
-        let result = await chatWithAgent('infer', userMsg, messages, textContext, imageContext, htmlContextRef.current, logs);
+        let result = await chatWithAgent('infer', userMsg, messages, textContext, imageContext, pruneHtmlContext(htmlContextRef.current, instances), logs);
         message = result.message;
         newInstances = result.instances || [];
       } else {
@@ -3123,6 +3143,16 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         ) : (
           // Default Instance View
           <>
+            {/* First-time canvas/capture tip */}
+            <FirstTimeBanner
+              storageKey="webseek_ftip_canvas"
+              steps={[
+                { icon: '🖱️', text: 'Navigate to any webpage and click elements to capture them onto this canvas.' },
+                { icon: '📊', text: 'Click "Table" or "Visualization" in the toolbar to create data artifacts.' },
+                { icon: '↔️', text: 'Drag artifacts to reposition. Drag the edge handles to resize them.' },
+                { icon: '🖱️', text: 'Right-click any artifact for options like rename, export, or infer.' },
+              ]}
+            />
             <InstanceViewHeader
               webToolsOpen={webToolsOpen}
               setWebToolsOpen={setWebToolsOpen}
@@ -3220,7 +3250,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                       height: getInstanceGeometry(instance).height,
                       cursor: mode === 'select' ? 'pointer' : (draggingInstanceId === instance.id ? 'grabbing' : 'grab'),
                       userSelect: 'none',
-                      maxWidth: '200px',
                       wordBreak: 'break-word',
                       background: selectedInstanceIds.includes(instance.id) ? '#e6f2ff' : 'white',
                       border: selectedInstanceIds.includes(instance.id) ? '2px solid #0078ff' : '1px solid #ddd',
@@ -3298,8 +3327,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                     ) : instance.type === 'table' ? (
                       <div
                         style={{
-                          maxWidth: '100%',
-                          maxHeight: '100%',
+                          width: '100%',
+                          height: '100%',
                           display: 'grid',
                           gridTemplateRows: `repeat(${instance.rows}, 1fr)`,
                           gridTemplateColumns: `repeat(${instance.cols}, 1fr)`,
@@ -3370,8 +3399,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                                     src={cell.src}
                                     alt="thumbnail"
                                     style={{
-                                      width: '30px',
-                                      height: '30px',
+                                      width: '100%',
+                                      height: '100%',
                                       objectFit: 'cover',
                                       pointerEvents: 'none',
                                     }}
@@ -3395,7 +3424,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                         })}
                       </div>
                     ) : instance.type === 'visualization' ? (
-                      instance.thumbnail ? (
+                      // Only use stored thumbnail if it is a data URI (persists across sessions).
+                      // Blob URLs (blob:...) become invalid after reload — fall through to regenerate.
+                      instance.thumbnail && instance.thumbnail.startsWith('data:') ? (
                         <img
                           key={instance.id}
                           src={instance.thumbnail}
@@ -3408,13 +3439,12 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                           }}
                         />
                       ) : (
-                        <VisualizationThumbnailGenerator 
+                        <VisualizationThumbnailGenerator
                           key={instance.id}
                           instance={instance}
                           onThumbnailGenerated={(thumbnailUrl: string) => {
-                            // Update the instance with the generated thumbnail
-                            const updatedInstances = instances.map(inst => 
-                              inst.id === instance.id 
+                            const updatedInstances = instances.map(inst =>
+                              inst.id === instance.id
                                 ? { ...inst, thumbnail: thumbnailUrl }
                                 : inst
                             );
@@ -3425,26 +3455,16 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                     ) : null}
                     {selectedInstanceId === instance.id && (
                       <>
-                        <div
-                          className="resizer"
-                          data-direction="top-left"
-                          onMouseDown={handleResizerMouseDown('top-left', instance.id)}
-                        />
-                        <div
-                          className="resizer"
-                          data-direction="top-right"
-                          onMouseDown={handleResizerMouseDown('top-right', instance.id)}
-                        />
-                        <div
-                          className="resizer"
-                          data-direction="bottom-right"
-                          onMouseDown={handleResizerMouseDown('bottom-right', instance.id)}
-                        />
-                        <div
-                          className="resizer"
-                          data-direction="bottom-left"
-                          onMouseDown={handleResizerMouseDown('bottom-left', instance.id)}
-                        />
+                        {/* Corner handles */}
+                        <div className="resizer" data-direction="top-left" onMouseDown={handleResizerMouseDown('top-left', instance.id)} />
+                        <div className="resizer" data-direction="top-right" onMouseDown={handleResizerMouseDown('top-right', instance.id)} />
+                        <div className="resizer" data-direction="bottom-right" onMouseDown={handleResizerMouseDown('bottom-right', instance.id)} />
+                        <div className="resizer" data-direction="bottom-left" onMouseDown={handleResizerMouseDown('bottom-left', instance.id)} />
+                        {/* Edge handles */}
+                        <div className="resizer" data-direction="right" onMouseDown={handleResizerMouseDown('right', instance.id)} />
+                        <div className="resizer" data-direction="left" onMouseDown={handleResizerMouseDown('left', instance.id)} />
+                        <div className="resizer" data-direction="bottom" onMouseDown={handleResizerMouseDown('bottom', instance.id)} />
+                        <div className="resizer" data-direction="top" onMouseDown={handleResizerMouseDown('top', instance.id)} />
                       </>
                     )}
                   </div>

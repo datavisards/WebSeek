@@ -1044,12 +1044,14 @@ Before suggesting any sort operation, you MUST:
     - Column data types that support reasonable imputation methods
     - Missing data percentage that makes filling worthwhile (10%-80% missing)`;
 
-        case 'interactive-filtering-highlighting':
-          return `- ${rule.name}: You MUST verify that linked data exists for meaningful interactive filtering. Check:
-    - Presence of both tabular data and visualizations
-    - Common data fields that can be linked between instances
-    - User benefit from cross-filtering capabilities
-    - Technical feasibility of implementing the interaction`;
+        case 'suggest-additional-visualization':
+          return `- ${rule.name}: Suggest a NEW chart using the "createVisualization" tool. You MUST:
+    - Pick a table that has at least 2 numeral columns (use the exact table instanceId)
+    - Choose a chart type appropriate for those columns (bar, line, scatter, or histogram)
+    - Set xAxis and yAxis to actual column names from that table's columnNames array
+    - Provide a descriptive title for the chart
+    - Do NOT suggest a chart that already exists for the same column pair
+    - Use a single "toolCall" with function "createVisualization" — no toolSequence needed`;
 
         case 'suggest-useful-websites':
           return `- ${rule.name}: **DEMO MODE - HARD-CODED CAMERA WEBSITES**: For this demo, ALWAYS suggest these three camera shopping websites regardless of context:

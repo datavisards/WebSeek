@@ -75,6 +75,21 @@ class WebSocketService {
   private isConnecting: boolean = false;
   private pingInterval: NodeJS.Timeout | null = null;
 
+  // Context provider - set by sidepanel to allow WebSocket to access current state
+  private contextProvider: {
+    getInstances: () => import('./types').Instance[];
+    getHtmlContext: () => Record<string, { pageURL: string; htmlContent: string }>;
+    getMessages: () => import('./types').Message[];
+  } | null = null;
+
+  registerContextProvider(provider: {
+    getInstances: () => import('./types').Instance[];
+    getHtmlContext: () => Record<string, { pageURL: string; htmlContent: string }>;
+    getMessages: () => import('./types').Message[];
+  }): void {
+    this.contextProvider = provider;
+  }
+
   constructor(url: string = `ws://${import.meta.env.VITE_BACKEND_WS_URL}/ws` || 'ws://localhost:8000/ws') {
     this.url = url;
     this.clientId = this.generateClientId();
@@ -257,27 +272,44 @@ class WebSocketService {
 
   // Context API methods
   private async getHtmlContent(url?: string): Promise<any> {
-    // TODO: Implement direct HTML content retrieval
-    // This would need to interface with the content script or background script
-    return { success: false, error: 'HTML content retrieval not implemented' };
+    if (!this.contextProvider) return { success: false, error: 'No context provider registered' };
+    const htmlContext = this.contextProvider.getHtmlContext();
+    // Find page by URL
+    const entry = Object.entries(htmlContext).find(([, data]) => data.pageURL === url);
+    if (!entry) return { success: false, error: `No HTML snapshot found for URL: ${url}` };
+    const [, data] = entry;
+    return { success: true, html: data.htmlContent, url: data.pageURL };
   }
 
   private async getMetadata(instanceIds?: string[]): Promise<any> {
-    // TODO: Implement direct metadata retrieval
-    // This would need to access instance data from the current context
-    return { success: false, error: 'Metadata retrieval not implemented' };
+    if (!this.contextProvider) return { success: false, error: 'No context provider registered' };
+    const instances = this.contextProvider.getInstances();
+    const filtered = instanceIds && !instanceIds.includes('<all>')
+      ? instances.filter(i => instanceIds.includes(i.id))
+      : instances;
+    // Strip large fields for metadata response
+    const metadata = filtered.map(inst => {
+      const { ...meta } = inst as any;
+      if (meta.type === 'image') delete meta.src; // images need separate call
+      return meta;
+    });
+    return { success: true, instances: metadata };
   }
 
   private async getImageContent(instanceIds?: string[]): Promise<any> {
-    // TODO: Implement direct image content retrieval
-    // This would need to access image data from instances
-    return { success: false, error: 'Image content retrieval not implemented' };
+    if (!this.contextProvider) return { success: false, error: 'No context provider registered' };
+    const instances = this.contextProvider.getInstances();
+    const imageInstances = instances.filter(i =>
+      i.type === 'image' && (!instanceIds || instanceIds.includes('<all>') || instanceIds.includes(i.id))
+    );
+    const images = imageInstances.map(i => ({ id: i.id, src: (i as any).src }));
+    return { success: true, images };
   }
 
   private async getChatHistory(): Promise<any> {
-    // TODO: Implement direct chat history retrieval
-    // This would need to access chat messages from the current session
-    return { success: false, error: 'Chat history retrieval not implemented' };
+    if (!this.contextProvider) return { success: false, error: 'No context provider registered' };
+    const messages = this.contextProvider.getMessages();
+    return { success: true, messages };
   }
 
   // Start ping interval

@@ -4,6 +4,7 @@ import VisualizationRenderer from './visualizationrenderer';
 import { Instance, ProactiveSuggestion } from '../types';
 import GhostInstance from './GhostInstance';
 import './visualizationeditor.css';
+import FeatureTutorialModal from './FeatureTutorialModal';
 
 interface VisualizationEditorProps {
   initialSpec: object | string;
@@ -158,6 +159,15 @@ const VisualizationEditor: React.FC<VisualizationEditorProps> = ({
         </div>
       </div>
 
+      <FeatureTutorialModal
+        storageKey="webseek_ftip_viz_editor"
+        steps={[
+          { icon: '📊', title: 'Vega-Lite Editor', content: 'Edit the JSON spec on the left to design your chart. The preview updates as you type.' },
+          { icon: '🔗', title: 'Load Data', content: 'Use "Import Data from Instance" to bind a captured table as the data source, then click "Insert as data.values".' },
+          { icon: '👁️', title: 'Live Preview', content: 'The chart preview on the right updates instantly. JSON errors are highlighted in red.' },
+          { icon: '💾', title: 'Save Chart', content: 'Click Save to place the finished chart on your canvas.' },
+        ]}
+      />
       <main className="vis-editor-main">
         {/* Left Panel: Editor and Data Controls */}
         <div className="vis-editor-panel">

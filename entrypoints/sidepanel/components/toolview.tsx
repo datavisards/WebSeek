@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Message, Instance, ProactiveSuggestion } from '../types';
+import { Message, Instance, ProactiveSuggestion, ToolCall } from '../types';
 import './toolview.css';
 import ChatTab from './chattab';
 import HistoryTab from './historytab';
@@ -23,8 +23,8 @@ interface ToolViewProps {
     onAcceptSuggestion?: (suggestionId: string) => void;
     onDismissSuggestion?: (suggestionId: string) => void;
     onDismissAllSuggestions?: () => void; // Add dismiss all callback
-    onExecuteTool?: (toolCall: { function: string; parameters: any }, suggestionId: string) => void;
-    onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => void;
+    onExecuteTool?: (toolCall: ToolCall, suggestionId: string) => void;
+    onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: ToolCall }> }, suggestionId: string) => void;
     // History restoration callback
     onRestoreToCheckpoint?: (logIndex: number) => void;
     // Application state context
@@ -33,6 +33,7 @@ interface ToolViewProps {
     editingTableId?: string | null;
     onTableModified?: (tableId: string) => void; // Add callback for table modifications
     updateHTMLContext?: React.Dispatch<React.SetStateAction<Record<string, { pageURL: string, htmlContent: string }>>>;
+    onOpenApiSettings?: () => void;
 }
 
 const ToolView: React.FC<ToolViewProps> = ({
@@ -58,7 +59,8 @@ const ToolView: React.FC<ToolViewProps> = ({
     isInEditor,
     editingTableId,
     onTableModified,
-    updateHTMLContext
+    updateHTMLContext,
+    onOpenApiSettings
 }) => {
     const [activeRightTab, setActiveRightTab] = useState<'chat' | 'history' | 'logs'>('chat');
     const [showSystemLogs, setShowSystemLogs] = useState(false);
@@ -116,6 +118,13 @@ const ToolView: React.FC<ToolViewProps> = ({
                     >
                         History {logs.length > 0 && `(${logs.length})`}
                     </h3>
+                    {onOpenApiSettings && (
+                        <button
+                            onClick={onOpenApiSettings}
+                            title="API Settings"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '0 4px', color: '#666', marginLeft: 4 }}
+                        >⚙</button>
+                    )}
                 </div>
                 <div className="collapse-toggle-container">
                     <span className="height-mode-indicator">{getHeightModeDisplay()}</span>

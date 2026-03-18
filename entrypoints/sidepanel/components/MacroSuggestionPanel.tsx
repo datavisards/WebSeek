@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ProactiveSuggestion } from '../types';
+import { ProactiveSuggestion, ToolCall } from '../types';
 import { detectMarkdown, renderMarkdown } from '../utils';
 import { MACRO_TOOLS } from '../macro-tools';
 import './MacroSuggestionPanel.css';
@@ -14,8 +14,8 @@ interface MacroSuggestionPanelProps {
   onAccept: (suggestionId: string) => void;
   onDismiss: (suggestionId: string) => void;
   onDismissAll?: () => void; // Add dismiss all callback
-  onExecuteTool: (toolCall: { function: string; parameters: any }, suggestionId: string) => void;
-  onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => void;
+  onExecuteTool: (toolCall: ToolCall, suggestionId: string) => void;
+  onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: ToolCall }> }, suggestionId: string) => void;
   className?: string;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;

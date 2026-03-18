@@ -73,24 +73,18 @@ export class GlobalUndoManager {
       return;
     }
 
-    // Check for duplicate recording - prevent identical operations within 100ms
-    // TEMPORARILY DISABLED FOR DEBUGGING
+    // Prevent duplicate recordings: same description within 100ms with same instance count.
+    // Uses a lightweight fingerprint rather than deep equality to avoid blocking valid rapid ops.
     const now = Date.now();
     const lastSnapshot = this.stateHistory[this.stateHistory.length - 1];
-    
-    // TODO: Re-enable duplicate prevention after debugging
-    /*
-    if (lastSnapshot && 
+    if (lastSnapshot &&
         (now - lastSnapshot.timestamp) < 100 &&
         lastSnapshot.description === change.description &&
         lastSnapshot.instances.length === change.newState.length &&
         lastSnapshot.logs.length === change.newLogs.length) {
-      console.log('[GlobalUndoManager] Preventing duplicate recording of same operation:', change.description);
-      console.log('[GlobalUndoManager] Time since last:', now - lastSnapshot.timestamp, 'ms');
+      console.log('[GlobalUndoManager] Skipping duplicate recording within 100ms:', change.description);
       return;
     }
-    */
-    console.log('[GlobalUndoManager] Duplicate prevention DISABLED for debugging');
 
     // Create snapshot ID
     const snapshotId = `state_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -203,7 +197,7 @@ export class GlobalUndoManager {
 
     this.currentStateIndex--;
     const targetSnapshot = this.stateHistory[this.currentStateIndex];
-    
+
     console.log('[GlobalUndoManager] Undoing to snapshot:', {
       targetIndex: this.currentStateIndex,
       targetDescription: targetSnapshot.description,
@@ -211,9 +205,14 @@ export class GlobalUndoManager {
       targetLogsCount: targetSnapshot.logs.length,
       targetLogs: targetSnapshot.logs
     });
-    
-    this.applySnapshot(targetSnapshot);
-    this.dispatchStateChanged();
+
+    this.isApplyingUndoRedo = true;
+    try {
+      this.applySnapshot(targetSnapshot);
+      this.dispatchStateChanged();
+    } finally {
+      this.isApplyingUndoRedo = false;
+    }
     return true;
   }
 
@@ -276,7 +275,8 @@ export class GlobalUndoManager {
     if (!this.canUndo()) {
       return null;
     }
-    return this.stateHistory[this.currentStateIndex - 1].description;
+    // Return the description of the current state — this is the action being undone.
+    return this.stateHistory[this.currentStateIndex].description;
   }
 
   /**

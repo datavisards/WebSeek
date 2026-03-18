@@ -284,13 +284,26 @@ function sanitizeJSONString(jsonString: any): any {
         return jsonString;
     }
 
-    // Replace invalid escaped single quotes (e.g., `\'`) with plain quotes (`'`)
-    let sanitized = jsonString.replace(/\\'/g, "'");
+    // Valid JSON escape sequences: \", \\, \/, \b, \f, \n, \r, \t, \uXXXX
+    // Replace any backslash followed by a character that is NOT a valid JSON escape character
+    // with just the character itself.
+    const VALID_ESCAPES = /^["\\/bfnrtu]/;
+    let result = '';
+    for (let i = 0; i < jsonString.length; i++) {
+        if (jsonString[i] === '\\' && i + 1 < jsonString.length) {
+            const next = jsonString[i + 1];
+            if (VALID_ESCAPES.test(next)) {
+                // Keep valid escape sequences
+                result += jsonString[i];
+            } else {
+                // Drop the backslash for invalid escapes (e.g. \', \s, \a, \c, etc.)
+            }
+        } else {
+            result += jsonString[i];
+        }
+    }
 
-    // Replace escaped spaces (`\s`) with actual spaces
-    sanitized = sanitized.replace(/\\s/g, ' ');
-
-    return sanitized;
+    return result;
 }
 
 export function extractJSONFromResponse(response: string) {
@@ -1219,9 +1232,9 @@ const generateVisualizationThumbnailViaBackend = async (spec: object): Promise<s
             throw new Error('Backend response missing SVG content');
         }
 
-        // Convert SVG to blob URL (same as VisualizationRenderer does)
-        const blob = new Blob([json.svg], { type: 'image/svg+xml' });
-        return URL.createObjectURL(blob);
+        // Convert SVG to a data URI so the thumbnail survives extension reloads
+        const b64 = btoa(unescape(encodeURIComponent(json.svg)));
+        return `data:image/svg+xml;base64,${b64}`;
     } catch (error) {
         console.error('Failed to generate visualization thumbnail via backend:', error);
         // Return a placeholder thumbnail as fallback

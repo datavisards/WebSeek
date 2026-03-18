@@ -6,6 +6,7 @@ import { TableInstance, Instance, ProactiveSuggestion, ColumnType } from '../typ
 import { indexToLetters, normalizeTableInstance } from '../utils';
 import { systemLogger } from '../system-logger';
 import './MultiTableEditor.css';
+import FeatureTutorialModal from './FeatureTutorialModal';
 
 // Types for multi-table operations
 interface OpenTable {
@@ -1749,6 +1750,16 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       onPaste={handlePasteEvent}
       tabIndex={0}
     >
+      {/* First-time table editor tutorial modal */}
+      <FeatureTutorialModal
+        storageKey="webseek_ftip_table_editor"
+        steps={[
+          { icon: '📋', title: 'Table Editor', content: 'Drag any captured element from the canvas onto a cell to populate it.' },
+          { icon: '✏️', title: 'Edit Cells', content: 'Double-click a text cell to edit it directly.', tip: 'Tip: Right-click a row/column header for insert, delete, and transform options.' },
+          { icon: '📌', title: 'Capture to Cell', content: 'Select a cell first, then use "Capture to Cell" in the toolbar to capture web content directly into it.' },
+          { icon: '💾', title: 'Save Your Work', content: 'Click Save in the toolbar when done — unsaved changes are shown with a dot (●) on the tab.' },
+        ]}
+      />
       {/* Tab Bar */}
       <div className="tab-bar" style={{ 
         display: 'flex', 
@@ -1851,8 +1862,9 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
               }}
               disabled={!isCaptureEnabled || !selectedCell}
               style={{
-                opacity: (!isCaptureEnabled || !selectedCell) ? 0.5 : 1,
-                backgroundColor: !isCaptureEnabled ? '#ffcccc' : (!selectedCell ? '#ffffcc' : ''),
+                opacity: (!isCaptureEnabled || !selectedCell) ? 0.7 : 1,
+                backgroundColor: (!isCaptureEnabled || !selectedCell) ? '#ccc' : '',
+                color: (!isCaptureEnabled || !selectedCell) ? '#666' : '',
                 cursor: (!isCaptureEnabled || !selectedCell) ? 'not-allowed' : 'pointer'
               }}
               title={!isCaptureEnabled ? "Capture in progress..." : !selectedCell ? "Click on a table cell first to capture content to it" : `Capture content to cell (${selectedCell.row + 1}, ${String.fromCharCode(65 + selectedCell.col)})`}
@@ -2134,7 +2146,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       )}
 
       {/* Available Instances */}
-      <div className="available-instances">
+      {availableInstances.length > 0 && <div className="available-instances">
         <h4 style={{ margin: '10px 0' }}>Add to Table:</h4>
         <div className="instance-thumbs">
           {availableInstances
@@ -2205,7 +2217,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
               </div>
             ))}
         </div>
-      </div>
+      </div>}
 
       {/* Table Selector Modal */}
       {showTableSelector && (

@@ -132,9 +132,78 @@ const TableGrid: React.FC<TableGridProps> = ({
     return table;
   }, [table, currentSuggestion]);
 
-  // Update cell dimensions based on effective table
-  const effectiveCellWidth = Math.max(50, Math.min(200, getInstanceGeometry(table).width / effectiveTable.cols));
-  const effectiveCellHeight = Math.max(50, Math.min(200, getInstanceGeometry(table).height / effectiveTable.rows));
+  // Image modal state
+  const [modalImageSrc, setModalImageSrc] = useState<string | null>(null);
+
+  // Column/row resize state
+  const [colSizeOverrides, setColSizeOverrides] = useState<Map<number, number>>(new Map());
+  const [rowSizeOverrides, setRowSizeOverrides] = useState<Map<number, number>>(new Map());
+  const resizingRef = useRef<{ type: 'col' | 'row'; index: number; startPos: number; startSize: number } | null>(null);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const { type, index, startPos, startSize } = resizingRef.current;
+      if (type === 'col') {
+        const newSize = Math.max(60, startSize + (e.clientX - startPos));
+        setColSizeOverrides(prev => new Map(prev).set(index, newSize));
+      } else {
+        const newSize = Math.max(30, startSize + (e.clientY - startPos));
+        setRowSizeOverrides(prev => new Map(prev).set(index, newSize));
+      }
+    };
+    const handleMouseUp = () => { resizingRef.current = null; };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  // Compute per-column widths based on content
+  const columnWidths = useMemo(() => {
+    const MIN_COL_WIDTH = 120;
+    const CHAR_PX = 8; // approx pixels per character
+    return Array.from({ length: effectiveTable.cols }, (_, colIndex) => {
+      // Width from column name
+      const headerName = table.columnNames?.[colIndex] || indexToLetters(colIndex);
+      let maxChars = headerName.length + 4; // +4 for padding/icons
+      // Width from cell content
+      for (const row of table.cells) {
+        const cell = row[colIndex];
+        if (!cell) continue;
+        if (cell.type === 'image') return 140; // fixed width for image columns
+        if (cell.type === 'text') {
+          const len = Math.min((cell as any).content?.length ?? 0, 40);
+          if (len > maxChars) maxChars = len;
+        }
+      }
+      return Math.max(MIN_COL_WIDTH, maxChars * CHAR_PX);
+    });
+  }, [effectiveTable.cols, table.cells, table.columnNames]);
+
+  // Compute per-row heights based on content type
+  const rowHeights = useMemo(() => {
+    const TEXT_ROW_HEIGHT = 60;
+    const IMAGE_ROW_HEIGHT = 120;
+    return Array.from({ length: effectiveTable.rows }, (_, rowIndex) => {
+      const row = table.cells[rowIndex];
+      if (!row) return TEXT_ROW_HEIGHT;
+      const hasImage = row.some(cell => cell?.type === 'image');
+      return hasImage ? IMAGE_ROW_HEIGHT : TEXT_ROW_HEIGHT;
+    });
+  }, [effectiveTable.rows, table.cells]);
+
+  // Effective sizes: user overrides take precedence over content-driven sizes
+  const effectiveColWidths = useMemo(
+    () => columnWidths.map((w, i) => colSizeOverrides.get(i) ?? w),
+    [columnWidths, colSizeOverrides]
+  );
+  const effectiveRowHeights = useMemo(
+    () => rowHeights.map((h, i) => rowSizeOverrides.get(i) ?? h),
+    [rowHeights, rowSizeOverrides]
+  );
 
   // Helper function to find suggestion for a specific cell
   const getSuggestionForCell = (row: number, col: number): InstanceEvent | null => {
@@ -189,12 +258,14 @@ const TableGrid: React.FC<TableGridProps> = ({
         const cell = table.cells[row]?.[col];
         return cell && cell.id === event.targetId;
       } else if (event.instance) {
-        // For add/update actions, check position
+        // For add/update actions, check position using per-column/row sizes
         const geometry = getInstanceGeometry(event.instance);
-        const cellX = col * effectiveCellWidth;
-        const cellY = row * effectiveCellHeight;
-        return geometry.x >= cellX && geometry.x < cellX + effectiveCellWidth &&
-               geometry.y >= cellY && geometry.y < cellY + effectiveCellHeight;
+        const cellX = effectiveColWidths.slice(0, col).reduce((s, w) => s + w, 0);
+        const colW = effectiveColWidths[col] ?? 120;
+        const cellY = effectiveRowHeights.slice(0, row).reduce((s, h) => s + h, 0);
+        const rowH = effectiveRowHeights[row] ?? 60;
+        return geometry.x >= cellX && geometry.x < cellX + colW &&
+               geometry.y >= cellY && geometry.y < cellY + rowH;
       }
       return false;
     }) || null;
@@ -1488,8 +1559,8 @@ const TableGrid: React.FC<TableGridProps> = ({
       className="table-grid"
       style={{
         display: 'grid',
-        gridTemplateColumns: `50px repeat(${effectiveTable.cols}, ${effectiveCellWidth}px)`,
-        gridTemplateRows: `${headerHeight}px repeat(${effectiveTable.rows}, ${effectiveCellHeight}px)`,
+        gridTemplateColumns: `50px ${effectiveColWidths.map(w => `${w}px`).join(' ')}`,
+        gridTemplateRows: `${headerHeight}px ${effectiveRowHeights.map(h => `${h}px`).join(' ')}`,
         border: '1px solid #ccc',
         width: 'fit-content',
         flex: '1 1 auto',
@@ -1727,6 +1798,17 @@ const TableGrid: React.FC<TableGridProps> = ({
               />
             </div>
           </div>
+          {/* Column resize handle */}
+          {!isReadOnly && (
+            <div
+              style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 5, cursor: 'col-resize', zIndex: 10 }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                resizingRef.current = { type: 'col', index: colIndex, startPos: e.clientX, startSize: effectiveColWidths[colIndex] };
+              }}
+            />
+          )}
         </div>
       ))}
 
@@ -1736,7 +1818,7 @@ const TableGrid: React.FC<TableGridProps> = ({
           style={{
             position: 'absolute',
             top: '30px',
-            left: `${50 + openFilterDropdown * effectiveCellWidth}px`,
+            left: `${50 + effectiveColWidths.slice(0, openFilterDropdown).reduce((s, w) => s + w, 0)}px`,
             zIndex: 2000
           }}
         >
@@ -1770,7 +1852,7 @@ const TableGrid: React.FC<TableGridProps> = ({
           style={{
             position: 'absolute',
             top: '30px',
-            left: `${Math.max(10, 50 + transformPanelColumn * effectiveCellWidth - 100)}px`,
+            left: `${Math.max(10, 50 + effectiveColWidths.slice(0, transformPanelColumn).reduce((s, w) => s + w, 0) - 100)}px`,
             zIndex: 2000
           }}
         >
@@ -1809,9 +1891,21 @@ const TableGrid: React.FC<TableGridProps> = ({
               border: '1px solid #ccc',
               backgroundColor: '#f0f0f0',
               fontWeight: 'bold',
+              position: 'relative',
             }}
           >
             {originalRowIndex + 1}
+            {/* Row resize handle */}
+            {!isReadOnly && (
+              <div
+                style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 5, cursor: 'row-resize', zIndex: 10 }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  resizingRef.current = { type: 'row', index: displayRowIndex, startPos: e.clientY, startSize: effectiveRowHeights[displayRowIndex] };
+                }}
+              />
+            )}
           </div>
         );
       })}
@@ -1938,7 +2032,7 @@ const TableGrid: React.FC<TableGridProps> = ({
                   }}
                   onClick={isReadOnly ? undefined : (e) => handleContentClick(e, displayRowIndex, colIndex, originalRowIndex)}
                 >
-                  {cell ? renderEmbeddedContent(cell, evaluateFormula) : null}
+                  {cell ? renderEmbeddedContent(cell, evaluateFormula, setModalImageSrc) : null}
                   {!isReadOnly && !isEditing && (
                     <button
                       className="remove-cell-content"
@@ -2128,6 +2222,29 @@ const TableGrid: React.FC<TableGridProps> = ({
           </div>
         </div>
       )}
+
+      {/* Image preview modal */}
+      {modalImageSrc && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+            zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={() => setModalImageSrc(null)}
+        >
+          <div style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }} onClick={e => e.stopPropagation()}>
+            <img
+              src={modalImageSrc}
+              alt="Full size"
+              style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 4, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+            />
+            <button
+              onClick={() => setModalImageSrc(null)}
+              style={{ position: 'absolute', top: -14, right: -14, background: '#fff', border: 'none', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', fontSize: 16, boxShadow: '0 2px 6px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >×</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -2135,7 +2252,7 @@ const TableGrid: React.FC<TableGridProps> = ({
 // (Render embedded content function remains unchanged)
 
 // Helper to render different embedded content types (unchanged)
-function renderEmbeddedContent(embedded: EmbeddedInstance, evaluateFormula?: (formula: string) => string) {
+function renderEmbeddedContent(embedded: EmbeddedInstance, evaluateFormula?: (formula: string) => string, onImageClick?: (src: string) => void) {
   switch (embedded.type) {
     case 'text':
       const textContent = embedded.content;
@@ -2144,26 +2261,35 @@ function renderEmbeddedContent(embedded: EmbeddedInstance, evaluateFormula?: (fo
         return <span style={{ color: '#999', fontStyle: 'italic' }}></span>;
       }
       const isFormulaCell = textContent.startsWith('=');
-      const displayContent = (isFormulaCell && evaluateFormula) 
-        ? evaluateFormula(textContent) 
+      const displayContent = (isFormulaCell && evaluateFormula)
+        ? evaluateFormula(textContent)
         : textContent;
       return (
-        <p className={`cell-text ${isFormulaCell ? 'formula' : ''}`} style={{ margin: 0, fontSize: '16px' }}>
+        <p className={`cell-text ${isFormulaCell ? 'formula' : ''}`} style={{ margin: 0, fontSize: '13px' }}>
           {displayContent}
         </p>
       );
     case 'image':
       return (
-        <img
-          src={embedded.src}
-          alt="thumbnail"
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'contain',
-            pointerEvents: 'none',
-          }}
-        />
+        <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <img
+            src={(embedded as any).src}
+            alt="thumbnail"
+            style={{
+              maxWidth: '100%',
+              maxHeight: '100%',
+              objectFit: 'contain',
+              cursor: onImageClick ? 'zoom-in' : 'default',
+              display: 'block',
+            }}
+            onClick={onImageClick ? (e) => { e.stopPropagation(); onImageClick((embedded as any).src); } : undefined}
+          />
+          {onImageClick && (
+            <div style={{ position: 'absolute', bottom: 2, right: 2, background: 'rgba(0,0,0,0.45)', borderRadius: 3, padding: '1px 4px', fontSize: 10, color: '#fff', pointerEvents: 'none' }}>
+              click to expand
+            </div>
+          )}
+        </div>
       );
     case 'sketch':
       return (

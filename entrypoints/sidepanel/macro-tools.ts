@@ -63,92 +63,7 @@ export const MACRO_TOOLS: MacroTool[] = [
     ]
   },
   
-  // === DATA EXTRACTION & WRANGLING ===
-  {
-    name: "selectElements",
-    description: "Automatically identifies and selects relevant DOM elements on webpages for data extraction.",
-    parameters: [
-      {
-        name: "selector",
-        type: "string",
-        description: "CSS selector or pattern to identify elements",
-        required: true
-      },
-      {
-        name: "pageUrl",
-        type: "string",
-        description: "URL of the page to select elements from",
-        required: true
-      }
-    ],
-    examples: [
-      'selectElements(".product-card", "https://amazon.com/s?k=camera")',
-      'selectElements("[data-testid=\'product-item\']", "https://ebay.com/search")'
-    ],
-    constraints: [
-      "Page must be currently loaded or accessible",
-      "Selector should match multiple similar elements"
-    ]
-  },
-  {
-    name: "inferSchema",
-    description: "Analyzes webpage structure and infers data schema for structured extraction from tables and lists.",
-    parameters: [
-      {
-        name: "pageUrl",
-        type: "string",
-        description: "URL of the page to analyze",
-        required: true
-      },
-      {
-        name: "targetElement",
-        type: "string",
-        description: "Selector for the target table or list element",
-        required: true
-      }
-    ],
-    examples: [
-      'inferSchema("https://wikipedia.org/wiki/List_of_countries", "table.wikitable")',
-      'inferSchema("https://amazon.com/s?k=laptop", ".s-result-list")'
-    ],
-    constraints: [
-      "Target element should contain structured data",
-      "Schema inference works best with tables and consistent lists"
-    ]
-  },
-  {
-    name: "extractBatch",
-    description: "Extracts multiple similar data entries from web pages in batch operations using pattern recognition.",
-    parameters: [
-      {
-        name: "pageUrl",
-        type: "string",
-        description: "URL of the page to extract from",
-        required: true
-      },
-      {
-        name: "pattern",
-        type: "string",
-        description: "Pattern or selector to identify similar items",
-        required: true
-      },
-      {
-        name: "maxItems",
-        type: "number",
-        description: "Maximum number of items to extract",
-        required: false,
-        defaultValue: 50
-      }
-    ],
-    examples: [
-      'extractBatch("https://amazon.com/s?k=camera", ".s-result-item", 20)',
-      'extractBatch("https://wikipedia.org/wiki/List_of_cities", "table tr", 100)'
-    ],
-    constraints: [
-      "Pattern should match multiple similar elements",
-      "Extraction preserves data relationships and structure"
-    ]
-  },
+  // === DATA WRANGLING ===
   {
     name: "updateInstance",
     description: "Updates the specified instance with new values. Used for row/column autocomplete.",
@@ -438,10 +353,11 @@ export const MACRO_TOOLS: MacroTool[] = [
     ],
     constraints: [
       "Exactly 2 source instances required",
-      "All source instances must exist and be table type",
+      "BOTH source tables must ALREADY EXIST in the current workspace — never reference a table that the user has not collected yet",
       "For join strategies: joinColumns must specify both leftColumn and rightColumn with actual column names from the respective tables",
       "For union/append strategies: tables should have compatible column structures",
-      "Column names in joinColumns must exist in their respective tables"
+      "Column names in joinColumns must exist in their respective tables",
+      "NEVER pair this tool with openPage in the same toolSequence — the page must be opened and data collected manually before merging is possible"
     ]
   },
   {
@@ -595,6 +511,67 @@ export const MACRO_TOOLS: MacroTool[] = [
       "Specified columns must exist in the source table",
       "Chart type should be appropriate for the data types"
     ]
+  },
+
+  // === TABLE ROW / COLUMN MANIPULATION ===
+  {
+    name: "appendToTable",
+    description: "Adds one or more new rows to an existing table instance.",
+    parameters: [
+      {
+        name: "instanceId",
+        type: "string",
+        description: "The ID of the table instance to append rows to",
+        required: true
+      },
+      {
+        name: "rows",
+        type: "array",
+        description: "Array of row objects to append. Each object maps column names to cell values.",
+        required: true
+      }
+    ],
+    examples: [
+      'appendToTable("table_abc", [{"Name":"Alice","Age":"30"},{"Name":"Bob","Age":"25"}])'
+    ],
+    constraints: [
+      "Instance must exist and be a table type",
+      "Column keys in each row should match the table's existing column names"
+    ]
+  },
+  {
+    name: "addColumnToTable",
+    description: "Adds a new empty column to an existing table instance.",
+    parameters: [
+      {
+        name: "instanceId",
+        type: "string",
+        description: "The ID of the table instance to add a column to",
+        required: true
+      },
+      {
+        name: "columnName",
+        type: "string",
+        description: "Name for the new column",
+        required: true
+      },
+      {
+        name: "columnType",
+        type: "string",
+        description: "Type of the new column",
+        required: false,
+        options: ["categorical", "numeral"],
+        defaultValue: "categorical"
+      }
+    ],
+    examples: [
+      'addColumnToTable("table_abc", "Notes", "categorical")',
+      'addColumnToTable("table_xyz", "Price", "numeral")'
+    ],
+    constraints: [
+      "Instance must exist and be a table type",
+      "Column name must not already exist in the table"
+    ]
   }
 ];
 
@@ -647,14 +624,24 @@ When suggesting a macro action, include a "toolCall" field in your suggestion:
 - Use "tableSort" for suggesting data organization improvements
 - Use "tableFilter" for suggesting data refinement and subset creation
 - Use "createVisualization" for suggesting data exploration through charts
-- Use "exportData" for suggesting data sharing or backup workflows
-- Use "duplicateInstance" for suggesting experimentation or version control
 - Use "searchAndReplace" for suggesting data cleaning operations
-- Use "mergeInstances" for suggesting data consolidation workflows (supports different join column names and multiple join types)
+- Use "mergeInstances" for suggesting data consolidation workflows — ONLY when BOTH tables already exist in the workspace
 - Use "convertColumnType" for suggesting data type conversions (text to numbers, etc.)
 - Use "renameColumn" for suggesting column header standardization and clarity improvements
+- Use "appendToTable" to add rows to an existing table
+- Use "addColumnToTable" to add a new empty column to an existing table
+- Use "addComputedColumn" to derive a new column from an arithmetic formula over existing columns
+- Use "formatColumn" to apply text formatting (uppercase, lowercase, titlecase, trim) to a column
+- Use "fillMissingValues" to fill empty cells using mean, median, mode, constant, or interpolation
 
-**IMPORTANT:** Always ensure the tool call parameters match the exact specifications above and that the suggested action provides genuine value to the user's workflow.
+**CRITICAL TOOL SEQUENCE RULES:**
+- A toolSequence must ONLY contain steps that can ALL be executed immediately with data that already exists
+- NEVER combine "openPage" with table operations (sort, filter, merge, etc.) in the same toolSequence — opening a page does NOT automatically create instances; the user must capture data manually first
+- "mergeInstances" requires BOTH tables to exist RIGHT NOW — never suggest merging a table that will be created "in the future"
+- If a workflow requires the user to first collect data and then process it, suggest these as TWO SEPARATE suggestions, not as steps in one toolSequence
+- Use a single "toolCall" (not toolSequence) for single-step actions
+
+**IMPORTANT:** Always use the exact instance IDs visible in the workspace context. Never invent instance IDs like "Table_BestBuy" for tables that don't exist yet.
 `;
 }
 

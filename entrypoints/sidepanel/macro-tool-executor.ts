@@ -4,7 +4,7 @@
  */
 
 import { validateToolCall } from './macro-tools';
-import { TableInstance, VisualizationInstance, Instance } from './types';
+import { TableInstance, VisualizationInstance, Instance, ToolCall } from './types';
 import { extractNumericalValue, getVisualizationThumbnail } from './utils';
 
 export class MacroToolExecutor {
@@ -78,8 +78,8 @@ export class MacroToolExecutor {
    * Execute a tool call from a macro suggestion
    */
   static async executeTool(
-    toolCall: { function: string; parameters: any }, 
-    currentInstances: Instance[], 
+    toolCall: ToolCall,
+    currentInstances: Instance[],
     updateInstances: (newInstances: Instance[]) => void
   ): Promise<{ success: boolean; message: string; result?: any }> {
     // Validate the tool call
@@ -91,45 +91,63 @@ export class MacroToolExecutor {
       };
     }
 
+    // Handle legacy tools not in the ToolCall union
+    const fn = (toolCall as any).function as string;
+    if (fn === 'exportData') {
+      return await this.executeExportData((toolCall as any).parameters, currentInstances);
+    }
+    if (fn === 'duplicateInstance') {
+      return await this.executeDuplicateInstance((toolCall as any).parameters, currentInstances, updateInstances);
+    }
+    if (fn === 'appendToTable') {
+      return await this.executeAppendToTable((toolCall as any).parameters, currentInstances, updateInstances);
+    }
+    if (fn === 'addColumnToTable') {
+      return await this.executeAddColumnToTable((toolCall as any).parameters, currentInstances, updateInstances);
+    }
+    if (fn === 'updateInstance') {
+      return await this.executeUpdateInstance((toolCall as any).parameters, currentInstances, updateInstances);
+    }
+    if (fn === 'addComputedColumn') {
+      return await this.executeAddComputedColumn((toolCall as any).parameters, currentInstances, updateInstances);
+    }
+    if (fn === 'formatColumn') {
+      return await this.executeFormatColumn((toolCall as any).parameters, currentInstances, updateInstances);
+    }
+
     try {
       switch (toolCall.function) {
         case 'openPage':
           return await this.executeOpenPage(toolCall.parameters);
-        
+
         case 'tableSort':
           return await this.executeTableSort(toolCall.parameters, currentInstances, updateInstances);
-        
+
         case 'tableFilter':
           return await this.executeTableFilter(toolCall.parameters, currentInstances, updateInstances);
-        
+
         case 'createVisualization':
           return await this.executeCreateVisualization(toolCall.parameters, currentInstances, updateInstances);
-        
-        case 'exportData':
-          return await this.executeExportData(toolCall.parameters, currentInstances);
-        
-        case 'duplicateInstance':
-          return await this.executeDuplicateInstance(toolCall.parameters, currentInstances, updateInstances);
-        
+
         case 'searchAndReplace':
           return await this.executeSearchAndReplace(toolCall.parameters, currentInstances, updateInstances);
-        
+
         case 'mergeInstances':
           return await this.executeMergeInstances(toolCall.parameters, currentInstances, updateInstances);
-        
+
         case 'convertColumnType':
           return await this.executeConvertColumnType(toolCall.parameters, currentInstances, updateInstances);
-        
+
         case 'renameColumn':
           return await this.executeRenameColumn(toolCall.parameters, currentInstances, updateInstances);
-        
+
         case 'fillMissingValues':
           return await this.executeFillMissingValues(toolCall.parameters, currentInstances, updateInstances);
-        
+
         default:
           return {
             success: false,
-            message: `Unknown tool function: ${toolCall.function}`
+            message: `Unknown tool function: ${(toolCall as any).function}`
           };
       }
     } catch (error) {
@@ -148,7 +166,7 @@ export class MacroToolExecutor {
       goal: string;
       steps: Array<{
         description: string;
-        toolCall: { function: string; parameters: any };
+        toolCall: ToolCall;
       }>;
     },
     currentInstances: Instance[],
@@ -158,65 +176,68 @@ export class MacroToolExecutor {
     console.log(`📋 Total steps: ${toolSequence.steps.length}`);
     
     const results: any[] = [];
+    const skipped: Array<{ step: number; description: string; reason: string }> = [];
     let instances = [...currentInstances];
-    
+
+    // Errors that indicate a dependency (instance/table) doesn't exist yet —
+    // these are "future" steps that require the user to collect more data first.
+    const isMissingDependency = (msg: string) =>
+      /not found|missing|Could not find/i.test(msg);
+
     try {
       // Execute each step in sequence
       for (let i = 0; i < toolSequence.steps.length; i++) {
         const step = toolSequence.steps[i];
-        
+
         console.log(`\n⚡ Step ${i + 1}/${toolSequence.steps.length}: ${step.description}`);
-        console.log(`🔧 Tool: ${step.toolCall.function}`);
-        console.log(`📄 Parameters:`, step.toolCall.parameters);
-        
+
         // Create a temporary update function to track intermediate changes
         let stepInstances = instances;
         const stepUpdateInstances = (newInstances: Instance[]) => {
-          console.log(`📊 Step ${i + 1} updated ${newInstances.length} instances`);
           stepInstances = newInstances;
         };
-        
-        // Execute the tool for this step
+
         const stepResult = await this.executeTool(
           step.toolCall,
           instances,
           stepUpdateInstances
         );
-        
-        console.log(`✅ Step ${i + 1} result:`, stepResult);
-        
+
         if (!stepResult.success) {
+          if (isMissingDependency(stepResult.message)) {
+            // This step depends on data that doesn't exist yet — skip gracefully
+            console.warn(`⏭️ Step ${i + 1} skipped (dependency not yet available): ${stepResult.message}`);
+            skipped.push({ step: i + 1, description: step.description, reason: stepResult.message });
+            continue;
+          }
+          // Hard failure — stop the sequence
           console.error(`❌ Step ${i + 1} failed: ${stepResult.message}`);
+          // Still apply changes from previously completed steps
+          if (instances !== currentInstances) updateInstances(instances);
           return {
             success: false,
-            message: `Step ${i + 1} failed: ${stepResult.message}. Goal: ${toolSequence.goal}`
+            message: `Step ${i + 1} failed: ${stepResult.message}`
           };
         }
-        
-        // Update instances for next step
+
         instances = stepInstances;
-        results.push({
-          step: i + 1,
-          description: step.description,
-          result: stepResult.result
-        });
-        
-        console.log(`✨ Step ${i + 1} completed successfully`);
+        results.push({ step: i + 1, description: step.description, result: stepResult.result });
+        console.log(`✨ Step ${i + 1} completed`);
       }
-      
-      console.log(`🎉 All steps completed. Applying final changes to ${instances.length} instances`);
-      
-      // Apply final changes using the provided updateInstances function
+
+      // Apply all successful step changes
       updateInstances(instances);
-      
+
+      const skippedNote = skipped.length > 0
+        ? ` ${skipped.length} step(s) were skipped because they depend on data you haven't collected yet: ${skipped.map(s => `"${s.description}"`).join('; ')}`
+        : '';
+
       return {
-        success: true,
-        message: `Successfully completed all ${toolSequence.steps.length} steps for: ${toolSequence.goal}`,
-        result: {
-          goal: toolSequence.goal,
-          steps: results,
-          totalSteps: toolSequence.steps.length
-        }
+        success: results.length > 0,
+        message: results.length > 0
+          ? `Completed ${results.length} of ${toolSequence.steps.length} step(s) for: ${toolSequence.goal}.${skippedNote}`
+          : `No steps could be executed — all required data is missing.${skippedNote}`,
+        result: { goal: toolSequence.goal, steps: results, skipped, totalSteps: toolSequence.steps.length }
       };
       
     } catch (error) {
@@ -1715,14 +1736,168 @@ export class MacroToolExecutor {
       };
     }
   }
+
+  /**
+   * Append one or more rows to an existing table instance
+   */
+  private static async executeAppendToTable(
+    params: { instanceId: string; rows: Record<string, string>[] },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string; result?: any }> {
+    const tableInstance = currentInstances.find(
+      inst => inst.id === params.instanceId && inst.type === 'table'
+    ) as TableInstance | undefined;
+
+    if (!tableInstance) {
+      return { success: false, message: `Table '${params.instanceId}' not found` };
+    }
+    if (!Array.isArray(params.rows) || params.rows.length === 0) {
+      return { success: false, message: 'No rows provided to append' };
+    }
+
+    const newCells: (import('./types').EmbeddedInstance | null)[][] = params.rows.map(rowObj => {
+      return (tableInstance.columnNames || []).map(colName => {
+        const val = rowObj[colName] ?? '';
+        if (!val) return null;
+        return { id: `cell-${Math.random().toString(36).slice(2)}`, type: 'text', content: String(val), source: { type: 'manual' } } as import('./types').EmbeddedInstance;
+      });
+    });
+
+    const updatedTable: TableInstance = {
+      ...tableInstance,
+      rows: tableInstance.rows + newCells.length,
+      cells: [...tableInstance.cells, ...newCells]
+    };
+
+    updateInstances(currentInstances.map(inst => inst.id === params.instanceId ? updatedTable : inst));
+    return { success: true, message: `Appended ${newCells.length} row(s) to table '${params.instanceId}'` };
+  }
+
+  /**
+   * Add a new empty column to an existing table instance
+   */
+  private static async executeAddColumnToTable(
+    params: { instanceId: string; columnName: string; columnType?: 'categorical' | 'numeral' },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string; result?: any }> {
+    const tableInstance = currentInstances.find(
+      inst => inst.id === params.instanceId && inst.type === 'table'
+    ) as TableInstance | undefined;
+
+    if (!tableInstance) {
+      return { success: false, message: `Table '${params.instanceId}' not found` };
+    }
+    if (tableInstance.columnNames?.includes(params.columnName)) {
+      return { success: false, message: `Column '${params.columnName}' already exists` };
+    }
+
+    const updatedTable: TableInstance = {
+      ...tableInstance,
+      cols: tableInstance.cols + 1,
+      columnNames: [...(tableInstance.columnNames || []), params.columnName],
+      columnTypes: [...(tableInstance.columnTypes || []), params.columnType ?? 'categorical'],
+      cells: tableInstance.cells.map(row => [...row, null])
+    };
+
+    updateInstances(currentInstances.map(inst => inst.id === params.instanceId ? updatedTable : inst));
+    return { success: true, message: `Added column '${params.columnName}' to table '${params.instanceId}'` };
+  }
+
+  /** Replace an existing instance with a new version */
+  private static async executeUpdateInstance(
+    params: { instanceId: string; newInstance: any },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string }> {
+    const idx = currentInstances.findIndex(i => i.id === params.instanceId);
+    if (idx === -1) return { success: false, message: `Instance '${params.instanceId}' not found` };
+    const updated = currentInstances.map(i => i.id === params.instanceId ? { ...i, ...params.newInstance, id: params.instanceId } : i);
+    updateInstances(updated);
+    return { success: true, message: `Updated instance '${params.instanceId}'` };
+  }
+
+  /** Add a computed column to a table using a simple column-reference formula */
+  private static async executeAddComputedColumn(
+    params: { instanceId: string; formula: string; newColumnName: string },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string }> {
+    const table = currentInstances.find(i => i.id === params.instanceId && i.type === 'table') as TableInstance | undefined;
+    if (!table) return { success: false, message: `Table '${params.instanceId}' not found` };
+    if (table.columnNames?.includes(params.newColumnName)) return { success: false, message: `Column '${params.newColumnName}' already exists` };
+
+    // Evaluate formula per row: replace column names with their numeric values
+    const newCells = table.cells.map(row => {
+      try {
+        let expr = params.formula;
+        (table.columnNames || []).forEach((colName, idx) => {
+          const cell = row[idx];
+          const val = cell?.type === 'text' ? parseFloat((cell as any).content) || 0 : 0;
+          expr = expr.replace(new RegExp(`\\b${colName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), String(val));
+        });
+        // eslint-disable-next-line no-new-func
+        const result = Function(`"use strict"; return (${expr})`)();
+        const content = isFinite(result) ? String(result) : '';
+        return content ? { id: `cell-${Math.random().toString(36).slice(2)}`, type: 'text' as const, content, source: { type: 'manual' as const } } : null;
+      } catch { return null; }
+    });
+
+    const updatedTable: TableInstance = {
+      ...table,
+      cols: table.cols + 1,
+      columnNames: [...(table.columnNames || []), params.newColumnName],
+      columnTypes: [...(table.columnTypes || []), 'numeral' as const],
+      cells: table.cells.map((row, i) => [...row, newCells[i]])
+    };
+    updateInstances(currentInstances.map(inst => inst.id === params.instanceId ? updatedTable : inst));
+    return { success: true, message: `Added computed column '${params.newColumnName}' to table '${params.instanceId}'` };
+  }
+
+  /** Apply a text format transformation to all cells in a column */
+  private static async executeFormatColumn(
+    params: { instanceId: string; columnName: string; formatPattern: string },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string }> {
+    const table = currentInstances.find(i => i.id === params.instanceId && i.type === 'table') as TableInstance | undefined;
+    if (!table) return { success: false, message: `Table '${params.instanceId}' not found` };
+
+    const resolved = MacroToolExecutor.resolveColumnName(params.columnName, table);
+    if (!resolved) return { success: false, message: `Column '${params.columnName}' not found in table '${params.instanceId}'` };
+    const { columnIndex } = resolved;
+
+    const applyFormat = (text: string, pattern: string): string => {
+      switch (pattern.toLowerCase()) {
+        case 'uppercase': return text.toUpperCase();
+        case 'lowercase': return text.toLowerCase();
+        case 'titlecase': return text.replace(/\b\w/g, c => c.toUpperCase());
+        case 'trim': return text.trim();
+        default: return text; // unknown patterns are a no-op
+      }
+    };
+
+    const updatedCells = table.cells.map(row =>
+      row.map((cell, idx) => {
+        if (idx !== columnIndex || !cell || cell.type !== 'text') return cell;
+        const formatted = applyFormat((cell as any).content || '', params.formatPattern);
+        return { ...cell, content: formatted };
+      })
+    );
+
+    const updatedTable: TableInstance = { ...table, cells: updatedCells };
+    updateInstances(currentInstances.map(inst => inst.id === params.instanceId ? updatedTable : inst));
+    return { success: true, message: `Formatted column '${params.columnName}' in table '${params.instanceId}' using '${params.formatPattern}'` };
+  }
 }
 
 /**
  * Simple wrapper for external usage
  */
 export const executeMacroTool = async (
-  toolCall: { function: string; parameters: any },
-  currentInstances: Instance[], 
+  toolCall: ToolCall,
+  currentInstances: Instance[],
   updateInstances: (newInstances: Instance[]) => void
 ) => {
   return await MacroToolExecutor.executeTool(toolCall, currentInstances, updateInstances);
@@ -1733,12 +1908,12 @@ export const executeMacroTool = async (
  */
 export const executeCompositeSuggestion = async (
   suggestion: {
-    toolCall?: { function: string; parameters: any };
+    toolCall?: ToolCall;
     toolSequence?: {
       goal: string;
       steps: Array<{
         description: string;
-        toolCall: { function: string; parameters: any };
+        toolCall: ToolCall;
       }>;
     };
   },

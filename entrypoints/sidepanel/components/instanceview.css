@@ -159,6 +159,47 @@ button[disabled] {
   cursor: nesw-resize;
 }
 
+/* Edge (mid-side) resize handles */
+.resizer[data-direction="right"] {
+  right: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: ew-resize;
+}
+
+.resizer[data-direction="left"] {
+  left: -4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: ew-resize;
+}
+
+.resizer[data-direction="bottom"] {
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 8px;
+  border-radius: 4px;
+  cursor: ns-resize;
+}
+
+.resizer[data-direction="top"] {
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 8px;
+  border-radius: 4px;
+  cursor: ns-resize;
+}
+
 .contextmenuoption {
   padding: 5px 10px;
   cursor: 'pointer';

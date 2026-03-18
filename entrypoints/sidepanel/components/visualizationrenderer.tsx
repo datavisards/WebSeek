@@ -113,8 +113,9 @@ const VisualizationRenderer: React.FC<VisualizationRendererProps> = ({
         const processed = processSvgForResponsiveness(json.svg);
         setSvgContent(processed);
         if (onImageUrlReady) {
-          const blob = new Blob([processed], { type: 'image/svg+xml' });
-          onImageUrlReady(URL.createObjectURL(blob));
+          // Use a data URI instead of a Blob URL so the thumbnail persists across sessions
+          const b64 = btoa(unescape(encodeURIComponent(processed)));
+          onImageUrlReady(`data:image/svg+xml;base64,${b64}`);
         }
       } catch (e: any) {
         if (!cancelled) setError(e.message || String(e));

@@ -22,6 +22,10 @@ export class SuggestionUIController {
 
   constructor() {
     this.initializeContainers();
+    // DG5a: listen for the proactive service's conflict-avoidance signal.
+    document.addEventListener('clearInSituSuggestions', () => {
+      this.clearInSituSuggestions();
+    });
   }
 
   /**
