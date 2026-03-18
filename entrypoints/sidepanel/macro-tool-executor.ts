@@ -4,7 +4,7 @@
  */
 
 import { validateToolCall } from './macro-tools';
-import { TableInstance, VisualizationInstance, Instance } from './types';
+import { TableInstance, VisualizationInstance, Instance, ToolCall } from './types';
 import { extractNumericalValue, getVisualizationThumbnail } from './utils';
 
 export class MacroToolExecutor {
@@ -78,8 +78,8 @@ export class MacroToolExecutor {
    * Execute a tool call from a macro suggestion
    */
   static async executeTool(
-    toolCall: { function: string; parameters: any }, 
-    currentInstances: Instance[], 
+    toolCall: ToolCall,
+    currentInstances: Instance[],
     updateInstances: (newInstances: Instance[]) => void
   ): Promise<{ success: boolean; message: string; result?: any }> {
     // Validate the tool call
@@ -91,42 +91,63 @@ export class MacroToolExecutor {
       };
     }
 
+    // Handle legacy tools not in the ToolCall union
+    const fn = (toolCall as any).function as string;
+    if (fn === 'exportData') {
+      return await this.executeExportData((toolCall as any).parameters, currentInstances);
+    }
+    if (fn === 'duplicateInstance') {
+      return await this.executeDuplicateInstance((toolCall as any).parameters, currentInstances, updateInstances);
+    }
+    if (fn === 'appendToTable') {
+      return await this.executeAppendToTable((toolCall as any).parameters, currentInstances, updateInstances);
+    }
+    if (fn === 'addColumnToTable') {
+      return await this.executeAddColumnToTable((toolCall as any).parameters, currentInstances, updateInstances);
+    }
+    if (fn === 'updateInstance') {
+      return await this.executeUpdateInstance((toolCall as any).parameters, currentInstances, updateInstances);
+    }
+    if (fn === 'addComputedColumn') {
+      return await this.executeAddComputedColumn((toolCall as any).parameters, currentInstances, updateInstances);
+    }
+    if (fn === 'formatColumn') {
+      return await this.executeFormatColumn((toolCall as any).parameters, currentInstances, updateInstances);
+    }
+
     try {
       switch (toolCall.function) {
         case 'openPage':
           return await this.executeOpenPage(toolCall.parameters);
-        
+
         case 'tableSort':
           return await this.executeTableSort(toolCall.parameters, currentInstances, updateInstances);
-        
+
         case 'tableFilter':
           return await this.executeTableFilter(toolCall.parameters, currentInstances, updateInstances);
-        
+
         case 'createVisualization':
           return await this.executeCreateVisualization(toolCall.parameters, currentInstances, updateInstances);
-        
-        case 'exportData':
-          return await this.executeExportData(toolCall.parameters, currentInstances);
-        
-        case 'duplicateInstance':
-          return await this.executeDuplicateInstance(toolCall.parameters, currentInstances, updateInstances);
-        
+
         case 'searchAndReplace':
           return await this.executeSearchAndReplace(toolCall.parameters, currentInstances, updateInstances);
-        
+
         case 'mergeInstances':
           return await this.executeMergeInstances(toolCall.parameters, currentInstances, updateInstances);
-        
+
         case 'convertColumnType':
           return await this.executeConvertColumnType(toolCall.parameters, currentInstances, updateInstances);
-        
+
         case 'renameColumn':
           return await this.executeRenameColumn(toolCall.parameters, currentInstances, updateInstances);
-        
+
+        case 'fillMissingValues':
+          return await this.executeFillMissingValues(toolCall.parameters, currentInstances, updateInstances);
+
         default:
           return {
             success: false,
-            message: `Unknown tool function: ${toolCall.function}`
+            message: `Unknown tool function: ${(toolCall as any).function}`
           };
       }
     } catch (error) {
@@ -145,7 +166,7 @@ export class MacroToolExecutor {
       goal: string;
       steps: Array<{
         description: string;
-        toolCall: { function: string; parameters: any };
+        toolCall: ToolCall;
       }>;
     },
     currentInstances: Instance[],
@@ -155,65 +176,68 @@ export class MacroToolExecutor {
     console.log(`📋 Total steps: ${toolSequence.steps.length}`);
     
     const results: any[] = [];
+    const skipped: Array<{ step: number; description: string; reason: string }> = [];
     let instances = [...currentInstances];
-    
+
+    // Errors that indicate a dependency (instance/table) doesn't exist yet —
+    // these are "future" steps that require the user to collect more data first.
+    const isMissingDependency = (msg: string) =>
+      /not found|missing|Could not find/i.test(msg);
+
     try {
       // Execute each step in sequence
       for (let i = 0; i < toolSequence.steps.length; i++) {
         const step = toolSequence.steps[i];
-        
+
         console.log(`\n⚡ Step ${i + 1}/${toolSequence.steps.length}: ${step.description}`);
-        console.log(`🔧 Tool: ${step.toolCall.function}`);
-        console.log(`📄 Parameters:`, step.toolCall.parameters);
-        
+
         // Create a temporary update function to track intermediate changes
         let stepInstances = instances;
         const stepUpdateInstances = (newInstances: Instance[]) => {
-          console.log(`📊 Step ${i + 1} updated ${newInstances.length} instances`);
           stepInstances = newInstances;
         };
-        
-        // Execute the tool for this step
+
         const stepResult = await this.executeTool(
           step.toolCall,
           instances,
           stepUpdateInstances
         );
-        
-        console.log(`✅ Step ${i + 1} result:`, stepResult);
-        
+
         if (!stepResult.success) {
+          if (isMissingDependency(stepResult.message)) {
+            // This step depends on data that doesn't exist yet — skip gracefully
+            console.warn(`⏭️ Step ${i + 1} skipped (dependency not yet available): ${stepResult.message}`);
+            skipped.push({ step: i + 1, description: step.description, reason: stepResult.message });
+            continue;
+          }
+          // Hard failure — stop the sequence
           console.error(`❌ Step ${i + 1} failed: ${stepResult.message}`);
+          // Still apply changes from previously completed steps
+          if (instances !== currentInstances) updateInstances(instances);
           return {
             success: false,
-            message: `Step ${i + 1} failed: ${stepResult.message}. Goal: ${toolSequence.goal}`
+            message: `Step ${i + 1} failed: ${stepResult.message}`
           };
         }
-        
-        // Update instances for next step
+
         instances = stepInstances;
-        results.push({
-          step: i + 1,
-          description: step.description,
-          result: stepResult.result
-        });
-        
-        console.log(`✨ Step ${i + 1} completed successfully`);
+        results.push({ step: i + 1, description: step.description, result: stepResult.result });
+        console.log(`✨ Step ${i + 1} completed`);
       }
-      
-      console.log(`🎉 All steps completed. Applying final changes to ${instances.length} instances`);
-      
-      // Apply final changes using the provided updateInstances function
+
+      // Apply all successful step changes
       updateInstances(instances);
-      
+
+      const skippedNote = skipped.length > 0
+        ? ` ${skipped.length} step(s) were skipped because they depend on data you haven't collected yet: ${skipped.map(s => `"${s.description}"`).join('; ')}`
+        : '';
+
       return {
-        success: true,
-        message: `Successfully completed all ${toolSequence.steps.length} steps for: ${toolSequence.goal}`,
-        result: {
-          goal: toolSequence.goal,
-          steps: results,
-          totalSteps: toolSequence.steps.length
-        }
+        success: results.length > 0,
+        message: results.length > 0
+          ? `Completed ${results.length} of ${toolSequence.steps.length} step(s) for: ${toolSequence.goal}.${skippedNote}`
+          : `No steps could be executed — all required data is missing.${skippedNote}`,
+        result: { goal: toolSequence.goal, steps: results, skipped, totalSteps: toolSequence.steps.length }
       };
       
     } catch (error) {
@@ -1433,14 +1457,447 @@ export class MacroToolExecutor {
       };
     }
   }
+
+  /**
+   * Execute fillMissingValues tool - fills missing values in table columns
+   */
+  private static async executeFillMissingValues(
+    params: {
+      instanceId: string;
+      columnName: string;
+      strategy: string;
+      constantValue?: string;
+      missingIndicators?: string[];
+    },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string; result?: any }> {
+    try {
+      const { instanceId, columnName, strategy, constantValue, missingIndicators = ["", "N/A", "null", "NULL", "-"] } = params;
+      
+      // Find the target table instance
+      const tableInstance = currentInstances.find(inst => inst.id === instanceId && inst.type === 'table') as TableInstance;
+      if (!tableInstance) {
+        return {
+          success: false,
+          message: `Table instance '${instanceId}' not found`
+        };
+      }
+
+      // Resolve column name and get index
+      const columnInfo = this.resolveColumnName(columnName, tableInstance);
+      if (!columnInfo) {
+        return {
+          success: false,
+          message: `Column '${columnName}' not found in table '${instanceId}'`
+        };
+      }
+
+      const { columnIndex } = columnInfo;
+      
+      // Extract column values
+      const columnValues: (string | null)[] = tableInstance.cells.map(row => {
+        const cell = row[columnIndex];
+        if (!cell || !('content' in cell) || !cell.content || missingIndicators.includes(cell.content.trim())) {
+          return null; // Missing value
+        }
+        return cell.content;
+      });
+
+      // Calculate statistics for imputation
+      const validValues = columnValues.filter(val => val !== null) as string[];
+      const missingCount = columnValues.length - validValues.length;
+      const missingPercentage = (missingCount / columnValues.length) * 100;
+
+      if (missingCount === 0) {
+        return {
+          success: false,
+          message: `No missing values found in column '${columnName}'`
+        };
+      }
+
+      if (missingPercentage > 80) {
+        return {
+          success: false,
+          message: `Too many missing values (${missingPercentage.toFixed(1)}%). Cannot reliably impute column '${columnName}'`
+        };
+      }
+
+      // Calculate imputation value based on strategy
+      let imputeValue: string;
+      
+      switch (strategy) {
+        case 'mean': {
+          const numericalValues = validValues.map(val => parseFloat(val)).filter(val => !isNaN(val));
+          if (numericalValues.length === 0) {
+            return {
+              success: false,
+              message: `Cannot calculate mean for non-numerical column '${columnName}'`
+            };
+          }
+          const mean = numericalValues.reduce((sum, val) => sum + val, 0) / numericalValues.length;
+          imputeValue = mean.toString();
+          break;
+        }
+        
+        case 'median': {
+          const numericalValues = validValues.map(val => parseFloat(val)).filter(val => !isNaN(val));
+          if (numericalValues.length === 0) {
+            return {
+              success: false,
+              message: `Cannot calculate median for non-numerical column '${columnName}'`
+            };
+          }
+          numericalValues.sort((a, b) => a - b);
+          const mid = Math.floor(numericalValues.length / 2);
+          const median = numericalValues.length % 2 === 0 
+            ? (numericalValues[mid - 1] + numericalValues[mid]) / 2
+            : numericalValues[mid];
+          imputeValue = median.toString();
+          break;
+        }
+        
+        case 'mode': {
+          const valueCounts: { [key: string]: number } = {};
+          validValues.forEach(val => {
+            valueCounts[val] = (valueCounts[val] || 0) + 1;
+          });
+          const mode = Object.entries(valueCounts).reduce((a, b) => valueCounts[a[0]] > valueCounts[b[0]] ? a : b)[0];
+          imputeValue = mode;
+          break;
+        }
+        
+        case 'constant': {
+          if (!constantValue) {
+            return {
+              success: false,
+              message: `Constant value required for 'constant' strategy`
+            };
+          }
+          imputeValue = constantValue;
+          break;
+        }
+        
+        case 'forward_fill': {
+          // Will be handled row by row below
+          imputeValue = '';
+          break;
+        }
+        
+        case 'backward_fill': {
+          // Will be handled row by row below
+          imputeValue = '';
+          break;
+        }
+        
+        case 'interpolate': {
+          const numericalValues = validValues.map(val => parseFloat(val)).filter(val => !isNaN(val));
+          if (numericalValues.length === 0) {
+            return {
+              success: false,
+              message: `Cannot interpolate non-numerical column '${columnName}'`
+            };
+          }
+          // Will be handled row by row below
+          imputeValue = '';
+          break;
+        }
+        
+        default:
+          return {
+            success: false,
+            message: `Unknown imputation strategy: ${strategy}`
+          };
+      }
+
+      // Create new cells with imputed values
+      const newCells = tableInstance.cells.map((row, rowIndex) => {
+        const newRow = [...row];
+        const cell = newRow[columnIndex];
+        
+        if (!cell || !('content' in cell) || !cell.content || missingIndicators.includes(cell.content.trim())) {
+          // This is a missing value, fill it
+          let fillValue = imputeValue;
+          
+          // Special handling for forward/backward fill and interpolation
+          if (strategy === 'forward_fill') {
+            // Find the last valid value before this row
+            for (let i = rowIndex - 1; i >= 0; i--) {
+              const prevCell = tableInstance.cells[i][columnIndex];
+              if (prevCell && 'content' in prevCell && prevCell.content && !missingIndicators.includes(prevCell.content.trim())) {
+                fillValue = prevCell.content;
+                break;
+              }
+            }
+            if (!fillValue && validValues.length > 0) {
+              fillValue = validValues[0]; // Fallback to first valid value
+            }
+          } else if (strategy === 'backward_fill') {
+            // Find the next valid value after this row
+            for (let i = rowIndex + 1; i < tableInstance.cells.length; i++) {
+              const nextCell = tableInstance.cells[i][columnIndex];
+              if (nextCell && 'content' in nextCell && nextCell.content && !missingIndicators.includes(nextCell.content.trim())) {
+                fillValue = nextCell.content;
+                break;
+              }
+            }
+            if (!fillValue && validValues.length > 0) {
+              fillValue = validValues[validValues.length - 1]; // Fallback to last valid value
+            }
+          } else if (strategy === 'interpolate') {
+            // Simple linear interpolation between nearest valid values
+            let prevValue: number | null = null;
+            let nextValue: number | null = null;
+            let prevIndex = -1;
+            let nextIndex = -1;
+            
+            // Find previous valid numerical value
+            for (let i = rowIndex - 1; i >= 0; i--) {
+              const prevCell = tableInstance.cells[i][columnIndex];
+              if (prevCell && 'content' in prevCell && prevCell.content && !missingIndicators.includes(prevCell.content.trim())) {
+                const val = parseFloat(prevCell.content);
+                if (!isNaN(val)) {
+                  prevValue = val;
+                  prevIndex = i;
+                  break;
+                }
+              }
+            }
+            
+            // Find next valid numerical value
+            for (let i = rowIndex + 1; i < tableInstance.cells.length; i++) {
+              const nextCell = tableInstance.cells[i][columnIndex];
+              if (nextCell && 'content' in nextCell && nextCell.content && !missingIndicators.includes(nextCell.content.trim())) {
+                const val = parseFloat(nextCell.content);
+                if (!isNaN(val)) {
+                  nextValue = val;
+                  nextIndex = i;
+                  break;
+                }
+              }
+            }
+            
+            if (prevValue !== null && nextValue !== null) {
+              // Linear interpolation
+              const ratio = (rowIndex - prevIndex) / (nextIndex - prevIndex);
+              fillValue = (prevValue + ratio * (nextValue - prevValue)).toString();
+            } else if (prevValue !== null) {
+              fillValue = prevValue.toString();
+            } else if (nextValue !== null) {
+              fillValue = nextValue.toString();
+            } else {
+              // Fallback to mean if no valid values found for interpolation
+              const numericalValues = validValues.map(val => parseFloat(val)).filter(val => !isNaN(val));
+              if (numericalValues.length > 0) {
+                const mean = numericalValues.reduce((sum, val) => sum + val, 0) / numericalValues.length;
+                fillValue = mean.toString();
+              } else {
+                fillValue = '0'; // Ultimate fallback
+              }
+            }
+          }
+          
+          newRow[columnIndex] = {
+            type: 'text',
+            id: `filled_${rowIndex}_${columnIndex}`,
+            content: fillValue,
+            source: { type: 'manual' }
+          };
+        }
+        
+        return newRow;
+      });
+
+      // Update instances
+      const updatedInstances = currentInstances.map(inst => {
+        if (inst.id === instanceId && inst.type === 'table') {
+          return { ...inst, cells: newCells };
+        }
+        return inst;
+      });
+
+      updateInstances(updatedInstances);
+
+      return {
+        success: true,
+        message: `Filled ${missingCount} missing values in column '${columnName}' using ${strategy} strategy`,
+        result: {
+          filledCount: missingCount,
+          strategy: strategy,
+          columnName: columnName,
+          missingPercentage: missingPercentage.toFixed(1)
+        }
+      };
+
+    } catch (error) {
+      return {
+        success: false,
+        message: `Error filling missing values: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
+  }
+
+  /**
+   * Append one or more rows to an existing table instance
+   */
+  private static async executeAppendToTable(
+    params: { instanceId: string; rows: Record<string, string>[] },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string; result?: any }> {
+    const tableInstance = currentInstances.find(
+      inst => inst.id === params.instanceId && inst.type === 'table'
+    ) as TableInstance | undefined;
+
+    if (!tableInstance) {
+      return { success: false, message: `Table '${params.instanceId}' not found` };
+    }
+    if (!Array.isArray(params.rows) || params.rows.length === 0) {
+      return { success: false, message: 'No rows provided to append' };
+    }
+
+    const newCells: (import('./types').EmbeddedInstance | null)[][] = params.rows.map(rowObj => {
+      return (tableInstance.columnNames || []).map(colName => {
+        const val = rowObj[colName] ?? '';
+        if (!val) return null;
+        return { id: `cell-${Math.random().toString(36).slice(2)}`, type: 'text', content: String(val), source: { type: 'manual' } } as import('./types').EmbeddedInstance;
+      });
+    });
+
+    const updatedTable: TableInstance = {
+      ...tableInstance,
+      rows: tableInstance.rows + newCells.length,
+      cells: [...tableInstance.cells, ...newCells]
+    };
+
+    updateInstances(currentInstances.map(inst => inst.id === params.instanceId ? updatedTable : inst));
+    return { success: true, message: `Appended ${newCells.length} row(s) to table '${params.instanceId}'` };
+  }
+
+  /**
+   * Add a new empty column to an existing table instance
+   */
+  private static async executeAddColumnToTable(
+    params: { instanceId: string; columnName: string; columnType?: 'categorical' | 'numeral' },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string; result?: any }> {
+    const tableInstance = currentInstances.find(
+      inst => inst.id === params.instanceId && inst.type === 'table'
+    ) as TableInstance | undefined;
+
+    if (!tableInstance) {
+      return { success: false, message: `Table '${params.instanceId}' not found` };
+    }
+    if (tableInstance.columnNames?.includes(params.columnName)) {
+      return { success: false, message: `Column '${params.columnName}' already exists` };
+    }
+
+    const updatedTable: TableInstance = {
+      ...tableInstance,
+      cols: tableInstance.cols + 1,
+      columnNames: [...(tableInstance.columnNames || []), params.columnName],
+      columnTypes: [...(tableInstance.columnTypes || []), params.columnType ?? 'categorical'],
+      cells: tableInstance.cells.map(row => [...row, null])
+    };
+
+    updateInstances(currentInstances.map(inst => inst.id === params.instanceId ? updatedTable : inst));
+    return { success: true, message: `Added column '${params.columnName}' to table '${params.instanceId}'` };
+  }
+
+  /** Replace an existing instance with a new version */
+  private static async executeUpdateInstance(
+    params: { instanceId: string; newInstance: any },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string }> {
+    const idx = currentInstances.findIndex(i => i.id === params.instanceId);
+    if (idx === -1) return { success: false, message: `Instance '${params.instanceId}' not found` };
+    const updated = currentInstances.map(i => i.id === params.instanceId ? { ...i, ...params.newInstance, id: params.instanceId } : i);
+    updateInstances(updated);
+    return { success: true, message: `Updated instance '${params.instanceId}'` };
+  }
+
+  /** Add a computed column to a table using a simple column-reference formula */
+  private static async executeAddComputedColumn(
+    params: { instanceId: string; formula: string; newColumnName: string },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string }> {
+    const table = currentInstances.find(i => i.id === params.instanceId && i.type === 'table') as TableInstance | undefined;
+    if (!table) return { success: false, message: `Table '${params.instanceId}' not found` };
+    if (table.columnNames?.includes(params.newColumnName)) return { success: false, message: `Column '${params.newColumnName}' already exists` };
+
+    // Evaluate formula per row: replace column names with their numeric values
+    const newCells = table.cells.map(row => {
+      try {
+        let expr = params.formula;
+        (table.columnNames || []).forEach((colName, idx) => {
+          const cell = row[idx];
+          const val = cell?.type === 'text' ? parseFloat((cell as any).content) || 0 : 0;
+          expr = expr.replace(new RegExp(`\\b${colName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), String(val));
+        });
+        // eslint-disable-next-line no-new-func
+        const result = Function(`"use strict"; return (${expr})`)();
+        const content = isFinite(result) ? String(result) : '';
+        return content ? { id: `cell-${Math.random().toString(36).slice(2)}`, type: 'text' as const, content, source: { type: 'manual' as const } } : null;
+      } catch { return null; }
+    });
+
+    const updatedTable: TableInstance = {
+      ...table,
+      cols: table.cols + 1,
+      columnNames: [...(table.columnNames || []), params.newColumnName],
+      columnTypes: [...(table.columnTypes || []), 'numeral' as const],
+      cells: table.cells.map((row, i) => [...row, newCells[i]])
+    };
+    updateInstances(currentInstances.map(inst => inst.id === params.instanceId ? updatedTable : inst));
+    return { success: true, message: `Added computed column '${params.newColumnName}' to table '${params.instanceId}'` };
+  }
+
+  /** Apply a text format transformation to all cells in a column */
+  private static async executeFormatColumn(
+    params: { instanceId: string; columnName: string; formatPattern: string },
+    currentInstances: Instance[],
+    updateInstances: (newInstances: Instance[]) => void
+  ): Promise<{ success: boolean; message: string }> {
+    const table = currentInstances.find(i => i.id === params.instanceId && i.type === 'table') as TableInstance | undefined;
+    if (!table) return { success: false, message: `Table '${params.instanceId}' not found` };
+
+    const resolved = MacroToolExecutor.resolveColumnName(params.columnName, table);
+    if (!resolved) return { success: false, message: `Column '${params.columnName}' not found in table '${params.instanceId}'` };
+    const { columnIndex } = resolved;
+
+    const applyFormat = (text: string, pattern: string): string => {
+      switch (pattern.toLowerCase()) {
+        case 'uppercase': return text.toUpperCase();
+        case 'lowercase': return text.toLowerCase();
+        case 'titlecase': return text.replace(/\b\w/g, c => c.toUpperCase());
+        case 'trim': return text.trim();
+        default: return text; // unknown patterns are a no-op
+      }
+    };
+
+    const updatedCells = table.cells.map(row =>
+      row.map((cell, idx) => {
+        if (idx !== columnIndex || !cell || cell.type !== 'text') return cell;
+        const formatted = applyFormat((cell as any).content || '', params.formatPattern);
+        return { ...cell, content: formatted };
+      })
+    );
+
+    const updatedTable: TableInstance = { ...table, cells: updatedCells };
+    updateInstances(currentInstances.map(inst => inst.id === params.instanceId ? updatedTable : inst));
+    return { success: true, message: `Formatted column '${params.columnName}' in table '${params.instanceId}' using '${params.formatPattern}'` };
+  }
 }
 
 /**
  * Simple wrapper for external usage
  */
 export const executeMacroTool = async (
-  toolCall: { function: string; parameters: any },
-  currentInstances: Instance[], 
+  toolCall: ToolCall,
+  currentInstances: Instance[],
   updateInstances: (newInstances: Instance[]) => void
 ) => {
   return await MacroToolExecutor.executeTool(toolCall, currentInstances, updateInstances);
@@ -1451,12 +1908,12 @@ export const executeMacroTool = async (
  */
 export const executeCompositeSuggestion = async (
   suggestion: {
-    toolCall?: { function: string; parameters: any };
+    toolCall?: ToolCall;
     toolSequence?: {
       goal: string;
       steps: Array<{
         description: string;
-        toolCall: { function: string; parameters: any };
+        toolCall: ToolCall;
       }>;
     };
   },
@@ -1477,10 +1934,10 @@ export const executeCompositeSuggestion = async (
       currentInstances,
       updateInstances
     );
-  } else {
-    return {
-      success: false,
-      message: "Suggestion must contain either toolCall or toolSequence"
-    };
-  }
-};
+    } else {
+      return {
+        success: false,
+        message: "Suggestion must contain either toolCall or toolSequence"
+      };
+    }
+  };

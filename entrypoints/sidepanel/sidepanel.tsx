@@ -1,7 +1,7 @@
 // sidepanel.tsx
 import { useState, useEffect, useCallback, useRef } from 'react';
 import InstanceView from './components/instanceview.tsx';
-import { Instance, ProactiveSuggestion } from './types.tsx';
+import { Instance, ProactiveSuggestion, ToolCall } from './types.tsx';
 import './sidepanel.css';
 import { Message } from './types.tsx';
 import ToolView from './components/toolview.tsx';
@@ -10,13 +10,30 @@ import { proactiveService } from './proactive-service-enhanced';
 import { actionMonitor } from './action-monitor';
 import SuggestionIndicator from './components/SuggestionIndicator.tsx';
 import ProactiveSettings from './components/ProactiveSettings.tsx';
+import ApiSettingsPanel from './components/ApiSettingsPanel.tsx';
+import OnboardingModal, { shouldShowOnboarding } from './components/OnboardingModal.tsx';
 import { executeMacroTool } from './macro-tool-executor';
-import { chatWithAgent } from './apis';
+import { getApiSettings } from './apis';
 import { requestSuggestionRefinement as refinementAPI } from './refinement-api';
 import WorkspaceNameModal from './components/WorkspaceNameModal.tsx';
 import { updateInstances } from './utils';
 import { globalUndoManager } from './global-undo-manager';
 import { systemLogger } from './system-logger';
+
+// Helper function for logging macro suggestion applications
+// Logs suggestion application to console only (no file download)
+const logMacroSuggestionApplicationCombined = async (
+  suggestion: ProactiveSuggestion,
+  stateBefore: any,
+  stateAfter: any
+) => {
+  const suggestionType = suggestion.scope === 'micro' ? 'micro' : 'macro';
+  console.log(`[SuggestionLog] Applied ${suggestionType} suggestion:`, {
+    id: suggestion.id,
+    message: suggestion.message.slice(0, 120),
+    instanceDelta: (stateAfter.instances?.length || 0) - (stateBefore.instances?.length || 0),
+  });
+};
 
 const SidePanel = () => {
   console.log('[SidePanel] Component mounting/re-mounting');
@@ -96,6 +113,8 @@ const SidePanel = () => {
   const [suggestions, setSuggestions] = useState<ProactiveSuggestion[]>([]);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
   const isGeneratingSuggestionsRef = useRef(false); // For real-time state checking
+  // Track how many LLM refinement attempts have been made per suggestion (max 2)
+  const suggestionRefinementRetries = useRef<Map<string, number>>(new Map());
   const [showSettings, setShowSettings] = useState(false);
   
   // Workspace naming state
@@ -135,6 +154,17 @@ const SidePanel = () => {
   
   // Currently editing table ID - for constraining suggestions to only the editing table
   const [editingTableId, setEditingTableId] = useState<string | null>(null);
+
+  // Clear in-situ (micro) suggestions when the table editor is closed
+  const prevEditingTableId = useRef<string | null>(null);
+  useEffect(() => {
+    if (prevEditingTableId.current !== null && editingTableId === null) {
+      // Table editor just closed — dismiss any lingering in-situ suggestions
+      proactiveService.clearMicroSuggestions();
+      setSuggestions(prev => prev.filter(s => s.scope !== 'micro'));
+    }
+    prevEditingTableId.current = editingTableId;
+  }, [editingTableId]);
   
   // Capture mode state - tracks if user is currently in element capture mode
   const [isInCaptureMode, setIsInCaptureMode] = useState(false);
@@ -148,12 +178,48 @@ const SidePanel = () => {
     saveTable: () => void;
     closeTableEditor: () => void;
     openVisualizationEditor: (spec: any) => void;
+    // isInVisualizationEditor: () => boolean;
+    // saveCurrentVisualization: () => boolean;
+    // hasNonEmptyVisualization: () => boolean;
   } | null>(null);
 
   // Callback to notify MultiTableEditor about external table modifications
   const multiTableEditorCallbacks = useRef<{
     markTableDirty: (tableId: string) => void;
   } | null>(null);
+
+  // Refs to expose current state to WebSocket context provider
+  const instancesRef2 = useRef<Instance[]>(instances);
+  const htmlContextRef2 = useRef<Record<string, { pageURL: string; htmlContent: string }>>(htmlContext);
+  const messagesRef2 = useRef<Message[]>(messages);
+
+  useEffect(() => { instancesRef2.current = instances; }, [instances]);
+  useEffect(() => { htmlContextRef2.current = htmlContext; }, [htmlContext]);
+  useEffect(() => { messagesRef2.current = messages; }, [messages]);
+
+  const [backendConnected, setBackendConnected] = useState(false);
+  const [showApiSettings, setShowApiSettings] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(shouldShowOnboarding);
+
+  useEffect(() => {
+    websocketService.registerContextProvider({
+      getInstances: () => instancesRef2.current,
+      getHtmlContext: () => htmlContextRef2.current,
+      getMessages: () => messagesRef2.current,
+    });
+    const onConnected = () => setBackendConnected(true);
+    const onDisconnected = () => setBackendConnected(false);
+    websocketService.on('connected', onConnected);
+    websocketService.on('disconnected', onDisconnected);
+    websocketService.connect().catch(err => {
+      console.warn('[SidePanel] WebSocket connection failed (backend may be offline):', err);
+    });
+    return () => {
+      websocketService.off('connected', onConnected);
+      websocketService.off('disconnected', onDisconnected);
+      websocketService.disconnect();
+    };
+  }, []);
 
   // Helper function to update currentPageInfo both in state and ref
   const updateCurrentPageInfo = useCallback((newPageInfo: {pageId: string, url: string} | null) => {
@@ -675,11 +741,13 @@ const SidePanel = () => {
             const cellUpdates: string[] = [];
             if (table?.cells) {
               table.cells.forEach((row: any[], rowIndex: number) => {
-                row.forEach((cell: any, colIndex: number) => {
-                  if (cell) {
-                    cellUpdates.push(`R${rowIndex}C${colIndex}`);
-                  }
-                });
+                if (row && Array.isArray(row)) {
+                  row.forEach((cell: any, colIndex: number) => {
+                    if (cell) {
+                      cellUpdates.push(`R${rowIndex}C${colIndex}`);
+                    }
+                  });
+                }
               });
             }
             return cellUpdates;
@@ -1019,11 +1087,23 @@ const SidePanel = () => {
   // Function to request LLM refinement for failed tool suggestions
   const requestSuggestionRefinement = useCallback(async (
     originalSuggestionId: string, 
-    failedToolCall: { function: string; parameters: any }, 
+    failedToolCall: ToolCall,
     errorMessage: string
   ) => {
     try {
       console.log('[SidePanel] Requesting suggestion refinement for failed tool:', failedToolCall, 'Error:', errorMessage);
+      
+      // Defensive coding: Check if current active tab is in htmlContext
+      if (currentPageInfo && currentPageInfo.pageId) {
+        const currentPageInContext = htmlContext[currentPageInfo.pageId];
+        if (!currentPageInContext) {
+          console.warn(`[SidePanel] Current active tab ${currentPageInfo.pageId} not found in htmlContext for suggestion refinement. Available pages:`, Object.keys(htmlContext));
+          // Show a warning but continue with refinement since it might still work with other pages
+          console.log('[SidePanel] Proceeding with refinement using available HTML context');
+        } else {
+          console.log(`[SidePanel] Current active tab ${currentPageInfo.pageId} found in htmlContext with URL: ${currentPageInContext.pageURL}`);
+        }
+      }
       
       // Find the original suggestion
       const originalSuggestion = suggestions.find(s => s.id === originalSuggestionId);
@@ -1133,8 +1213,25 @@ const SidePanel = () => {
   }, [suggestions, setSuggestions, setAgentLoading, messages, instances, htmlContext, logs]);
 
   // Tool execution handler for macro suggestions
-  const handleExecuteTool = useCallback(async (toolCall: { function: string; parameters: any }, suggestionId: string) => {
+  const handleExecuteTool = useCallback(async (toolCall: ToolCall, suggestionId: string) => {
     console.log('[SidePanel] Executing tool:', toolCall, 'for suggestion:', suggestionId);
+    
+    // Find the suggestion and capture state before for logging
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    let stateBefore: any = null;
+    
+    if (suggestion) {
+      stateBefore = {
+        timestamp: new Date().toISOString(),
+        instances: JSON.parse(JSON.stringify(instances)),
+        messages: JSON.parse(JSON.stringify(messages)),
+        htmlContexts: Object.keys(htmlContext),
+        logs: [...logs].slice(-50),
+        editingTableId: editingTableId,
+        currentPageInfo: currentPageInfo,
+        suggestions: JSON.parse(JSON.stringify(suggestions))
+      };
+    }
     
     // Special handling for createVisualization when in table editor mode
     if (toolCall.function === 'createVisualization' && editingTableId) {
@@ -1153,6 +1250,41 @@ const SidePanel = () => {
       
       console.log('[SidePanel] User confirmed visualization creation, proceeding');
     }
+
+    // Special handling for createVisualization when in visualization editor mode
+    // TODO: Implement when visualization editor callbacks are available
+    /*
+    if (toolCall.function === 'createVisualization' && 
+        instanceViewCallbacks.current?.isInVisualizationEditor && 
+        instanceViewCallbacks.current.isInVisualizationEditor()) {
+      console.log('[SidePanel] createVisualization requested while in visualization editor, checking for confirmation');
+      
+      let shouldContinue = true;
+      
+      // Check if current visualization is non-empty
+      if (instanceViewCallbacks.current?.hasNonEmptyVisualization && 
+          instanceViewCallbacks.current.hasNonEmptyVisualization()) {
+        shouldContinue = window.confirm(
+          `You are currently editing a visualization. Creating a new visualization will save your current work and replace it with the new one. Continue?`
+        );
+      } else {
+        console.log('[SidePanel] Current visualization is empty, proceeding without confirmation');
+      }
+      
+      if (!shouldContinue) {
+        console.log('[SidePanel] User cancelled visualization creation');
+        return;
+      }
+      
+      // Save current visualization if it exists
+      if (instanceViewCallbacks.current?.saveCurrentVisualization) {
+        const saved = instanceViewCallbacks.current.saveCurrentVisualization();
+        console.log('[SidePanel] Current visualization saved:', saved);
+      }
+      
+      console.log('[SidePanel] User confirmed visualization creation, proceeding');
+    }
+    */
     
     try {
       console.log('[SidePanel] Current instances before tool execution:', instances.length);
@@ -1199,8 +1331,10 @@ const SidePanel = () => {
       const result = await executeMacroTool(toolCall, instances, wrappedUpdateInstances);
       console.log('[SidePanel] Tool execution result:', result);
       console.log('[SidePanel] Current instances after tool execution:', instances.length);
-      
+
       if (result.success) {
+        // Clear retry counter on success
+        suggestionRefinementRetries.current.delete(suggestionId);
         // Remove the applied suggestion first
         proactiveService.dismissSuggestion(suggestionId);
         
@@ -1210,6 +1344,26 @@ const SidePanel = () => {
         
         // Small delay to ensure suggestion dismissal is processed before log triggers new generation
         await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Log combined before/after state
+        if (suggestion && stateBefore) {
+          const stateAfter = {
+            timestamp: new Date().toISOString(),
+            instances: JSON.parse(JSON.stringify(instances)),
+            messages: JSON.parse(JSON.stringify(messages)),
+            htmlContexts: Object.keys(htmlContext),
+            logs: [...logs].slice(-50),
+            editingTableId: editingTableId,
+            currentPageInfo: currentPageInfo,
+            suggestions: JSON.parse(JSON.stringify(suggestions))
+          };
+          await logMacroSuggestionApplicationCombined(suggestion, stateBefore, stateAfter);
+        } else {
+          console.error('[SidePanel] Cannot log suggestion application - missing:', {
+            hasSuggestion: !!suggestion,
+            hasStateBefore: !!stateBefore
+          });
+        }
         
         // Special handling for createVisualization: auto-save table and switch to visualization editor
         if (toolCall.function === 'createVisualization' && editingTableId && result.result?.newInstanceId) {
@@ -1253,65 +1407,128 @@ const SidePanel = () => {
               }
             }, 200);
           }
+        } else if (toolCall.function === 'createVisualization' && result.result?.newVisualizationSpec) {
+          // Handle createVisualization when not in table editor (e.g., from visualization editor or main view)
+          console.log('[SidePanel] createVisualization succeeded from non-table context, handling visualization editor transition');
+          console.log('[SidePanel] editingTableId:', editingTableId, 'newInstanceId:', result.result.newInstanceId);
+          
+          if (instanceViewCallbacks.current?.openVisualizationEditor) {
+            console.log('[SidePanel] Calling openVisualizationEditor with new spec');
+            // Small delay to ensure any state updates are processed
+            setTimeout(() => {
+              instanceViewCallbacks.current?.openVisualizationEditor(result.result.newVisualizationSpec);
+            }, 100);
+          } else {
+            console.log('[SidePanel] openVisualizationEditor callback not available');
+          }
         }
+        
+        // Special handling for createVisualization: switch to visualization editor with new spec
+        // TODO: Implement when visualization editor callbacks are available
+        /*
+        if (toolCall.function === 'createVisualization' && 
+            instanceViewCallbacks.current?.isInVisualizationEditor &&
+            instanceViewCallbacks.current.isInVisualizationEditor() && 
+            result.result?.newVisualizationSpec) {
+          console.log('[SidePanel] createVisualization succeeded while in visualization editor, switching to new spec');
+          console.log('[SidePanel] New visualization ID:', result.result.newInstanceId);
+          
+          // Open the visualization editor with the new visualization spec
+          if (instanceViewCallbacks.current?.openVisualizationEditor) {
+            console.log('[SidePanel] Auto-opening visualization editor with new spec from result');
+            // Small delay to ensure any state updates are processed
+            setTimeout(() => {
+              instanceViewCallbacks.current?.openVisualizationEditor(result.result.newVisualizationSpec);
+            }, 100);
+          } else {
+            console.log('[SidePanel] openVisualizationEditor callback not available');
+          }
+        }
+        */
         
         // Log already added by wrappedUpdateInstances - no need to add another log here
         
         console.log('[SidePanel] Successfully executed tool and removed suggestion:', suggestionId);
       } else {
-        // Tool execution failed - show loading state and request LLM refinement
-        console.log('[SidePanel] Tool execution failed, showing loading state and requesting LLM refinement:', result.message);
-        
-        // Update the suggestion to show loading state
-        setSuggestions(prev => prev.map(s => 
-          s.id === suggestionId 
-            ? { 
-                ...s, 
-                isLoading: true, 
-                loadingMessage: 'Processing...',
-              }
-            : s
-        ));
-        
-        // Don't dismiss the suggestion yet - keep it visible until refinement arrives
-        // Request refined suggestion from LLM (don't add to logs to avoid noise)
-        await requestSuggestionRefinement(suggestionId, toolCall, result.message);
+        // Tool execution failed - attempt LLM refinement up to MAX_RETRIES times
+        const MAX_RETRIES = 2;
+        const retries = suggestionRefinementRetries.current.get(suggestionId) ?? 0;
+        console.log(`[SidePanel] Tool execution failed (attempt ${retries + 1}/${MAX_RETRIES}):`, result.message);
+
+        if (retries >= MAX_RETRIES) {
+          // Give up — dismiss the suggestion and surface a manual fallback message
+          console.warn('[SidePanel] Max refinement retries reached, dismissing suggestion:', suggestionId);
+          suggestionRefinementRetries.current.delete(suggestionId);
+          proactiveService.dismissSuggestion(suggestionId);
+          setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+          addLog(`Suggestion dismissed after ${MAX_RETRIES} failed attempts: ${result.message}`);
+        } else {
+          suggestionRefinementRetries.current.set(suggestionId, retries + 1);
+          setSuggestions(prev => prev.map(s =>
+            s.id === suggestionId
+              ? { ...s, isLoading: true, loadingMessage: `Fixing suggestion (attempt ${retries + 1}/${MAX_RETRIES})…` }
+              : s
+          ));
+          await requestSuggestionRefinement(suggestionId, toolCall, result.message);
+        }
       }
     } catch (error) {
       console.error('[SidePanel] Tool execution error:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      // Update the suggestion to show loading state
-      setSuggestions(prev => prev.map(s => 
-        s.id === suggestionId 
-          ? { 
-              ...s, 
-              isLoading: true, 
-              loadingMessage: 'Processing...',
-            }
-          : s
-      ));
-      
-      // Don't dismiss the suggestion yet - keep it visible until refinement arrives
-      // Request refined suggestion from LLM for execution errors too (don't add to logs)
-      await requestSuggestionRefinement(suggestionId, toolCall, errorMessage);
+      const MAX_RETRIES = 2;
+      const retries = suggestionRefinementRetries.current.get(suggestionId) ?? 0;
+
+      if (retries >= MAX_RETRIES) {
+        console.warn('[SidePanel] Max refinement retries reached after exception, dismissing suggestion:', suggestionId);
+        suggestionRefinementRetries.current.delete(suggestionId);
+        proactiveService.dismissSuggestion(suggestionId);
+        setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+        addLog(`Suggestion dismissed after ${MAX_RETRIES} failed attempts: ${errorMessage}`);
+      } else {
+        suggestionRefinementRetries.current.set(suggestionId, retries + 1);
+        setSuggestions(prev => prev.map(s =>
+          s.id === suggestionId
+            ? { ...s, isLoading: true, loadingMessage: `Fixing suggestion (attempt ${retries + 1}/${MAX_RETRIES})…` }
+            : s
+        ));
+        await requestSuggestionRefinement(suggestionId, toolCall, errorMessage);
+      }
     }
   }, [addLog, instances, requestSuggestionRefinement, editingTableId]);
 
   // Remove the complex forwarding system
   const handleToolExecutionWithConfirmation = handleExecuteTool;
 
-  const handleExecuteToolSequence = useCallback(async (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => {
+  const handleExecuteToolSequence = useCallback(async (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: ToolCall }> }, suggestionId: string) => {
     console.log('[SidePanel] ⚡ TOOL SEQUENCE EXECUTION STARTED:', toolSequence, 'for suggestion:', suggestionId);
     console.log('[SidePanel] ⚡ Current instances count:', instances.length);
     console.log('[SidePanel] ⚡ Tool sequence goal:', toolSequence.goal);
     console.log('[SidePanel] ⚡ Number of steps:', toolSequence.steps.length);
+    
+    // Find the suggestion and capture state before for logging
+    const suggestion = suggestions.find(s => s.id === suggestionId);
+    let stateBefore: any = null;
+    let updatedInstances: Instance[] | null = null; // Track the updated instances
+    
+    if (suggestion) {
+      stateBefore = {
+        timestamp: new Date().toISOString(),
+        instances: JSON.parse(JSON.stringify(instances)),
+        messages: JSON.parse(JSON.stringify(messages)),
+        htmlContexts: Object.keys(htmlContext),
+        logs: [...logs].slice(-50),
+        editingTableId: editingTableId,
+        currentPageInfo: currentPageInfo,
+        suggestions: JSON.parse(JSON.stringify(suggestions))
+      };
+    }
     
     try {
       const { executeCompositeSuggestion } = await import('./macro-tool-executor');
       
       // Create a wrapper for recordableSetInstances that provides proper undo descriptions
       const wrappedUpdateInstances = (newInstances: Instance[]) => {
+        updatedInstances = newInstances; // Capture the updated instances
         const description = `Execute composite suggestion: ${toolSequence.goal}`;
         recordableSetInstances(newInstances, description);
         
@@ -1342,15 +1559,43 @@ const SidePanel = () => {
       console.log('[SidePanel] Tool sequence execution result:', result);
       
       if (result.success) {
+        // Clear retry counter on success
+        suggestionRefinementRetries.current.delete(suggestionId);
         // Remove the applied suggestion first
         proactiveService.dismissSuggestion(suggestionId);
-        
+
         // Force immediate UI update by syncing with service state
         const currentServiceSuggestions = proactiveService.getCurrentSuggestions();
         setSuggestions(currentServiceSuggestions);
-        
+
         // Small delay to ensure suggestion dismissal is processed before log triggers new generation
         await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Log combined before/after state
+        if (suggestion && stateBefore) {
+          // Use updatedInstances if available, otherwise fall back to current instances
+          const finalInstances = updatedInstances || instances;
+          if (!updatedInstances) {
+            console.warn('[SidePanel] updatedInstances is null in tool sequence, using current instances for state logging');
+          }
+          const stateAfter = {
+            timestamp: new Date().toISOString(),
+            instances: JSON.parse(JSON.stringify(finalInstances)),
+            messages: JSON.parse(JSON.stringify(messages)),
+            htmlContexts: Object.keys(htmlContext),
+            logs: [...logs].slice(-50),
+            editingTableId: editingTableId,
+            currentPageInfo: currentPageInfo,
+            suggestions: JSON.parse(JSON.stringify(suggestions))
+          };
+          await logMacroSuggestionApplicationCombined(suggestion, stateBefore, stateAfter);
+        } else {
+          console.error('[SidePanel] Cannot log tool sequence application - missing:', {
+            hasSuggestion: !!suggestion,
+            hasStateBefore: !!stateBefore,
+            hasUpdatedInstances: !!updatedInstances
+          });
+        }
         
         // Add log for the successful execution with comprehensive details
         addLog(`Applied suggestion - ${result.message}`, {
@@ -1373,32 +1618,49 @@ const SidePanel = () => {
         
         console.log('[SidePanel] Successfully executed tool sequence and removed suggestion:', suggestionId);
       } else {
-        // Tool sequence execution failed - request LLM refinement
-        console.log('[SidePanel] Tool sequence execution failed, requesting LLM refinement:', result.message);
-        
-        // Create a simplified tool call representation for refinement
-        const simplifiedToolCall = {
-          function: 'executeToolSequence',
-          parameters: { toolSequence }
-        };
-        
-        // Don't dismiss the suggestion yet - keep it visible until refinement arrives
-        // Request refined suggestion from LLM (don't add to logs to avoid noise)
-        await requestSuggestionRefinement(suggestionId, simplifiedToolCall, result.message);
+        // Tool sequence execution failed - apply retry/fallback logic
+        const MAX_RETRIES = 2;
+        const retries = suggestionRefinementRetries.current.get(suggestionId) ?? 0;
+        console.log(`[SidePanel] Tool sequence failed (attempt ${retries + 1}/${MAX_RETRIES}):`, result.message);
+
+        if (retries >= MAX_RETRIES) {
+          suggestionRefinementRetries.current.delete(suggestionId);
+          proactiveService.dismissSuggestion(suggestionId);
+          setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+          addLog(`Suggestion dismissed after ${MAX_RETRIES} failed attempts: ${result.message}`);
+        } else {
+          suggestionRefinementRetries.current.set(suggestionId, retries + 1);
+          setSuggestions(prev => prev.map(s =>
+            s.id === suggestionId
+              ? { ...s, isLoading: true, loadingMessage: `Fixing suggestion (attempt ${retries + 1}/${MAX_RETRIES})…` }
+              : s
+          ));
+          // Cast: 'executeToolSequence' is a synthetic descriptor for the refinement LLM prompt
+          const simplifiedToolCall = { function: 'executeToolSequence', parameters: { toolSequence } } as unknown as ToolCall;
+          await requestSuggestionRefinement(suggestionId, simplifiedToolCall, result.message);
+        }
       }
     } catch (error) {
       console.error('[SidePanel] Tool sequence execution error:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      // Create a simplified tool call representation for refinement
-      const simplifiedToolCall = {
-        function: 'executeToolSequence',
-        parameters: { toolSequence }
-      };
-      
-      // Don't dismiss the suggestion yet - keep it visible until refinement arrives
-      // Request refined suggestion from LLM for execution errors too (don't add to logs)
-      await requestSuggestionRefinement(suggestionId, simplifiedToolCall, errorMessage);
+      const MAX_RETRIES = 2;
+      const retries = suggestionRefinementRetries.current.get(suggestionId) ?? 0;
+
+      if (retries >= MAX_RETRIES) {
+        suggestionRefinementRetries.current.delete(suggestionId);
+        proactiveService.dismissSuggestion(suggestionId);
+        setSuggestions(prev => prev.filter(s => s.id !== suggestionId));
+        addLog(`Suggestion dismissed after ${MAX_RETRIES} failed attempts: ${errorMessage}`);
+      } else {
+        suggestionRefinementRetries.current.set(suggestionId, retries + 1);
+        setSuggestions(prev => prev.map(s =>
+          s.id === suggestionId
+            ? { ...s, isLoading: true, loadingMessage: `Fixing suggestion (attempt ${retries + 1}/${MAX_RETRIES})…` }
+            : s
+        ));
+        const simplifiedToolCall = { function: 'executeToolSequence', parameters: { toolSequence } } as unknown as ToolCall;
+        await requestSuggestionRefinement(suggestionId, simplifiedToolCall, errorMessage);
+      }
     }
   }, [addLog, instances, requestSuggestionRefinement]);
 
@@ -1466,9 +1728,31 @@ const SidePanel = () => {
   }, [handleGlobalKeyDown]);
 
   return (
-    <div 
+    <div
       className="side-panel"
     >
+      {/* Backend disconnection warning */}
+      {!backendConnected && (
+        <div style={{
+          background: '#fff3cd', color: '#856404', fontSize: '12px',
+          padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 6,
+          borderBottom: '1px solid #ffc107', flexShrink: 0
+        }}>
+          <span>⚠️</span>
+          <span>Backend not connected — AI features may be limited. Start the backend server and refresh.</span>
+          <button
+            onClick={() => setShowApiSettings(true)}
+            title="API Settings"
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: '#856404', fontSize: '14px' }}
+          >⚙</button>
+        </div>
+      )}
+      <ApiSettingsPanel isOpen={showApiSettings} onClose={() => setShowApiSettings(false)} />
+      {showOnboarding && <OnboardingModal onDone={() => {
+        setShowOnboarding(false);
+        // Prompt for API key setup if no key has been configured yet
+        if (!getApiSettings().apiKey) setShowApiSettings(true);
+      }} />}
       {/* ToolView now appears first/above */}
       <ToolView 
         logs={logs} 
@@ -1493,6 +1777,8 @@ const SidePanel = () => {
         isInEditor={isInEditor}
         editingTableId={editingTableId}
         onTableModified={handleTableModified}
+        updateHTMLContext={setHtmlContexts}
+        onOpenApiSettings={() => setShowApiSettings(true)}
       />
       
       {/* InstanceView now appears second/below */}
@@ -1541,6 +1827,7 @@ const SidePanel = () => {
         onCancel={handleCancelWorkspaceNaming}
         onSkip={handleSkipWorkspaceNaming}
       />
+      
     </div>
   );
 };

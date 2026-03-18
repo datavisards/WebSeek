@@ -4,6 +4,67 @@
     align-items: center;
     justify-content: flex-start;
     position: relative;
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 8px;
+}
+
+/* Split pane header layout */
+.left-pane-header {
+    width: 50%;
+    flex: none;
+    display: flex;
+    align-items: center;
+    border-right: 1px solid #e0e0e0;
+    margin-right: 12px;
+}
+
+.right-pane-header {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pane-title {
+    margin: 0;
+    font-weight: 600;
+    font-size: 14px;
+    color: #333;
+}
+
+.pane-title.disabled {
+    opacity: 0.5;
+}
+
+/* Split pane content layout */
+.split-pane-layout {
+    display: flex;
+    flex: 1;
+    height: 100%;
+    width: 100%;
+}
+
+.left-pane {
+    width: 50%;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid #e0e0e0;
+    padding-left: 6px;
+    padding-right: 6px;
+    min-height: 0; /* Allow flex shrinking */
+    box-sizing: border-box;
+}
+
+.right-pane {
+    width: 50%;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    padding-left: 6px;
+    padding-right: 6px;
+    min-height: 0; /* Allow flex shrinking */
+    box-sizing: border-box;
 }
 
 .tab-button {
@@ -32,7 +93,7 @@
   border: 1px solid #dee2e6;
   border-radius: 4px;
   padding: 4px 8px;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
   margin-left: 8px;
@@ -47,6 +108,18 @@
 .system-logs-btn.disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* System logs button in left pane header */
+.left-pane-header .system-logs-btn {
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: 8px;
+  white-space: nowrap;
 }
 
 .collapse-toggle-container {
@@ -83,12 +156,35 @@
     background-color: #e0e0e0;
 }
 
-/* Dismiss All button in toolview header */
+/* Dismiss All button in left pane header */
+.left-pane-header .dismiss-all-btn {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: normal;
+    transition: all 0.2s;
+    margin-left: 8px;
+    white-space: nowrap;
+    color: inherit;
+}
+
+.left-pane-header .dismiss-all-btn:hover:not(:disabled) {
+    border-color: #adb5bd;
+}
+
+.left-pane-header .dismiss-all-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Legacy dismiss all button for backward compatibility */
 .view-title-container .dismiss-all-btn {
     color: white;
     border: none;
     border-radius: 3px;
-    padding: 3px 8px;
+    padding: 4px 8px;
     cursor: pointer;
     font-size: 11px;
     font-weight: 500;
@@ -127,4 +223,16 @@
 .embedded-suggestions-panel .view-content {
     padding: 0;
     margin: 0;
+}
+
+/* Ensure proper content sizing in split panes */
+.left-pane .embedded-suggestions-panel,
+.right-pane > div {
+    height: 100%;
+    overflow-y: auto;
+}
+
+/* Style adjustments for the split layout */
+.tool-view .view-content {
+    padding: 8px 0;
 }

@@ -7,11 +7,12 @@
 
 import { MACRO_TOOLS, validateToolCall } from './macro-tools';
 import { executeMacroTool, executeCompositeSuggestion } from './macro-tool-executor';
-import { Instance } from './types';
+import { Instance, ToolCall } from './types';
 import { normalizeTableInstance } from './utils';
 
 // Example tool calls for testing with real WebSeek functionality
-const exampleToolCalls = [
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const exampleToolCalls = ([
   {
     function: "openPage",
     parameters: {
@@ -85,10 +86,11 @@ const exampleToolCalls = [
       modifications: { x: 100, y: 100 }
     }
   }
-];
+]) as unknown as ToolCall[];
 
 // Example composite suggestions that solve the price sorting problem
-const exampleCompositeSuggestions = [
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const exampleCompositeSuggestions = ([
   {
     toolSequence: {
       goal: "Sort table by price (lowest to highest)",
@@ -164,7 +166,7 @@ const exampleCompositeSuggestions = [
       ]
     }
   }
-];
+]) as unknown as Array<{ toolCall?: ToolCall; toolSequence?: { goal: string; steps: Array<{ description: string; toolCall: ToolCall }> } }>;
 
 // Example macro suggestion with tool call
 const exampleMacroSuggestion = {

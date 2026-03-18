@@ -16,10 +16,13 @@ import { createEmbeddedTextInstance, createEmbeddedImageInstance, createManualSo
 import { useHTMLContent } from './useHTMLContent';
 import { useInputHandlers } from './useInputHandlers';
 import SnapshotStatusIndicator from './SnapshotStatusIndicator';
+import VisualizationRenderer from './visualizationrenderer';
 import './instanceview.css';
+import FirstTimeBanner from './FirstTimeBanner';
 import { message } from 'vega-lite/types_unstable/log/index.js';
 import { chatWithAgent } from '../api-selector';
 import { ProactiveSuggestion } from '../types';
+import { pruneHtmlContext, getReferencedPageIds } from '../context-filter';
 import { proactiveService } from '../proactive-service-enhanced';
 
 // Props interface for the component
@@ -55,7 +58,7 @@ interface InstanceViewProps {
     closeTableEditor: () => void;
     openVisualizationEditor: (spec: any) => void;
   } | null>; // For programmatic control from parent component
-  onRegisterMultiTableCallbacks?: (callbacks: { markTableDirty: (tableId: string) => void }) => void; // For external table dirty state management
+  onRegisterMultiTableCallbacks?: (callbacks: { markTableDirty: (tableId: string) => void; updateTableInstance: (tableId: string, instance: TableInstance) => void }) => void; // For external table dirty state management
   onTableModified?: (tableId: string) => void; // For notifying about table modifications
 }
 
@@ -106,6 +109,30 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   const [sketchCount, setSketchCount] = useState(0);
   const sketchCountRef = useRef(0);
   const [isCaptureEnabled, setIsCaptureEnabled] = useState(true);
+  
+  // Add logging for capture enabled state changes
+  const setIsCaptureEnabledWithLogging = useCallback((enabled: boolean, reason?: string) => {
+    console.log(`[InstanceView] isCaptureEnabled changing: ${!enabled} -> ${enabled}`, {
+      reason: reason || 'unknown',
+      timestamp: Date.now(),
+      stack: new Error().stack?.split('\n')[2]?.trim()
+    });
+    setIsCaptureEnabled(enabled);
+    
+    // Add a safeguard timeout - if capture is disabled for more than 30 seconds, re-enable it
+    if (!enabled) {
+      setTimeout(() => {
+        setIsCaptureEnabled(current => {
+          if (!current) {
+            console.warn('[InstanceView] Capture timeout - re-enabling capture after 30 seconds');
+            setCaptureTarget(null);
+            return true;
+          }
+          return current;
+        });
+      }, 30000);
+    }
+  }, []);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -378,6 +405,21 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           newX = instanceX + deltaX;
           newWidth = instanceWidth - deltaX;
           newHeight = instanceHeight + deltaY;
+          break;
+        // Edge handles
+        case 'right':
+          newWidth = instanceWidth + deltaX;
+          break;
+        case 'left':
+          newX = instanceX + deltaX;
+          newWidth = instanceWidth - deltaX;
+          break;
+        case 'bottom':
+          newHeight = instanceHeight + deltaY;
+          break;
+        case 'top':
+          newY = instanceY + deltaY;
+          newHeight = instanceHeight - deltaY;
           break;
       }
 
@@ -898,26 +940,29 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     let port = browser.runtime.connect({ name: 'side-panel' });
     bgPort.current = port;
     port.onMessage.addListener((msg) => {
-      // Handle HTML content via pageId - fetch asynchronously
+      // Handle HTML content via pageId - lazy fetch (only if referenced or already cached)
       if (msg.pageURL && msg.pageId) {
-        fetchHTMLContent(msg.pageId, msg.pageURL);
+        const alreadyCached = !!htmlContextRef.current?.[msg.pageId];
+        const referencedIds = getReferencedPageIds(instancesRef.current);
+        if (alreadyCached || referencedIds.has(msg.pageId)) {
+          fetchHTMLContent(msg.pageId, msg.pageURL);
+        }
+        // Otherwise skip: no instance references this page yet, avoid context bloat
       }
 
       // Handle messages (msg.action, etc.)
       if (msg.action === 'element_selected') {
         handleElementSelected(msg);
       } else if (msg.action === 'snapshot_ready') {
-        // Handle snapshot completion - this is when real pageId becomes available
+        // Handle snapshot completion - user is actively capturing; always fetch
         if (msg.pageId && msg.url) {
-          
-          // Fetch HTML content for the pageId
           fetchHTMLContent(msg.pageId, msg.url);
         }
       } else if (msg.action === 'screenshot_finished') {
         handleScreenshotFinished(msg);
       } else if (msg.action === 'selection_canceled') {
         setCaptureTarget(null);
-        setIsCaptureEnabled(true);
+        setIsCaptureEnabledWithLogging(true, 'selection_canceled');
       } else if (msg.action === 'exit_selection') {
         setSelectedInstanceId(null);
         setDraggingInstanceId(null);
@@ -988,11 +1033,23 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         }
       ], `Create image "${newId}" from element selection`, logMessage);
     }
-    setIsCaptureEnabled(true);
+    setIsCaptureEnabledWithLogging(true, 'handleElementSelected');
   };
 
   // Add debouncing for web content operations to prevent duplicates
   const lastOperationRef = useRef<{ type: string; cellKey: string; timestamp: number } | null>(null);
+
+  // Store callbacks for multi-table editor to sync state
+  const multiTableCallbacksRef = useRef<{ updateTableInstance?: (tableId: string, instance: TableInstance) => void }>({});
+
+  // Handle callback registration from MultiTableEditor
+  const handleRegisterMultiTableCallbacks = useCallback((callbacks: { markTableDirty: (tableId: string) => void; updateTableInstance: (tableId: string, instance: TableInstance) => void }) => {
+    console.log('[InstanceView] Registering MultiTableEditor callbacks:', {
+      hasMarkTableDirty: !!callbacks.markTableDirty,
+      hasUpdateTableInstance: !!callbacks.updateTableInstance
+    });
+    multiTableCallbacksRef.current = { updateTableInstance: callbacks.updateTableInstance };
+  }, []);
 
   // Handle captured content for table cells
   const handleTableCellCapture = (message: any) => {
@@ -1017,7 +1074,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         (now - lastOperationRef.current.timestamp) < 1000) {
       console.log('[InstanceView] Preventing duplicate operation:', operationType);
       setCaptureTarget(null);
-      setIsCaptureEnabled(true);
+      setIsCaptureEnabledWithLogging(true, 'duplicate_operation_prevention');
       return;
     }
     
@@ -1030,8 +1087,31 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     if (!table) {
       console.error('Table not found for capture target');
       setCaptureTarget(null);
-      setIsCaptureEnabled(true);
+      setIsCaptureEnabledWithLogging(true, 'table_not_found');
       return;
+    }
+
+    // Ensure table cells array is properly initialized
+    if (!table.cells) {
+      table.cells = [];
+    }
+
+    // Ensure the row exists and is valid - if not, initialize it
+    if (!table.cells[row] || !Array.isArray(table.cells[row])) {
+      console.warn(`Table row ${row} is null or invalid for table ${tableId}, initializing...`);
+      // Initialize missing rows up to the required row
+      for (let i = table.cells.length; i <= row; i++) {
+        table.cells[i] = new Array(table.cols || 0).fill(null);
+      }
+    }
+
+    // Ensure the row has enough columns
+    if (table.cells[row].length <= col) {
+      const currentLength = table.cells[row].length;
+      const neededLength = Math.max(col + 1, table.cols || 0);
+      for (let i = currentLength; i < neededLength; i++) {
+        table.cells[row][i] = null;
+      }
     }
 
     const currentContent = table.cells[row][col];
@@ -1108,7 +1188,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
 
     // Clear capture target and re-enable capture
     setCaptureTarget(null);
-    setIsCaptureEnabled(true);
+    setIsCaptureEnabledWithLogging(true, 'handleTableCellCapture_completed');
   };
 
   const handleScreenshotFinished = (message: any) => {
@@ -1136,7 +1216,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       }
     ], `Create image "${newId}" from screenshot`, logMessage);
     
-    setIsCaptureEnabled(true);
+    setIsCaptureEnabledWithLogging(true, 'handleScreenshotFinished');
   }
 
   // Delete selected instance
@@ -1178,14 +1258,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     // send message via the background port
     if (bgPort.current) {
       bgPort.current.postMessage({ action: 'start_element_selection' });
-      setIsCaptureEnabled(false);
+      setIsCaptureEnabledWithLogging(false, 'handleCaptureStart');
     }
   };
 
   const handleScreenshotStart = () => {
     if (bgPort.current) {
       bgPort.current.postMessage({ action: 'start_screenshot_capture' });
-      setIsCaptureEnabled(false);
+      setIsCaptureEnabledWithLogging(false, 'handleScreenshotStart');
     }
   }
 
@@ -1209,7 +1289,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           setDraggingInstanceId(null);
           setDraggingEmbeddedId(null);
           setCaptureTarget(null);
-          setIsCaptureEnabled(true);
+          setIsCaptureEnabledWithLogging(true, 'escape_key_pressed');
         }
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         // Check if we're focused on an input field
@@ -1561,12 +1641,19 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     }), `Remove cell content (${row + 1}, ${String.fromCharCode(65 + col)})`, logMessage);
   };
 
-  const saveTable = (tableId?: string, isDirty?: boolean) => {
+  const saveTable = (tableId?: string, isDirty?: boolean, tableInstance?: TableInstance) => {
     const targetTableId = tableId || editingTableId;
     
-    const table = instances.find(inst => inst.id === targetTableId && inst.type === 'table') as TableInstance | undefined;
+    // Try to find table in instances first, then use provided tableInstance
+    let table = instances.find(inst => inst.id === targetTableId && inst.type === 'table') as TableInstance | undefined;
+    
+    // If table not found in instances but tableInstance is provided (e.g., for joined tables)
+    if (!table && tableInstance) {
+      table = tableInstance;
+    }
     
     if (!table) {
+      console.warn(`[InstanceView] saveTable: Could not find table ${targetTableId}`);
       return null;
     }
     
@@ -1582,6 +1669,13 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       return originalInstanceId || null;
     } else {
       // Table was modified, keep it with current ID
+      
+      // If table instance was provided, update the existing instance in the array
+      if (tableInstance) {
+        setInstances(prev => prev.map(inst => 
+          inst.id === targetTableId ? tableInstance : inst
+        ));
+      }
       
       // Log the operation
       let withstr = "";
@@ -1642,20 +1736,96 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           console.log('[InstanceView] Current states before opening viz editor:', {
             editingTableId,
             editingVisualizationSpec: !!editingVisualizationSpec,
-            editingTextId
+            editingTextId,
+            originalInstanceId
           });
+          
+          // Check if we're already in visualization editor mode
+          if (editingVisualizationSpec && originalInstanceId) {
+            console.log('[InstanceView] Already in visualization editor, saving current work and returning to instance view');
+            
+            // Check if current visualization is non-empty (has meaningful content)
+            const hasNonEmptyViz = editingVisualizationSpec && 
+                                   typeof editingVisualizationSpec === 'object' && 
+                                   Object.keys(editingVisualizationSpec).length > 0;
+                                   
+            if (hasNonEmptyViz) {
+              // Save the current visualization to the instance
+              const currentInstance = instances.find(inst => inst.id === originalInstanceId);
+              if (currentInstance && currentInstance.type === 'visualization') {
+                console.log('[InstanceView] Saving current visualization before returning to instance view');
+                const specToSave = typeof editingVisualizationSpec === 'string' 
+                  ? JSON.parse(editingVisualizationSpec) 
+                  : editingVisualizationSpec;
+                
+                // Update the instance with the current spec
+                const updatedInstances = instances.map(inst => 
+                  inst.id === originalInstanceId 
+                    ? { ...inst, spec: specToSave }
+                    : inst
+                );
+                setInstances(updatedInstances);
+                console.log('[InstanceView] Current visualization saved');
+              }
+            } else {
+              console.log('[InstanceView] Current visualization is empty, no need to save');
+            }
+            
+            // Exit visualization editor and return to instance view
+            setEditingVisualizationSpec(null);
+            setOriginalInstanceId(null);
+            setAvailableInstances([]);
+            console.log('[InstanceView] Exited visualization editor, returning to instance view');
+            return;
+          }
+          
+          // Normal case: not currently in visualization editor, proceed as usual
           setEditingVisualizationSpec(spec);
           // Set available instances to exclude visualizations, same as double-click behavior
           setAvailableInstances(instances.filter(inst => inst.type !== 'visualization'));
           console.log('[InstanceView] setEditingVisualizationSpec called with:', spec);
           console.log('[InstanceView] setAvailableInstances called with filtered instances count:', instances.filter(inst => inst.type !== 'visualization').length);
-        }
+        },
+        // isInVisualizationEditor: () => {
+        //   return !!editingVisualizationSpec;
+        // },
+        // saveCurrentVisualization: () => {
+        //   console.log('[InstanceView] saveCurrentVisualization callback called');
+        //   if (editingVisualizationSpec && originalInstanceId) {
+        //     console.log('[InstanceView] Saving current visualization for instance:', originalInstanceId);
+        //     // Find the current instance being edited
+        //     const currentInstance = instances.find(inst => inst.id === originalInstanceId);
+        //     if (currentInstance && currentInstance.type === 'visualization') {
+        //       // Ensure spec is an object
+        //       const spec = typeof editingVisualizationSpec === 'string' 
+        //         ? JSON.parse(editingVisualizationSpec) 
+        //         : editingVisualizationSpec;
+              
+        //       // Update the instance with the current spec
+        //       const updatedInstances = instances.map(inst => 
+        //         inst.id === originalInstanceId 
+        //           ? { ...inst, spec: spec }
+        //           : inst
+        //       );
+        //       setInstances(updatedInstances);
+        //       console.log('[InstanceView] Current visualization saved');
+        //       return true;
+        //     }
+        //   }
+        //   console.log('[InstanceView] No current visualization to save or missing originalInstanceId');
+        //   return false;
+        // },
+        // hasNonEmptyVisualization: () => {
+        //   return !!editingVisualizationSpec && 
+        //          typeof editingVisualizationSpec === 'object' && 
+        //          Object.keys(editingVisualizationSpec).length > 0;
+        // }
       };
       console.log('[InstanceView] Callback ref populated successfully');
     } else {
       console.log('[InstanceView] callbackRef is null, skipping population');
     }
-  }, [callbackRef, editingTableId, instances]);
+  }, [callbackRef, editingTableId, instances, editingVisualizationSpec, originalInstanceId]);
 
   // Debug tracking for visualization editor state
   useEffect(() => {
@@ -1666,6 +1836,24 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       editingTextId
     });
   }, [editingVisualizationSpec, editingTableId, editingTextId]);
+
+  // Sync editingVisualizationSpec with instance changes when editing a visualization
+  useEffect(() => {
+    if (editingVisualizationSpec && originalInstanceId) {
+      // Only sync when we have originalInstanceId (editing existing visualization)
+      const currentInstance = instances.find(inst => inst.id === originalInstanceId);
+      if (currentInstance && currentInstance.type === 'visualization' && currentInstance.spec) {
+        // Check if the instance spec has changed from what we're currently editing
+        if (JSON.stringify(currentInstance.spec) !== JSON.stringify(editingVisualizationSpec)) {
+          console.log('[InstanceView] Detected spec change in edited visualization instance, updating editingVisualizationSpec');
+          console.log('[InstanceView] Old spec:', editingVisualizationSpec);
+          console.log('[InstanceView] New spec:', currentInstance.spec);
+          setEditingVisualizationSpec(currentInstance.spec);
+        }
+      }
+    }
+    // Removed the problematic case 2 logic that was auto-loading newest visualization for new instances
+  }, [instances, editingVisualizationSpec, originalInstanceId]);
 
   const cancelTableEdit = () => {
     if (!editingTableId) return;
@@ -1710,62 +1898,76 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       bgPort.current.postMessage({
         action: 'start_element_selection'
       });
-      setIsCaptureEnabled(false);
+      setIsCaptureEnabledWithLogging(false, 'handleCaptureToTableCell');
     }
   };
 
   // Handle adding a row to the table
-  const handleAddRow = (position: 'before' | 'after', rowIndex: number) => {
-    if (!editingTableId) return;
-    onOperation(`Add row ${position} row ${rowIndex + 1} in table "${editingTableId}"`);
+  const handleAddRow = (tableId: string, position: 'before' | 'after', rowIndex: number) => {
+    console.log(`[InstanceView] handleAddRow: tableId=${tableId}, position=${position}, rowIndex=${rowIndex}`);
+    onOperation(`Add row ${position} row ${rowIndex + 1} in table "${tableId}"`);
 
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
         const newRowIndex = position === 'after' ? rowIndex + 1 : rowIndex;
         const newRows = inst.rows + 1;
 
         // First, update row numbers for existing cells that need to be shifted
         const newCells = [...inst.cells.slice(0, newRowIndex), Array(inst.cols).fill(null), ...inst.cells.slice(newRowIndex)];
 
-        return {
+        const updatedInstance = {
           ...inst,
           rows: newRows,
           cells: newCells
         };
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
   };
 
   // Handle removing a row from the table
-  const handleRemoveRow = (rowIndex: number) => {
-    if (!editingTableId) return;
-    onOperation(`Remove row ${rowIndex + 1} from table "${editingTableId}"`);
+  const handleRemoveRow = (tableId: string, rowIndex: number) => {
+    console.log(`[InstanceView] handleRemoveRow: tableId=${tableId}, rowIndex=${rowIndex}`);
+    onOperation(`Remove row ${rowIndex + 1} from table "${tableId}"`);
 
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
         const newRows = inst.rows - 1;
 
         // Remove cells in the specified row and update row numbers
         const newCells = [...inst.cells.slice(0, rowIndex), ...inst.cells.slice(rowIndex + 1)];
 
-        return {
+        const updatedInstance = {
           ...inst,
           rows: newRows,
           cells: newCells
         };
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
   };
 
   // Handle adding a column to the table
-  const handleAddColumn = (position: 'before' | 'after', colIndex: number) => {
-    if (!editingTableId) return;
-    onOperation(`Add column ${position} column ${String.fromCharCode(65 + colIndex)} in table "${editingTableId}"`);
+  const handleAddColumn = (tableId: string, position: 'before' | 'after', colIndex: number) => {
+    console.log(`[InstanceView] handleAddColumn: tableId=${tableId}, position=${position}, colIndex=${colIndex}`);
+    onOperation(`Add column ${position} column ${String.fromCharCode(65 + colIndex)} in table "${tableId}"`);
 
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
         const newColIndex = position === 'after' ? colIndex + 1 : colIndex;
         const newCols = inst.cols + 1;
 
@@ -1790,25 +1992,32 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           ...currentColumnNames.slice(newColIndex)
         ];
 
-        return {
+        const updatedInstance = {
           ...inst,
           cols: newCols,
           cells: newCells,
           columnTypes: newColumnTypes,
           columnNames: newColumnNames
         };
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
   };
 
   // Handle removing a column from the table
-  const handleRemoveColumn = (colIndex: number) => {
-    if (!editingTableId) return;
-    onOperation(`Remove column ${String.fromCharCode(65 + colIndex)} from table "${editingTableId}"`);
+  const handleRemoveColumn = (tableId: string, colIndex: number) => {
+    console.log(`[InstanceView] handleRemoveColumn: tableId=${tableId}, colIndex=${colIndex}`);
+    onOperation(`Remove column ${String.fromCharCode(65 + colIndex)} from table "${tableId}"`);
 
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
         const newCols = inst.cols - 1;
 
         const newCells = inst.cells.map(rowArr => {
@@ -1830,13 +2039,20 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           ...currentColumnNames.slice(colIndex + 1)
         ];
 
-        return {
+        const updatedInstance = {
           ...inst,
           cols: newCols,
           cells: newCells,
           columnTypes: newColumnTypes,
           columnNames: newColumnNames
         };
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
@@ -1878,10 +2094,20 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
   };
 
   // Handle updating column type
-  const handleUpdateColumnType = (colIndex: number, columnType: 'numeral' | 'categorical') => {
-    if (!editingTableId) return;
+  const handleUpdateColumnType = (tableId: string, colIndex: number, columnType: 'numeral' | 'categorical') => {
+    console.log(`[InstanceView] handleUpdateColumnType: tableId=${tableId}, colIndex=${colIndex}, columnType=${columnType}`);
+    console.log(`[InstanceView] Current callback state:`, {
+      hasCallback: !!multiTableCallbacksRef.current.updateTableInstance,
+      callbackKeys: Object.keys(multiTableCallbacksRef.current)
+    });
+    
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
+        console.log(`[InstanceView] Found table ${tableId} for column type update`, {
+          currentColumnTypes: inst.columnTypes,
+          targetColumn: colIndex,
+          newType: columnType
+        });
         const currentColumnTypes = inst.columnTypes || [];
         const newColumnTypes = [...currentColumnTypes];
         newColumnTypes[colIndex] = columnType;
@@ -1905,21 +2131,46 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           });
         }
         
-        return {
+        const updatedInstance = {
           ...inst,
           columnTypes: newColumnTypes,
           cells: updatedCells
         };
+        
+        console.log(`[InstanceView] Created updated instance for ${tableId}:`, {
+          oldColumnTypes: inst.columnTypes,
+          newColumnTypes: updatedInstance.columnTypes,
+          hasCallback: !!multiTableCallbacksRef.current.updateTableInstance,
+          cellsPreview: updatedInstance.cells.slice(0, 3).map(row => row.map(cell => 
+            cell && 'content' in cell ? cell.content : (cell?.type || 'null')
+          ))
+        });
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          console.log(`[InstanceView] Calling updateTableInstance callback for ${tableId}`);
+          try {
+            multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+            console.log(`[InstanceView] Successfully called updateTableInstance callback for ${tableId}`);
+          } catch (error) {
+            console.error(`[InstanceView] Error calling updateTableInstance callback:`, error);
+          }
+        } else {
+          console.log(`[InstanceView] No updateTableInstance callback available for ${tableId}`);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
   };
 
   // Handle updating column name
-  const handleUpdateColumnName = (colIndex: number, columnName: string) => {
-    if (!editingTableId) return;
+  const handleUpdateColumnName = (tableId: string, colIndex: number, columnName: string) => {
+    console.log(`[InstanceView] handleUpdateColumnName: tableId=${tableId}, colIndex=${colIndex}, columnName=${columnName}`);
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
+        console.log(`[InstanceView] Found table ${tableId} for column name update`);
         const currentColumnNames = inst.columnNames || [];
         const newColumnNames = [...currentColumnNames];
         
@@ -1930,18 +2181,26 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         
         newColumnNames[colIndex] = columnName;
         
-        return { ...inst, columnNames: newColumnNames };
+        const updatedInstance = { ...inst, columnNames: newColumnNames };
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
   };
 
   // Handle column transformation
-  const handleTransformColumn = (colIndex: number, transformType: string, options?: any) => {
-    if (!editingTableId) return;
+  const handleTransformColumn = (tableId: string, colIndex: number, transformType: string, options?: any) => {
+    console.log(`[InstanceView] handleTransformColumn: tableId=${tableId}, colIndex=${colIndex}, transformType=${transformType}`);
     
     setInstances(prev => prev.map(inst => {
-      if (inst.id === editingTableId && inst.type === 'table') {
+      if (inst.id === tableId && inst.type === 'table') {
+        console.log(`[InstanceView] Found table ${tableId} for column transformation`);
         const newCells = inst.cells.map(row => {
           const cell = row[colIndex];
           if (!cell || cell.type !== 'text' || !cell.content) return row;
@@ -2060,7 +2319,14 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
           return newRow;
         });
         
-        return { ...inst, cells: newCells };
+        const updatedInstance = { ...inst, cells: newCells };
+        
+        // Sync back to MultiTableEditor if this is a joined table
+        if (multiTableCallbacksRef.current.updateTableInstance) {
+          multiTableCallbacksRef.current.updateTableInstance(tableId, updatedInstance as TableInstance);
+        }
+        
+        return updatedInstance;
       }
       return inst;
     }));
@@ -2223,12 +2489,28 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     });
     setAgentLoading(true);
     try {
+      // Defensive coding: Check if we have any HTML context available for inference
+      const htmlContextKeys = Object.keys(htmlContextRef.current);
+      if (htmlContextKeys.length === 0) {
+        console.warn(`[InstanceView] No HTML context available for inference. Please ensure there are pages loaded in the workspace.`);
+        addMessage({
+          role: 'agent',
+          message: '⚠️ No page context is available for inference. Please load or refresh some pages to provide context for the AI inference.',
+          id: generateId(),
+          isRetrying: false
+        });
+        setAgentLoading(false);
+        proactiveService.resumeSuggestions(); // Resume suggestions since we're not proceeding
+        return;
+      }
+      console.log(`[InstanceView] HTML context available for inference with ${htmlContextKeys.length} pages:`, htmlContextKeys);
+      
       let message: string = "", newInstances: any[] = [];
       if (import.meta.env.WXT_USE_LLM == "true") {
         // If using LLM, we need to generate the context first
         const { imageContext, textContext } = await generateInstanceContext(targetInstances);
         // let result = await parseLogWithAgent(logs, textContext, imageContext, htmlContext, instance.id);
-        let result = await chatWithAgent('infer', userMsg, messages, textContext, imageContext, htmlContextRef.current, logs);
+        let result = await chatWithAgent('infer', userMsg, messages, textContext, imageContext, pruneHtmlContext(htmlContextRef.current, instances), logs);
         message = result.message;
         newInstances = result.instances || [];
       } else {
@@ -2554,26 +2836,10 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     setIsInEditor?.(true);
     
     setOriginalInstanceId(null);
-    // Start with a simple Vega-Lite spec as a template
-    const defaultSpec = {
-      "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
-      "description": "A simple bar chart with embedded data.",
-      "data": {
-        "values": [
-          { "a": "A", "b": 28 }, { "a": "B", "b": 55 }, { "a": "C", "b": 43 },
-          { "a": "D", "b": 91 }, { "a": "E", "b": 81 }, { "a": "F", "b": 53 },
-          { "a": "G", "b": 19 }, { "a": "H", "b": 87 }, { "a": "I", "b": 52 }
-        ]
-      },
-      "mark": "bar",
-      "encoding": {
-        "x": { "field": "a", "type": "nominal", "axis": { "labelAngle": 0 } },
-        "y": { "field": "b", "type": "quantitative" }
-      }
-    };
-    setEditingVisualizationSpec(defaultSpec);
+    // Start with an empty spec for new visualization
+    setEditingVisualizationSpec({});
     setAvailableInstances(instances.filter(inst => inst.type === 'table' || inst.type === 'text' || inst.type === 'image'));
-    onOperation(`Open visualization editor to create a new visualization with default bar chart template`);
+    onOperation(`Open visualization editor to create a new visualization`);
   };
 
   // Add handler to track spec changes during editing (for state preservation between modes)
@@ -2632,6 +2898,123 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
     
     console.log('[InstanceView] Exiting editor mode - visualization cancelled');
     setIsInEditor?.(false);
+  };
+
+  // Handler to create sample data instances (Medal or World statistics)
+  const handleCreateSampleData = () => {
+    // Show a modal or dropdown to let user choose between Medal and World data
+    const choice = window.confirm('Click OK for Medal data, or Cancel for World data');
+    
+    if (choice) {
+      // Create Medal data table
+      const medalData = [
+        ['NOC', 'Gold', 'Silver', 'Bronze', 'Total'],
+        ['United States‡', '40', '44', '42', '126'],
+        ['China', '40', '27', '24', '91'],
+        ['Japan', '20', '12', '13', '45'],
+        ['Australia', '18', '19', '16', '53'],
+        ['France*', '16', '26', '22', '64'],
+        ['Netherlands', '15', '7', '12', '34'],
+        ['Great Britain', '14', '22', '29', '65'],
+        ['South Korea', '13', '9', '10', '32'],
+        ['Italy', '12', '13', '15', '40'],
+        ['Germany', '12', '13', '8', '33'],
+        ['New Zealand', '10', '7', '3', '20'],
+        ['Canada', '9', '7', '11', '27'],
+        ['Uzbekistan', '8', '2', '3', '13'],
+        ['Hungary', '6', '7', '6', '19'],
+        ['Spain', '5', '4', '9', '18'],
+        ['Sweden', '4', '4', '3', '11'],
+        ['Kenya', '4', '2', '5', '11'],
+        ['Norway', '4', '1', '3', '8'],
+        ['Ireland', '4', '0', '3', '7'],
+        ['Brazil', '3', '7', '10', '20'],
+        ['Iran', '3', '6', '3', '12'],
+        ['Ukraine', '3', '5', '4', '12'],
+        ['Romania‡', '3', '4', '2', '9'],
+        ['Georgia', '3', '3', '1', '7'],
+        ['Belgium', '3', '1', '6', '10'],
+        ['Bulgaria', '3', '1', '3', '7'],
+        ['Serbia', '3', '1', '1', '5'],
+        ['Czech Republic', '3', '0', '2', '5'],
+        ['Denmark', '2', '2', '5', '9'],
+        ['Azerbaijan', '2', '2', '3', '7']
+      ];
+      
+      createSampleTableInstance('Medal', medalData, 'Olympic medal counts by country');
+      
+    } else {
+      // Create World data table
+      const worldData = [
+        ['Country', 'GDP', 'Population'],
+        ['United States', '27.721 trillion', '343,477,335'],
+        ['China', '17.795 trillion', '1,422,584,933'],
+        ['Germany', '4.526 trillion', '84,548,231'],
+        ['Japan', '4.204 trillion', '124,370,947'],
+        ['India', '3.568 trillion', '1,438,069,596'],
+        ['United Kingdom', '3.381 trillion', '68,682,962'],
+        ['France', '3.052 trillion', '66,438,822'],
+        ['Italy', '2.301 trillion', '59,499,453'],
+        ['Brazil', '2.174 trillion', '211,140,729'],
+        ['Canada', '2.142 trillion', '39,299,105'],
+        ['Australia', '1.728 trillion', '26,451,124'],
+        ['South Korea', '1.713 trillion', '51,748,739'],
+        ['Spain', '1.62 trillion', '47,911,579'],
+        ['Indonesia', '1.371 trillion', '281,190,067'],
+        ['Netherlands', '1.154 trillion', '18,092,524'],
+        ['Turkey', '1.118 trillion', '87,270,501'],
+        ['Switzerland', '884.94 billion', '8,870,561'],
+        ['Poland', '809.201 billion', '38,762,844'],
+        ['Argentina', '646.075 billion', '45,538,401'],
+        ['Belgium', '644.783 billion', '11,712,893'],
+        ['Sweden', '584.96 billion', '10,551,494'],
+        ['Ireland', '551.395 billion', '5,196,630'],
+        ['Thailand', '514.969 billion', '71,702,435'],
+        ['Israel', '513.611 billion', '9,256,314'],
+        ['Austria', '511.685 billion', '9,130,429'],
+        ['Singapore', '501.428 billion', '5,789,090'],
+        ['Norway', '485.311 billion', '5,519,167'],
+        ['Philippines', '437.146 billion', '114,891,199'],
+        ['Denmark', '407.092 billion', '5,948,136'],
+        ['Iran', '404.626 billion', '90,608,707']
+      ];
+      
+      createSampleTableInstance('World', worldData, 'World GDP and population data');
+    }
+  };
+
+  // Helper function to create a sample table instance
+  const createSampleTableInstance = (baseName: string, data: string[][], description: string) => {
+    const newId = baseName;
+    const rows = data.length;
+    const cols = data[0]?.length || 0;
+    
+    // Convert string data to table cells
+    const cells = data.map(row => 
+      row.map(cellValue => ({
+        type: 'text' as const,
+        id: generateId(),
+        source: createManualSource(),
+        content: cellValue
+      }))
+    );
+    
+    const newTable: Instance = normalizeTableInstance({
+      id: newId,
+      type: 'table',
+      source: createManualSource(),
+      rows,
+      cols,
+      cells,
+      x: 50,
+      y: 50,
+      width: Math.min(800, Math.max(400, cols * 120)),
+      height: Math.min(600, Math.max(200, rows * 30 + 60))
+    });
+    
+    const logMessage = `Created sample data table [${newId}](#instance-${newId}): ${description}`;
+    setInstances(prev => [...prev, newTable], `Create sample data "${newId}"`, logMessage);
+    onOperation(logMessage);
   };
 
   return (
@@ -2698,7 +3081,11 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
             initialTableId={editingTableId}
             instances={instances}
             htmlContext={htmlContextRef.current}
-            onSaveTable={(tableId: string, _tableName?: string, isDirty?: boolean) => saveTable(tableId, isDirty)}
+            onSaveTable={(tableId: string, tableName?: string, isDirty?: boolean, tableInstance?: TableInstance) => saveTable(tableId, isDirty, tableInstance)}
+            onAddInstance={(instance: Instance) => {
+              console.log(`[InstanceView] Adding new instance to main array: ${instance.id}`);
+              setInstances(prev => [...prev, instance]);
+            }}
             onCancel={cancelTableEdit}
             onClose={closeTableEditor}
             onAddToTable={(_tableId: string, instance: Instance, row: number, col: number) => handleAddToTable(instance, row, col)}
@@ -2711,23 +3098,23 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
             availableInstances={availableInstances}
             onCaptureToCell={(_tableId: string, row: number, col: number) => handleCaptureToTableCell(row, col)}
             isCaptureEnabled={isCaptureEnabled}
-            onAddRow={(_tableId: string, position: 'before' | 'after', rowIndex: number) => handleAddRow(position, rowIndex)}
-            onRemoveRow={(_tableId: string, rowIndex: number) => handleRemoveRow(rowIndex)}
-            onAddColumn={(_tableId: string, position: 'before' | 'after', colIndex: number) => handleAddColumn(position, colIndex)}
-            onRemoveColumn={(_tableId: string, colIndex: number) => handleRemoveColumn(colIndex)}
-            onUpdateColumnType={(_tableId: string, colIndex: number, columnType: 'numeral' | 'categorical') => handleUpdateColumnType(colIndex, columnType)}
+            onAddRow={(tableId: string, position: 'before' | 'after', rowIndex: number) => handleAddRow(tableId, position, rowIndex)}
+            onRemoveRow={(tableId: string, rowIndex: number) => handleRemoveRow(tableId, rowIndex)}
+            onAddColumn={(tableId: string, position: 'before' | 'after', colIndex: number) => handleAddColumn(tableId, position, colIndex)}
+            onRemoveColumn={(tableId: string, colIndex: number) => handleRemoveColumn(tableId, colIndex)}
+            onUpdateColumnType={(tableId: string, colIndex: number, columnType: 'numeral' | 'categorical') => handleUpdateColumnType(tableId, colIndex, columnType)}
             onOperation={onOperation}
-            onUpdateColumnName={(_tableId: string, colIndex: number, columnName: string) => handleUpdateColumnName(colIndex, columnName)}
-            onTransformColumn={(_tableId: string, colIndex: number, transformType: string, options?: any) => handleTransformColumn(colIndex, transformType, options)}
+            onUpdateColumnName={(tableId: string, colIndex: number, columnName: string) => handleUpdateColumnName(tableId, colIndex, columnName)}
+            onTransformColumn={(tableId: string, colIndex: number, transformType: string, options?: any) => handleTransformColumn(tableId, colIndex, transformType, options)}
             onLiftRowToHeader={(_tableId: string, rowIndex: number) => handleLiftRowToHeader(rowIndex)}
             currentSuggestion={currentSuggestion}
             setIsInEditor={setIsInEditor}
-            onRegisterCallbacks={onRegisterMultiTableCallbacks}
+            onRegisterCallbacks={handleRegisterMultiTableCallbacks}
           />
         ) : editingVisualizationSpec ? (
           // Visualization Editor View
           <>
-            <div className="visualization-editor-mode-switcher">
+            {/* <div className="visualization-editor-mode-switcher">
               <button 
                 className={`mode-btn ${visualizationEditorMode === 'shelf' ? 'active' : ''}`}
                 onClick={() => setVisualizationEditorMode('shelf')}
@@ -2740,7 +3127,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
               >
                 JSON Editor
               </button>
-            </div>
+            </div> */}
             {visualizationEditorMode === 'shelf' ? (
               <ShelfVisualizationEditor
                 onSave={handleSaveVisualization}
@@ -2763,6 +3150,16 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
         ) : (
           // Default Instance View
           <>
+            {/* First-time canvas/capture tip */}
+            <FirstTimeBanner
+              storageKey="webseek_ftip_canvas"
+              steps={[
+                { icon: '🖱️', text: 'Navigate to any webpage and click elements to capture them onto this canvas.' },
+                { icon: '📊', text: 'Click "Table" or "Visualization" in the toolbar to create data artifacts.' },
+                { icon: '↔️', text: 'Drag artifacts to reposition. Drag the edge handles to resize them.' },
+                { icon: '🖱️', text: 'Right-click any artifact for options like rename, export, or infer.' },
+              ]}
+            />
             <InstanceViewHeader
               webToolsOpen={webToolsOpen}
               setWebToolsOpen={setWebToolsOpen}
@@ -2781,6 +3178,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
               selectedInstanceIds={selectedInstanceIds}
               selectedInstanceId={selectedInstanceId}
               handleInfer={handleInfer}
+              handleCreateSampleData={handleCreateSampleData}
             />
             <InstanceContextMenu
               contextMenu={contextMenu}
@@ -2859,7 +3257,6 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                       height: getInstanceGeometry(instance).height,
                       cursor: mode === 'select' ? 'pointer' : (draggingInstanceId === instance.id ? 'grabbing' : 'grab'),
                       userSelect: 'none',
-                      maxWidth: '200px',
                       wordBreak: 'break-word',
                       background: selectedInstanceIds.includes(instance.id) ? '#e6f2ff' : 'white',
                       border: selectedInstanceIds.includes(instance.id) ? '2px solid #0078ff' : '1px solid #ddd',
@@ -2879,8 +3276,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                         position: 'absolute',
                         top: '-18px', // 显示在实例上方
                         left: '-5px',
-                        color: '#bbb',
-                        fontSize: '11px',
+                        color: '#888',
+                        fontSize: '13px',
                         padding: '2px 6px',
                         borderRadius: '4px',
                         zIndex: 1001, // 确保显示在最上层
@@ -2937,8 +3334,8 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                     ) : instance.type === 'table' ? (
                       <div
                         style={{
-                          maxWidth: '100%',
-                          maxHeight: '100%',
+                          width: '100%',
+                          height: '100%',
                           display: 'grid',
                           gridTemplateRows: `repeat(${instance.rows}, 1fr)`,
                           gridTemplateColumns: `repeat(${instance.cols}, 1fr)`,
@@ -2984,7 +3381,7 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                                     key={cell.id}
                                     style={{
                                       margin: 0,
-                                      fontSize: '10px',
+                                      fontSize: '14px',
                                       overflow: 'hidden',
                                       textOverflow: 'ellipsis',
                                       whiteSpace: 'nowrap',
@@ -3009,9 +3406,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                                     src={cell.src}
                                     alt="thumbnail"
                                     style={{
-                                      maxWidth: '100%',
-                                      maxHeight: '100%',
-                                      objectFit: 'contain',
+                                      width: '100%',
+                                      height: '100%',
+                                      objectFit: 'cover',
                                       pointerEvents: 'none',
                                     }}
                                   />
@@ -3034,7 +3431,9 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                         })}
                       </div>
                     ) : instance.type === 'visualization' ? (
-                      instance.thumbnail ? (
+                      // Only use stored thumbnail if it is a data URI (persists across sessions).
+                      // Blob URLs (blob:...) become invalid after reload — fall through to regenerate.
+                      instance.thumbnail && instance.thumbnail.startsWith('data:') ? (
                         <img
                           key={instance.id}
                           src={instance.thumbnail}
@@ -3047,42 +3446,32 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
                           }}
                         />
                       ) : (
-                        <div style={{
-                          width: '100%',
-                          height: '100%',
-                          background: '#f0f0f0',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '12px',
-                          color: '#666'
-                        }}>
-                          📊 Visualization
-                        </div>
+                        <VisualizationThumbnailGenerator
+                          key={instance.id}
+                          instance={instance}
+                          onThumbnailGenerated={(thumbnailUrl: string) => {
+                            const updatedInstances = instances.map(inst =>
+                              inst.id === instance.id
+                                ? { ...inst, thumbnail: thumbnailUrl }
+                                : inst
+                            );
+                            setInstances(updatedInstances);
+                          }}
+                        />
                       )
                     ) : null}
                     {selectedInstanceId === instance.id && (
                       <>
-                        <div
-                          className="resizer"
-                          data-direction="top-left"
-                          onMouseDown={handleResizerMouseDown('top-left', instance.id)}
-                        />
-                        <div
-                          className="resizer"
-                          data-direction="top-right"
-                          onMouseDown={handleResizerMouseDown('top-right', instance.id)}
-                        />
-                        <div
-                          className="resizer"
-                          data-direction="bottom-right"
-                          onMouseDown={handleResizerMouseDown('bottom-right', instance.id)}
-                        />
-                        <div
-                          className="resizer"
-                          data-direction="bottom-left"
-                          onMouseDown={handleResizerMouseDown('bottom-left', instance.id)}
-                        />
+                        {/* Corner handles */}
+                        <div className="resizer" data-direction="top-left" onMouseDown={handleResizerMouseDown('top-left', instance.id)} />
+                        <div className="resizer" data-direction="top-right" onMouseDown={handleResizerMouseDown('top-right', instance.id)} />
+                        <div className="resizer" data-direction="bottom-right" onMouseDown={handleResizerMouseDown('bottom-right', instance.id)} />
+                        <div className="resizer" data-direction="bottom-left" onMouseDown={handleResizerMouseDown('bottom-left', instance.id)} />
+                        {/* Edge handles */}
+                        <div className="resizer" data-direction="right" onMouseDown={handleResizerMouseDown('right', instance.id)} />
+                        <div className="resizer" data-direction="left" onMouseDown={handleResizerMouseDown('left', instance.id)} />
+                        <div className="resizer" data-direction="bottom" onMouseDown={handleResizerMouseDown('bottom', instance.id)} />
+                        <div className="resizer" data-direction="top" onMouseDown={handleResizerMouseDown('top', instance.id)} />
                       </>
                     )}
                   </div>
@@ -3116,6 +3505,75 @@ const InstanceView = ({ instances, setInstances, logs, htmlContextRef, messages,
       />
     </>
   );
-};
+}
+
+// Component for generating thumbnails for visualization instances
+interface VisualizationThumbnailGeneratorProps {
+  instance: Instance;
+  onThumbnailGenerated: (thumbnailUrl: string) => void;
+}
+
+const VisualizationThumbnailGenerator: React.FC<VisualizationThumbnailGeneratorProps> = ({
+  instance,
+  onThumbnailGenerated
+}) => {
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    // Generate thumbnail when component mounts
+    if (!isGenerating && instance.type === 'visualization' && instance.spec) {
+      setIsGenerating(true);
+    }
+  }, [instance, isGenerating]);
+
+  if (instance.type !== 'visualization' || !instance.spec) {
+    return (
+      <div style={{
+        width: '100%',
+        height: '100%',
+        background: '#f0f0f0',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '12px',
+        color: '#666'
+      }}>
+        📊 No Spec
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Show loading state while generating */}
+      <div style={{
+        width: '100%',
+        height: '100%',
+        background: '#f0f0f0',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '12px',
+        color: '#666'
+      }}>
+        {isGenerating ? '⏳ Generating...' : '📊 Visualization'}
+      </div>
+      
+      {/* Invisible VisualizationRenderer to generate thumbnail */}
+      {isGenerating && (
+        <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', width: '200px', height: '150px' }}>
+          <VisualizationRenderer
+            key={`thumb-${instance.id}`}
+            spec={instance.spec}
+            onImageUrlReady={(imageUrl: string) => {
+              onThumbnailGenerated(imageUrl);
+              setIsGenerating(false);
+            }}
+          />
+        </div>
+      )}
+    </>
+  );
+};;
 
 export default InstanceView;

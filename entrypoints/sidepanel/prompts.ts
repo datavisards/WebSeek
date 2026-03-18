@@ -83,7 +83,13 @@ Note:
 - You may use markdown formatting in the summary for better readability (e.g., **bold**, *italic*, \`code\`, lists).
 - Do not leave any non-optional fields empty for each result instance.
 - When returning one or more instances in the results, assign a meaningful, human-readable, and unique ID to each instance (e.g., 'Annual_report', 'Info_list', etc.), which will be used for rendering.
-- For visualization, use the 'visualization' type and provide a Vega-Lite or similar spec in the 'spec' field.
+- **For visualization:** When creating VisualizationInstance objects:
+  - **IMPORTANT:** Do NOT embed data directly in the Vega-Lite spec. Instead, create specs that reference existing table instances.
+  - Use simple column references (A, B, C, etc.) as field names in the Vega-Lite spec encoding
+  - The spec should be compatible with WebSeek's shelf-based visualization editor  
+  - Example: Use field names like "A", "B", "C" for x/y axes, mark types like "point", "bar", "line", and include "width": "container", "height": "container"
+  - Do NOT include a "data" section with embedded values in the spec
+  - The visualization editor will automatically populate the data from existing table instances
 - **For tables:** When creating TableInstance objects, include the \`columnTypes\` field to specify the data type of each column:
   - Use 'numeral' for columns containing numeric data (numbers, prices, quantities, etc.)
   - Use 'categorical' for columns containing text data, categories, labels, or non-numeric identifiers
@@ -196,6 +202,7 @@ Now the user is chatting with you. You can analyze web content, understand user 
 ${applicationContextString ? `### Current Application State:
 ${applicationContextString}
 
+**IMPORTANT:** Make sure you consider the current application state when responding to the user. For example, the user may want to extract data from the current webpage but not explicitly describe what the current webpage is, in which case you have to extract the relevant HTML context for that page.
 ` : ''}### Your Capabilities:
 1. **Text Analysis**: Extract and process text content from web pages
 2. **Image Processing**: Work with images and visual content
@@ -301,7 +308,13 @@ export type Locator = string; // Stable ID (AID)
 - Reference existing instances when relevant using their IDs
 - Be conversational and helpful while maintaining focus on web automation and visualization tasks
 - When returning one or more instances in the results, assign a meaningful, human-readable, and unique ID to each instance (e.g., 'Annual_Report', 'Info_list', 'Sales_Bar_Chart', etc.), which will be used for rendering.
-- For visualization, use the 'visualization' type and provide a Vega-Lite or similar spec in the 'spec' field.
+- **For visualization:** When creating VisualizationInstance objects:
+  - **IMPORTANT:** Do NOT embed data directly in the Vega-Lite spec. Instead, create specs that reference existing table instances.
+  - Use simple column references (A, B, C, etc.) as field names in the Vega-Lite spec encoding
+  - The spec should be compatible with WebSeek's shelf-based visualization editor
+  - Example valid visualization spec: Use field names like "A", "B", "C" for x/y axes, mark types like "point", "bar", "line", and include "width": "container", "height": "container"
+  - Do NOT include a "data" section with embedded values in the spec
+  - The visualization editor will automatically populate the data from existing table instances
 - **For tables:** When creating TableInstance objects, include the \`columnTypes\` field to specify the data type of each column:
   - Use 'numeral' for columns containing numeric data (numbers, prices, quantities, etc.)
   - Use 'categorical' for columns containing text data, categories, labels, or non-numeric identifiers
@@ -309,7 +322,7 @@ export type Locator = string; // Stable ID (AID)
 - **Source Assignment:** When generating an instance, you MUST correctly assign its \`source\` field.
   - For a new instance created from scratch (e.g., a summary you write), use a \`ManualSource\`. Example: \`"source": { "type": "manual" }\`.
   - For new instances created from web content, you MUST generate a \`WebCaptureSource\` object. This includes creating a \`locator\` string, and you can get it from the source element in the HTML. The \`locator\` field should be a string containing the stable ID (AID) for the element (use the \`data-aid-id\` attribute value, e.g., "aid-a1b2c3d4").
-
+- If you are going to join tables, preserve web sources if possible (if both records to be joined are from the web, you can use either one for the cells)
 ---
 
 ### HTML Contexts:
@@ -353,7 +366,6 @@ Return your response strictly as a JSON object in the following format:
 }
 
 **CONSTRAINTS:**
-- Suggest ONLY ONE logical next step 
 - ALL responses MUST have instance updates in the "instances" array
 - Don't suggest destructive actions (deleting instances) unless clearly needed
 - Focus on extending/completing current work, not starting entirely new tasks
@@ -547,7 +559,9 @@ ${workspaceContext}
 ${applicationContextString ? `**CURRENT APPLICATION STATE:**
 ${applicationContextString}
 
-` : ''}**TRIGGERED RULES:**
+` : ''}
+
+**TRIGGERED RULES:**
 The following heuristic rules have been triggered and require suggestions:
 ${ruleDescriptions}
 
@@ -584,14 +598,11 @@ Before suggesting table completion, verify:
 3. Would the suggestion provide substantial value to the user?
 If the answer to any of these is NO, return success: false.
 
-**RECENT USER ACTIONS:**
-${recentActions.length > 0 ? recentActions.map((action, i) => `${i + 1}. ${action.type}: ${JSON.stringify(action.context)}`).join('\n') : 'No recent actions'}
-
 **RECENT LOGS:**
-${logs.slice(-10).join('\n')}
+${logs.slice(-15).join('\n')}
 
 **INSTRUCTIONS:**
-1. Analyze the triggered rules and recent actions
+1. Analyze the triggered rules and recent actions in the logs
 2. Verify that detailed constraints are met for each rule
 3. If NO rules have satisfied constraints, return success: false with empty suggestions
 4. ONLY provide suggestions if at least one rule's constraints are genuinely satisfied
@@ -728,10 +739,11 @@ Use toolSequence when the user's goal requires prerequisite steps. Common scenar
 - Do NOT suggest modifications to any other instances outside the current editing context`}
 
 **EXAMPLE FOR RULE "suggest-useful-websites":**
-If suggesting websites, your response must include:
+**DEMO MODE**: For demo purposes, ALWAYS suggest these three camera shopping websites:
 - category: "suggest-useful-websites"
 - ruleIds: ["suggest-useful-websites"]
-- message should contain actual website URLs like "Visit [DPReview](https://www.dpreview.com) for camera reviews..."
+- message: "Here are some great websites for buying cameras and camera equipment:"
+- Use toolSequence with Amazon, eBay, and HKTVMall
 
 Provide suggestions for the triggered rules: ${triggeredRules.map(r => r.id).join(', ')}`;
 };
@@ -1032,65 +1044,67 @@ Before suggesting any sort operation, you MUST:
     - Column data types that support reasonable imputation methods
     - Missing data percentage that makes filling worthwhile (10%-80% missing)`;
 
-        case 'interactive-filtering-highlighting':
-          return `- ${rule.name}: You MUST verify that linked data exists for meaningful interactive filtering. Check:
-    - Presence of both tabular data and visualizations
-    - Common data fields that can be linked between instances
-    - User benefit from cross-filtering capabilities
-    - Technical feasibility of implementing the interaction`;
+        case 'suggest-additional-visualization':
+          return `- ${rule.name}: Suggest a NEW chart using the "createVisualization" tool. You MUST:
+    - Pick a table that has at least 2 numeral columns (use the exact table instanceId)
+    - Choose a chart type appropriate for those columns (bar, line, scatter, or histogram)
+    - Set xAxis and yAxis to actual column names from that table's columnNames array
+    - Provide a descriptive title for the chart
+    - Do NOT suggest a chart that already exists for the same column pair
+    - Use a single "toolCall" with function "createVisualization" — no toolSequence needed`;
 
         case 'suggest-useful-websites':
-          return `- ${rule.name}: You MUST suggest websites that are genuinely relevant to the workspace context. Check:
-    - Workspace name provides clear topic/domain indication
-    - Suggested websites should directly relate to the workspace theme
-    - Consider the type of data already present (e.g., financial data → financial websites)
-    - Prioritize authoritative, useful sources over generic results
-    - Include 3-5 specific, actionable website suggestions with brief explanations
-    - Focus on websites that could provide additional data or context for the current work
+          return `- ${rule.name}: **DEMO MODE - HARD-CODED CAMERA WEBSITES**: For this demo, ALWAYS suggest these three camera shopping websites regardless of context:
+    - Amazon (amazon.com) - Wide selection of cameras and accessories
+    - eBay (ebay.com) - New and used camera equipment deals
+    - HKTVMall (hktvmall.com) - Hong Kong camera and electronics marketplace
     
 **REQUIRED RESPONSE FORMAT FOR THIS RULE:**
     - category: "suggest-useful-websites"
     - ruleIds: ["suggest-useful-websites"] 
-    - message: Brief description of what websites are being suggested and why
+    - message: "Here are some great websites for buying cameras and camera equipment:"
     - instances: MUST be empty array [] - this rule provides external guidance, NOT workspace modifications
-    - For single website: Use "toolCall" with "openPage" function
-    - For multiple websites: Use "toolSequence" with multiple "openPage" steps
+    - Use "toolSequence" with multiple "openPage" steps for all three websites
     
-**EXAMPLE SINGLE WEBSITE:**
+**DEMO RESPONSE TEMPLATE - USE EXACTLY THIS:**
 {
-  "message": "Open DPReview for professional camera reviews and buying guides",
-  "toolCall": {
-    "function": "openPage",
-    "parameters": {
-      "url": "https://www.dpreview.com",
-      "description": "Professional camera reviews and buying guides"
-    }
-  }
-}
-
-**EXAMPLE MULTIPLE WEBSITES:**
-{
-  "message": "Open multiple camera research websites for comprehensive product information",
+  "message": "Here are some great websites for buying cameras and camera equipment:",
+  "scope": "macro",
+  "modality": "peripheral", 
+  "priority": "high",
+  "confidence": 0.90,
+  "category": "suggest-useful-websites",
+  "ruleIds": ["suggest-useful-websites"],
   "toolSequence": {
-    "goal": "Open camera research websites",
+    "goal": "Open camera shopping websites",
     "steps": [
       {
-        "description": "Open DPReview for camera reviews",
+        "description": "Open HKTVMall for electronics",
         "toolCall": {
           "function": "openPage",
           "parameters": {
-            "url": "https://www.dpreview.com",
-            "description": "Professional camera reviews and buying guides"
+            "url": "https://hktvmall.com",
+            "description": "Hong Kong camera and electronics marketplace"
           }
         }
       },
       {
-        "description": "Open B&H Photo for specifications and pricing",
+        "description": "Open eBay for camera deals",
         "toolCall": {
           "function": "openPage",
           "parameters": {
-            "url": "https://www.bhphotovideo.com",
-            "description": "Technical specifications and pricing information"
+            "url": "https://ebay.com",
+            "description": "New and used camera equipment deals"
+          }
+        }
+      },
+      {
+        "description": "Open Amazon for camera shopping",
+        "toolCall": {
+          "function": "openPage",
+          "parameters": {
+            "url": "https://amazon.com",
+            "description": "Wide selection of cameras and accessories"
           }
         }
       }

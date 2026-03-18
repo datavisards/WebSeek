@@ -36,6 +36,11 @@ export class TriggerEngine {
         console.log('[TriggerEngine] Pattern result:', { hasEnoughSelections, areElementsSimilar });
         return hasEnoughSelections && areElementsSimilar;
       },
+      confidenceScore: (events) => {
+        const selections = events.filter(e => e.type === UserActionMonitor.ActionTypes.ELEMENT_SELECTED);
+        // More repeated similar selections → higher confidence
+        return Math.min(0.95, 0.6 + (selections.length - 2) * 0.1);
+      },
       suggestionType: 'batch-select-elements',
       scope: 'micro',
       modality: 'in-situ',
@@ -83,6 +88,11 @@ export class TriggerEngine {
       pattern: (events: UserActionEvent[]) => {
         const edits = events.filter(e => e.type === UserActionMonitor.ActionTypes.CELL_EDITED);
         return edits.length >= 2 && this.isPatternEstablished(edits);
+      },
+      confidenceScore: (events) => {
+        const edits = events.filter(e => e.type === UserActionMonitor.ActionTypes.CELL_EDITED);
+        // More edits in same column → clearer pattern → higher confidence
+        return Math.min(0.95, 0.55 + edits.length * 0.1);
       },
       suggestionType: 'autocomplete-pattern',
       scope: 'micro',
@@ -175,6 +185,18 @@ export class TriggerEngine {
       description: 'Suggest joining tables when matching columns are detected',
       pattern: (_events: UserActionEvent[], context: any) => {
         return this.hasMultipleTablesWithMatchingColumns(context);
+      },
+      confidenceScore: (_events, context) => {
+        if (!context.instances) return 0.5;
+        const tables = context.instances.filter((i: any) => i.type === 'table');
+        // More matching-column table pairs → higher confidence
+        let matchCount = 0;
+        for (let i = 0; i < tables.length; i++) {
+          for (let j = i + 1; j < tables.length; j++) {
+            if (this.tablesHaveMatchingColumns(tables[i], tables[j])) matchCount++;
+          }
+        }
+        return Math.min(0.9, 0.5 + matchCount * 0.15);
       },
       suggestionType: 'suggest-table-join',
       scope: 'macro',
@@ -307,24 +329,24 @@ export class TriggerEngine {
     });
 
     this.addRule({
-      id: 'interactive-filtering-highlighting',
-      name: 'Interactive Filtering and Highlighting',
-      description: 'Suggest interactive filtering when user selects data in visualizations',
+      id: 'suggest-additional-visualization',
+      name: 'Suggest Additional Visualization',
+      description: 'Suggest a new chart when a table has multiple numeric columns but no (or few) visualizations',
       pattern: (events: UserActionEvent[], context: any): boolean => {
-        const vizInteraction = events.find(e => 
-          e.type === UserActionMonitor.ActionTypes.VISUALIZATION_CREATED ||
-          e.type === UserActionMonitor.ActionTypes.TABLE_SELECTED
-        );
-        if (vizInteraction) {
-          return this.hasLinkedDataForFiltering(context, vizInteraction.instanceId);
-        }
-        return false;
+        if (!context.instances) return false;
+        const tables = context.instances.filter((i: any) => i.type === 'table');
+        const vizCount = context.instances.filter((i: any) => i.type === 'visualization').length;
+        // Trigger when there is at least one table with ≥2 numeral columns and fewer vizs than tables
+        return tables.some((t: any) => {
+          const numeralCols = (t.columnTypes || []).filter((ct: string) => ct === 'numeral').length;
+          return numeralCols >= 2 && vizCount < tables.length;
+        });
       },
-      suggestionType: 'suggest-interactive-filtering',
+      suggestionType: 'suggest-additional-visualization',
       scope: 'macro',
       modality: 'peripheral',
       priority: 'low',
-      debounceMs: 2000
+      debounceMs: 4000
     });
 
     this.addRule({
@@ -380,20 +402,38 @@ export class TriggerEngine {
   }
 
   /**
-   * Check if any rules are triggered by recent events
+   * Evaluate the confidence score for a triggered rule (Section 5.1.2).
+   * Uses the rule's own scorer if provided; otherwise falls back to a
+   * priority-based default so all rules have a comparable score.
+   */
+  private evaluateConfidence(rule: SuggestionTriggerRule, events: UserActionEvent[], context: any): number {
+    if (rule.confidenceScore) {
+      try {
+        return Math.max(0, Math.min(1, rule.confidenceScore(events, context)));
+      } catch (_) {
+        // Fall through to default
+      }
+    }
+    const defaults: Record<string, number> = { high: 0.85, medium: 0.65, low: 0.45 };
+    return defaults[rule.priority] ?? 0.5;
+  }
+
+  /**
+   * Check if any rules are triggered by recent events.
+   * Returns triggered rules sorted by descending confidence score.
    */
   checkTriggers(context: any): SuggestionTriggerRule[] {
-    const recentEvents = actionMonitor.getLastNActions(10); // Look at last 10 user interactions
-    const triggeredRules: SuggestionTriggerRule[] = [];
+    const recentEvents = actionMonitor.getLastNActions(15); // Match paper's 15-interaction window
+    const triggeredRules: Array<{ rule: SuggestionTriggerRule; confidence: number }> = [];
 
     console.log('[TriggerEngine] Checking', this.rules.length, 'rules against', recentEvents.length, 'recent events:', recentEvents);
 
     for (const rule of this.rules) {
       try {
-        // console.log('[TriggerEngine] Checking rule:', rule.id);
         if (rule.pattern(recentEvents, context)) {
-          console.log('[TriggerEngine] Rule triggered:', rule.id);
-          
+          const confidence = this.evaluateConfidence(rule, recentEvents, context);
+          console.log('[TriggerEngine] Rule triggered:', rule.id, 'confidence:', confidence.toFixed(2));
+
           // Handle debouncing - but return immediately triggered rules for high priority suggestions
           if (rule.debounceMs && rule.priority !== 'high') {
             const existingTimeout = this.pendingTriggers.get(rule.id);
@@ -404,16 +444,14 @@ export class TriggerEngine {
             // For debounced rules, trigger callback after delay
             const timeout = setTimeout(() => {
               this.pendingTriggers.delete(rule.id);
-              // Trigger suggestion generation via callback
               this.onDebouncedRuleTrigger?.(rule);
             }, rule.debounceMs);
 
             this.pendingTriggers.set(rule.id, timeout);
             console.log('[TriggerEngine] Rule debounced for', rule.debounceMs, 'ms');
           } else {
-            // Return immediately for high priority or non-debounced rules
-            triggeredRules.push(rule);
-            console.log('[TriggerEngine] Rule added immediately (high priority or no debounce)');
+            triggeredRules.push({ rule, confidence });
+            console.log('[TriggerEngine] Rule queued immediately (high priority or no debounce)');
           }
         }
       } catch (error) {
@@ -421,8 +459,12 @@ export class TriggerEngine {
       }
     }
 
-    console.log('[TriggerEngine] Returning', triggeredRules.length, 'triggered rules');
-    return triggeredRules;
+    // Sort by confidence descending so the most relevant rules are processed first
+    triggeredRules.sort((a, b) => b.confidence - a.confidence);
+
+    const sorted = triggeredRules.map(r => r.rule);
+    console.log('[TriggerEngine] Returning', sorted.length, 'triggered rules (sorted by confidence)');
+    return sorted;
   }
 
   /**
@@ -640,16 +682,6 @@ export class TriggerEngine {
     return missingPercentage > 0.1 && missingPercentage < 0.8; // Between 10% and 80% missing
   }
 
-  private hasLinkedDataForFiltering(context: any, instanceId?: string): boolean {
-    if (!instanceId || !context.instances) return false;
-    
-    const instances = context.instances;
-    const tables = instances.filter((i: any) => i.type === 'table');
-    const visualizations = instances.filter((i: any) => i.type === 'visualization');
-    
-    // Suggest interactive filtering if we have both tables and visualizations
-    return tables.length > 0 && visualizations.length > 0;
-  }
 
   /**
    * Cleanup pending triggers

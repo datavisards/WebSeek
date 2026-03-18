@@ -27,3 +27,7 @@ web-ext.config.ts
 
 # Ignore .env file
 .env
+
+# Algorithm & Paper
+algorithm_evaluation/*
+overleaf/*

@@ -20,7 +20,7 @@ export const useHTMLContent = (updateHTMLContext: React.Dispatch<React.SetStateA
     setHtmlLoadingStates(prev => ({ ...prev, [pageId]: true }));
     
     const maxRetries = 5;
-    const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff, max 5s
+    const retryDelay = Math.min(300 * Math.pow(1.8, retryCount), 2000); // Faster backoff, max 2s
     
     try {
       // Use background script proxy to avoid HTTPS/HTTP mixed content issues  
