@@ -8,9 +8,10 @@ import { UserActionEvent } from './types';
 export class UserActionMonitor {
   private actionHistory: UserActionEvent[] = [];
   private listeners: ((event: UserActionEvent) => void)[] = [];
-  private maxHistorySize: number = 100;
+  // Paper (Section 5.1.2) specifies last 15 major interactions as the relevant window.
+  private maxHistorySize: number = 15;
 
-  constructor(maxHistorySize: number = 100) {
+  constructor(maxHistorySize: number = 15) {
     this.maxHistorySize = maxHistorySize;
   }
 

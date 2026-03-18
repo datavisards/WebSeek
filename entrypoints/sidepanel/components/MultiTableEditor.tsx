@@ -6,6 +6,7 @@ import { TableInstance, Instance, ProactiveSuggestion, ColumnType } from '../typ
 import { indexToLetters, normalizeTableInstance } from '../utils';
 import { systemLogger } from '../system-logger';
 import './MultiTableEditor.css';
+import FeatureTutorialModal from './FeatureTutorialModal';
 
 // Types for multi-table operations
 interface OpenTable {
@@ -45,7 +46,8 @@ interface MultiTableEditorProps {
   initialTableId: string | null;
   instances: Instance[];
   htmlContext: Record<string, {pageURL: string, htmlContent: string}>;
-  onSaveTable: (tableId: string, tableName?: string, isDirty?: boolean) => string | null;
+  onSaveTable: (tableId: string, tableName?: string, isDirty?: boolean, tableInstance?: TableInstance) => string | null;
+  onAddInstance?: (instance: Instance) => void; // Callback to add new instances to main array
   onCancel: () => void;
   onClose: () => void;
   onAddToTable: (tableId: string, instance: Instance, row: number, col: number) => void;
@@ -73,7 +75,7 @@ interface MultiTableEditorProps {
   }) => void;
   setIsInEditor?: React.Dispatch<React.SetStateAction<boolean>>; // For tracking editor state
   // Callback to register MultiTableEditor functions for external access
-  onRegisterCallbacks?: (callbacks: { markTableDirty: (tableId: string) => void }) => void;
+  onRegisterCallbacks?: (callbacks: { markTableDirty: (tableId: string) => void; updateTableInstance: (tableId: string, instance: TableInstance) => void }) => void;
 }
 
 const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
@@ -81,6 +83,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
   instances,
   htmlContext,
   onSaveTable,
+  onAddInstance,
   onCancel,
   onClose,
   onAddToTable,
@@ -320,20 +323,89 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
   }, [openTables, activeTabId]);
 
   // Function to mark table as dirty
-  const markTableDirty = useCallback((tableId: string) => {
-    console.log(`[MultiTableEditor] Marking table ${tableId} as dirty`);
+  const markTableDirty = useCallback((tableId: string, reason?: string) => {
+    console.log(`[MultiTableEditor] Marking table ${tableId} as dirty${reason ? ` (reason: ${reason})` : ''}`);
     setOpenTables(prev => prev.map(t => 
       t.id === tableId ? { ...t, isDirty: true } : t
     ));
   }, []);
 
+  // Helper function to check if a table actually changed (to avoid false dirty marking)
+  const markTableDirtyIfChanged = useCallback((tableId: string, newInstance: TableInstance, reason?: string) => {
+    const currentTable = openTables.find(t => t.id === tableId);
+    if (!currentTable) return;
+    
+    // Simple check - compare JSON strings (not perfect but good enough for most cases)
+    const currentStr = JSON.stringify(currentTable.instance);
+    const newStr = JSON.stringify(newInstance);
+    
+    if (currentStr !== newStr) {
+      console.log(`[MultiTableEditor] Table ${tableId} actually changed, marking dirty (reason: ${reason})`);
+      markTableDirty(tableId, reason);
+    } else {
+      console.log(`[MultiTableEditor] Table ${tableId} unchanged, not marking dirty`);
+    }
+  }, [openTables, markTableDirty]);
+
+  // Function to update table instance in openTables when it's modified externally
+  const updateTableInstance = useCallback((tableId: string, updatedInstance: TableInstance) => {
+    console.log(`[MultiTableEditor] Updating table instance for ${tableId}:`, {
+      tableId,
+      hasUpdatedInstance: !!updatedInstance,
+      columnTypes: updatedInstance?.columnTypes,
+      columnNames: updatedInstance?.columnNames,
+      rows: updatedInstance?.rows,
+      cols: updatedInstance?.cols,
+      cellsPreview: updatedInstance?.cells?.slice(0, 3).map(row => row.map(cell => 
+        cell && 'content' in cell ? cell.content : (cell?.type || 'null')
+      ))
+    });
+    
+    setOpenTables(prev => {
+      const newTables = prev.map(table => {
+        if (table.id === tableId) {
+          console.log(`[MultiTableEditor] Found matching table to update:`, {
+            oldInstance: {
+              columnTypes: table.instance?.columnTypes,
+              cellsPreview: table.instance?.cells?.slice(0, 2).map(row => row.map(cell => 
+                cell && 'content' in cell ? cell.content : (cell?.type || 'null')
+              ))
+            },
+            newInstance: {
+              columnTypes: updatedInstance.columnTypes,
+              cellsPreview: updatedInstance.cells?.slice(0, 2).map(row => row.map(cell => 
+                cell && 'content' in cell ? cell.content : (cell?.type || 'null')
+              ))
+            }
+          });
+          return { ...table, instance: updatedInstance, isDirty: true };
+        }
+        return table;
+      });
+      
+      console.log(`[MultiTableEditor] Updated openTables:`, newTables.map(t => ({
+        id: t.id,
+        isDirty: t.isDirty,
+        columnTypes: t.instance?.columnTypes
+      })));
+      
+      return newTables;
+    });
+  }, []);
+
   // Register callback for external access
   useEffect(() => {
     if (onRegisterCallbacks) {
-      console.log(`[MultiTableEditor] Registering markTableDirty callback`);
-      onRegisterCallbacks({ markTableDirty });
+      console.log(`[MultiTableEditor] Registering markTableDirty and updateTableInstance callbacks`, {
+        hasMarkTableDirty: !!markTableDirty,
+        hasUpdateTableInstance: !!updateTableInstance,
+        openTablesCount: openTables.length
+      });
+      onRegisterCallbacks({ markTableDirty, updateTableInstance });
+    } else {
+      console.log(`[MultiTableEditor] No onRegisterCallbacks prop provided`);
     }
-  }, [onRegisterCallbacks, markTableDirty]);
+  }, [onRegisterCallbacks, markTableDirty, updateTableInstance]);
 
   // Enhanced handlers that work with multiple tables
   const handleAddToTable = useCallback((instance: Instance, row: number, col: number) => {
@@ -1333,14 +1405,16 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
 
   const handleUpdateColumnTypeWrapped = useCallback((colIndex: number, columnType: 'numeral' | 'categorical') => {
     if (!activeTabId || !onUpdateColumnType) return;
+    console.log(`[MultiTableEditor] Updating column type for table ${activeTabId}`);
     onUpdateColumnType(activeTabId, colIndex, columnType);
-    markTableDirty(activeTabId);
+    markTableDirty(activeTabId, 'column_type_change');
   }, [activeTabId, onUpdateColumnType, markTableDirty]);
 
   const handleUpdateColumnNameWrapped = useCallback((colIndex: number, columnName: string) => {
     if (!activeTabId || !onUpdateColumnName) return;
+    console.log(`[MultiTableEditor] Updating column name for table ${activeTabId}`);
     onUpdateColumnName(activeTabId, colIndex, columnName);
-    markTableDirty(activeTabId);
+    markTableDirty(activeTabId, 'column_name_change');
   }, [activeTabId, onUpdateColumnName, markTableDirty]);
 
   const handleTransformColumnWrapped = useCallback((colIndex: number, transformType: string, options?: any) => {
@@ -1487,9 +1561,13 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
     let joinedRows: any[][] = [];
     let joinedColumnNames: string[] = [];
     
-    // Create combined column headers
-    const leftNames = leftTable.columnNames || leftTable.cols ? Array.from({ length: leftTable.cols }, (_, i) => `L${i + 1}`) : [];
-    const rightNames = rightTable.columnNames || rightTable.cols ? Array.from({ length: rightTable.cols }, (_, i) => `R${i + 1}`) : [];
+    // Create combined column headers with original names preserved
+    const leftNames = leftTable.columnNames && leftTable.columnNames.length > 0 
+      ? leftTable.columnNames.map(name => `${name}_L`)
+      : Array.from({ length: leftTable.cols }, (_, i) => `L${i + 1}`);
+    const rightNames = rightTable.columnNames && rightTable.columnNames.length > 0
+      ? rightTable.columnNames.map(name => `${name}_R`)
+      : Array.from({ length: rightTable.cols }, (_, i) => `R${i + 1}`);
     
     if (suggestion.joinType === 'union') {
       // Union: combine all rows (assuming same structure)
@@ -1552,6 +1630,12 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       isNew: true,
       originalName: `${openTables.find(t => t.id === suggestion.leftTableId)?.originalName || 'Left'} ${suggestion.joinType.toUpperCase()} ${openTables.find(t => t.id === suggestion.rightTableId)?.originalName || 'Right'}`
     };
+    
+    // Immediately add the joined table to the main instances array so it's accessible to all components
+    if (onAddInstance) {
+      console.log(`[MultiTableEditor] Adding joined table ${joinedTableId} to main instances array`);
+      onAddInstance(newOpenTable.instance);
+    }
     
     setOpenTables(prev => [...prev, newOpenTable]);
     setActiveTabId(joinedTableId);
@@ -1666,6 +1750,16 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       onPaste={handlePasteEvent}
       tabIndex={0}
     >
+      {/* First-time table editor tutorial modal */}
+      <FeatureTutorialModal
+        storageKey="webseek_ftip_table_editor"
+        steps={[
+          { icon: '📋', title: 'Table Editor', content: 'Drag any captured element from the canvas onto a cell to populate it.' },
+          { icon: '✏️', title: 'Edit Cells', content: 'Double-click a text cell to edit it directly.', tip: 'Tip: Right-click a row/column header for insert, delete, and transform options.' },
+          { icon: '📌', title: 'Capture to Cell', content: 'Select a cell first, then use "Capture to Cell" in the toolbar to capture web content directly into it.' },
+          { icon: '💾', title: 'Save Your Work', content: 'Click Save in the toolbar when done — unsaved changes are shown with a dot (●) on the tab.' },
+        ]}
+      />
       {/* Tab Bar */}
       <div className="tab-bar" style={{ 
         display: 'flex', 
@@ -1744,15 +1838,36 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
           {onCaptureToCell && (
             <button 
               onClick={() => {
+                console.log('[MultiTableEditor] Capture button clicked:', {
+                  hasSelectedCell: !!selectedCell,
+                  selectedCell,
+                  hasOnCaptureToCell: !!onCaptureToCell,
+                  isCaptureEnabled,
+                  timestamp: Date.now()
+                });
+                
                 if (selectedCell) {
                   // Use original row index if available for data operations
                   const rowToUse = selectedCell.originalRow ?? selectedCell.row;
+                  console.log('[MultiTableEditor] Calling onCaptureToCell with:', {
+                    tableId: selectedCell.tableId,
+                    rowToUse,
+                    col: selectedCell.col
+                  });
                   onCaptureToCell?.(selectedCell.tableId, rowToUse, selectedCell.col);
                   markTableDirty(selectedCell.tableId);
+                } else {
+                  console.warn('[MultiTableEditor] Capture button clicked but no selected cell');
                 }
               }}
               disabled={!isCaptureEnabled || !selectedCell}
-              title={!selectedCell ? "Click on a table cell first to capture content to it" : `Capture content to cell (${selectedCell.row + 1}, ${String.fromCharCode(65 + selectedCell.col)})`}
+              style={{
+                opacity: (!isCaptureEnabled || !selectedCell) ? 0.7 : 1,
+                backgroundColor: (!isCaptureEnabled || !selectedCell) ? '#ccc' : '',
+                color: (!isCaptureEnabled || !selectedCell) ? '#666' : '',
+                cursor: (!isCaptureEnabled || !selectedCell) ? 'not-allowed' : 'pointer'
+              }}
+              title={!isCaptureEnabled ? "Capture in progress..." : !selectedCell ? "Click on a table cell first to capture content to it" : `Capture content to cell (${selectedCell.row + 1}, ${String.fromCharCode(65 + selectedCell.col)})`}
             >
               {selectedCell 
                 ? `Capture to Cell (${selectedCell.row + 1}, ${String.fromCharCode(65 + selectedCell.col)})` 
@@ -2031,7 +2146,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
       )}
 
       {/* Available Instances */}
-      <div className="available-instances">
+      {availableInstances.length > 0 && <div className="available-instances">
         <h4 style={{ margin: '10px 0' }}>Add to Table:</h4>
         <div className="instance-thumbs">
           {availableInstances
@@ -2102,7 +2217,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
               </div>
             ))}
         </div>
-      </div>
+      </div>}
 
       {/* Table Selector Modal */}
       {showTableSelector && (
@@ -2291,7 +2406,7 @@ const MultiTableEditor: React.FC<MultiTableEditorProps> = ({
                   const idChanges: { [oldId: string]: string } = {};
                   dirtyTables.forEach(table => {
                     console.log(`[MultiTableEditor] Saving table: ${table.id} (${table.originalName})`);
-                    const newTableId = onSaveTable(table.id, table.originalName, table.isDirty);
+                    const newTableId = onSaveTable(table.id, table.originalName, table.isDirty, table.instance);
                     console.log(`[MultiTableEditor] Save returned newTableId: ${newTableId} for ${table.id}`);
                     
                     if (newTableId && newTableId !== table.id) {

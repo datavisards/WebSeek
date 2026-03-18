@@ -175,6 +175,33 @@ export interface InstanceEvent {
   instance?: Instance; // The new content of the instance; NOT OPTIONAL FOR 'add' and 'update' ACTIONS
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Typed Tool Call API (Table 3 in the CHI paper)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface FilterCondition {
+  column: string;
+  operator: '>' | '>=' | '<' | '<=' | 'equals' | 'contains' | 'not_equals' | 'not_contains';
+  value: string | number;
+}
+
+export type ToolCall =
+  | { function: 'openPage'; parameters: { url: string; description: string; openInBackground?: boolean } }
+  | { function: 'selectElements'; parameters: { selector: string; pageUrl: string } }
+  | { function: 'inferSchema'; parameters: { pageUrl: string; targetElement: string } }
+  | { function: 'extractBatch'; parameters: { pageUrl: string; pattern: string; maxItems?: number } }
+  | { function: 'updateInstance'; parameters: { instanceId: string; newInstance: Instance } }
+  | { function: 'addComputedColumn'; parameters: { instanceId: string; formula: string; newColumnName: string } }
+  | { function: 'tableSort'; parameters: { instanceId: string; columnName: string; order: 'asc' | 'desc'; secondarySort?: { column: string; order: 'asc' | 'desc' } } }
+  | { function: 'tableFilter'; parameters: { instanceId: string; conditions: FilterCondition[]; operator?: 'AND' | 'OR' } }
+  | { function: 'renameColumn'; parameters: { instanceId: string; oldColumnName: string; newColumnName: string } }
+  | { function: 'formatColumn'; parameters: { instanceId: string; columnName: string; formatPattern: string } }
+  | { function: 'searchAndReplace'; parameters: { instanceId: string; searchPattern: string; replaceWith: string; useRegex?: boolean; columnName?: string } }
+  | { function: 'mergeInstances'; parameters: { sourceInstanceIds: [string, string]; mergeStrategy: 'append' | 'union' | 'inner_join' | 'left_join' | 'right_join'; joinColumns?: { leftColumn: string; rightColumn: string }; newInstanceName?: string } }
+  | { function: 'convertColumnType'; parameters: { instanceId: string; columnName: string; targetType: 'numerical' | 'categorical'; cleaningPattern?: string; replaceWith?: string } }
+  | { function: 'fillMissingValues'; parameters: { instanceId: string; columnName: string; strategy: 'mean' | 'median' | 'mode' | 'forward_fill' | 'backward_fill' | 'constant' | 'interpolate'; constantValue?: string; missingIndicators?: string[] } }
+  | { function: 'createVisualization'; parameters: { sourceInstanceId: string; chartType: 'bar' | 'line' | 'scatter' | 'histogram'; xAxis: string; yAxis?: string; title?: string } };
+
 // Proactive suggestion - reuse existing chatWithAgent response format
 // Suggestion scope classification
 export type SuggestionScope = 'micro' | 'macro';
@@ -203,18 +230,12 @@ export interface ProactiveSuggestion {
   undoable: boolean; // Whether this suggestion can be undone
   isLoading?: boolean; // Whether this suggestion is currently being processed/refined
   loadingMessage?: string; // Optional custom loading message
-  toolCall?: { // Optional single tool call for simple macro suggestions
-    function: string; // Tool function name
-    parameters: any; // Tool parameters
-  };
+  toolCall?: ToolCall; // Optional single tool call for simple macro suggestions
   toolSequence?: { // Optional tool sequence for composite macro suggestions
     goal: string; // High-level goal description (e.g., "Sort table by price")
     steps: Array<{
       description: string; // Human-readable step description (e.g., "Convert 'Price' column to numbers")
-      toolCall: {
-        function: string; // Tool function name
-        parameters: any; // Tool parameters
-      };
+      toolCall: ToolCall;
     }>;
   };
 }
@@ -234,6 +255,13 @@ export interface SuggestionTriggerRule {
   name: string;
   description: string;
   pattern: (events: UserActionEvent[], context: any) => boolean;
+  /**
+   * Optional confidence scorer (Section 5.1.2). Returns a value in [0, 1].
+   * Higher values mean the suggestion is more likely to be relevant.
+   * Used to sort and filter suggestions before display.
+   * If omitted, a default score based on priority is used.
+   */
+  confidenceScore?: (events: UserActionEvent[], context: any) => number;
   suggestionType: string;
   scope: SuggestionScope;
   modality: PresentationModality;

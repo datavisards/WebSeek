@@ -27,7 +27,7 @@ interface StateChange {
 export class GlobalUndoManager {
   private stateHistory: StateSnapshot[] = [];
   private currentStateIndex: number = -1;
-  private maxHistorySize: number = 100;
+  private maxHistorySize: number = 50; // Reduced from 100 to manage memory better
   private snapshotId: number = 0;
   private isApplyingUndoRedo: boolean = false;
   private instanceId: string;
@@ -73,24 +73,18 @@ export class GlobalUndoManager {
       return;
     }
 
-    // Check for duplicate recording - prevent identical operations within 100ms
-    // TEMPORARILY DISABLED FOR DEBUGGING
+    // Prevent duplicate recordings: same description within 100ms with same instance count.
+    // Uses a lightweight fingerprint rather than deep equality to avoid blocking valid rapid ops.
     const now = Date.now();
     const lastSnapshot = this.stateHistory[this.stateHistory.length - 1];
-    
-    // TODO: Re-enable duplicate prevention after debugging
-    /*
-    if (lastSnapshot && 
+    if (lastSnapshot &&
         (now - lastSnapshot.timestamp) < 100 &&
         lastSnapshot.description === change.description &&
         lastSnapshot.instances.length === change.newState.length &&
         lastSnapshot.logs.length === change.newLogs.length) {
-      console.log('[GlobalUndoManager] Preventing duplicate recording of same operation:', change.description);
-      console.log('[GlobalUndoManager] Time since last:', now - lastSnapshot.timestamp, 'ms');
+      console.log('[GlobalUndoManager] Skipping duplicate recording within 100ms:', change.description);
       return;
     }
-    */
-    console.log('[GlobalUndoManager] Duplicate prevention DISABLED for debugging');
 
     // Create snapshot ID
     const snapshotId = `state_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -133,12 +127,49 @@ export class GlobalUndoManager {
     
     // Save state to sessionStorage to survive hot reloads
     try {
-      sessionStorage.setItem('globalUndoManagerState', JSON.stringify({
+      const stateToSave = {
         stateHistory: this.stateHistory,
         currentStateIndex: this.currentStateIndex
-      }));
+      };
+      
+      const serialized = JSON.stringify(stateToSave);
+      const sizeInMB = (new Blob([serialized]).size / (1024 * 1024)).toFixed(2);
+      
+      // Check if the data size exceeds reasonable limits (5MB)
+      if (new Blob([serialized]).size > 5 * 1024 * 1024) {
+        console.warn('[GlobalUndoManager] State size too large, trimming history. Size:', sizeInMB, 'MB');
+        this.trimHistoryForStorage();
+        // Try again with trimmed history
+        const trimmedState = {
+          stateHistory: this.stateHistory,
+          currentStateIndex: this.currentStateIndex
+        };
+        sessionStorage.setItem('globalUndoManagerState', JSON.stringify(trimmedState));
+      } else {
+        sessionStorage.setItem('globalUndoManagerState', serialized);
+      }
     } catch (error) {
-      console.log('[GlobalUndoManager] Failed to save state:', error);
+      if (error instanceof Error && error.name === 'QuotaExceededError') {
+        console.warn('[GlobalUndoManager] Storage quota exceeded, trimming history and retrying');
+        this.trimHistoryForStorage();
+        try {
+          const trimmedState = {
+            stateHistory: this.stateHistory,
+            currentStateIndex: this.currentStateIndex
+          };
+          sessionStorage.setItem('globalUndoManagerState', JSON.stringify(trimmedState));
+        } catch (retryError) {
+          console.error('[GlobalUndoManager] Failed to save even trimmed state:', retryError);
+          // Clear the storage key if we still can't save
+          try {
+            sessionStorage.removeItem('globalUndoManagerState');
+          } catch (clearError) {
+            console.error('[GlobalUndoManager] Failed to clear storage:', clearError);
+          }
+        }
+      } else {
+        console.error('[GlobalUndoManager] Failed to save state:', error);
+      }
     }
   }
 
@@ -166,7 +197,7 @@ export class GlobalUndoManager {
 
     this.currentStateIndex--;
     const targetSnapshot = this.stateHistory[this.currentStateIndex];
-    
+
     console.log('[GlobalUndoManager] Undoing to snapshot:', {
       targetIndex: this.currentStateIndex,
       targetDescription: targetSnapshot.description,
@@ -174,9 +205,14 @@ export class GlobalUndoManager {
       targetLogsCount: targetSnapshot.logs.length,
       targetLogs: targetSnapshot.logs
     });
-    
-    this.applySnapshot(targetSnapshot);
-    this.dispatchStateChanged();
+
+    this.isApplyingUndoRedo = true;
+    try {
+      this.applySnapshot(targetSnapshot);
+      this.dispatchStateChanged();
+    } finally {
+      this.isApplyingUndoRedo = false;
+    }
     return true;
   }
 
@@ -239,7 +275,8 @@ export class GlobalUndoManager {
     if (!this.canUndo()) {
       return null;
     }
-    return this.stateHistory[this.currentStateIndex - 1].description;
+    // Return the description of the current state — this is the action being undone.
+    return this.stateHistory[this.currentStateIndex].description;
   }
 
   /**
@@ -464,6 +501,50 @@ export class GlobalUndoManager {
     } finally {
       this.isApplyingUndoRedo = false;
     }
+  }
+
+  /**
+   * Trim history to reduce storage size when quota is exceeded
+   */
+  private trimHistoryForStorage(): void {
+    const originalSize = this.stateHistory.length;
+    
+    // Strategy 1: Remove large snapshots (those with many instances or large data)
+    this.stateHistory = this.stateHistory.filter((snapshot, index) => {
+      // Always keep the current state and a few recent states
+      if (index >= this.currentStateIndex - 2) {
+        return true;
+      }
+      
+      // Remove snapshots with excessive instances (likely containing images/large data)
+      const hasLargeData = snapshot.instances.some(instance => {
+        return (instance.type === 'image' && instance.src && instance.src.length > 10000) ||
+               (instance.type === 'table' && instance.cells && instance.cells.length * (instance.cells[0]?.length || 0) > 100) ||
+               (instance.type === 'sketch' && instance.content && JSON.stringify(instance.content).length > 50000);
+      });
+      
+      return !hasLargeData;
+    });
+    
+    // Strategy 2: If still too many, keep only every 3rd snapshot for older history
+    if (this.stateHistory.length > 20) {
+      const recentStates = this.stateHistory.slice(-10); // Keep last 10
+      const olderStates = this.stateHistory.slice(0, -10);
+      const sampledOlderStates = olderStates.filter((_, index) => index % 3 === 0);
+      
+      this.stateHistory = [...sampledOlderStates, ...recentStates];
+      this.currentStateIndex = this.stateHistory.length - (recentStates.length - (this.currentStateIndex - olderStates.length));
+    }
+    
+    // Strategy 3: Hard limit to 30 states maximum
+    if (this.stateHistory.length > 30) {
+      const keepCount = 30;
+      const removeCount = this.stateHistory.length - keepCount;
+      this.stateHistory = this.stateHistory.slice(removeCount);
+      this.currentStateIndex = Math.max(0, this.currentStateIndex - removeCount);
+    }
+    
+    console.log(`[GlobalUndoManager] Trimmed history from ${originalSize} to ${this.stateHistory.length} snapshots`);
   }
 
   /**

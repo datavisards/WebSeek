@@ -7,7 +7,7 @@
 .table-cell {
   position: relative;
   overflow: hidden;
-  padding: 4px;
+  padding: 6px 8px;
   cursor: pointer;
   pointer-events: auto;
   border: 1px solid #ddd;
@@ -73,13 +73,14 @@
 
 .cell-text {
   margin: 0;
-  font-size: 12px;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
   -webkit-box-orient: vertical;
+  line-height: 1.4;
 }
 
 .cell-text.formula {
@@ -144,7 +145,7 @@
   overflow: hidden;
   position: relative;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   justify-content: space-between;
 }
 

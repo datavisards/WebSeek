@@ -12,17 +12,46 @@ import {
 import { extractJSONFromResponse, cleanHTML } from './utils';
 import { getPrompt, promptChat, promptInfer } from './prompts';
 
-const openai = new OpenAI({
-    baseURL: "https://openrouter.ai/api/v1",
-    apiKey: import.meta.env.WXT_OPENROUTER_KEY,
-    dangerouslyAllowBrowser: true
-});
+// --- User-configurable API settings (persisted in localStorage) ---
+const STORAGE_KEY_API = 'webseek_api_settings';
 
-const model_name = {
-    "chat": "google/gemini-2.5-flash",
-    "infer": "google/gemini-2.5-flash",
-    "suggest": "google/gemini-2.5-flash",
+export interface ApiSettings {
+    apiKey: string;        // OpenRouter API key
+    baseURL: string;       // Base URL (OpenRouter or compatible)
+    model: string;         // Model identifier
+}
+
+const DEFAULT_API_SETTINGS: ApiSettings = {
+    apiKey: import.meta.env.WXT_OPENROUTER_KEY || '',
+    baseURL: 'https://openrouter.ai/api/v1',
+    model: 'google/gemini-2.5-flash',
 };
+
+export function getApiSettings(): ApiSettings {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEY_API);
+        if (stored) {
+            const parsed = JSON.parse(stored) as Partial<ApiSettings>;
+            return { ...DEFAULT_API_SETTINGS, ...parsed };
+        }
+    } catch {/* ignore */}
+    return { ...DEFAULT_API_SETTINGS };
+}
+
+export function saveApiSettings(settings: Partial<ApiSettings>): void {
+    const current = getApiSettings();
+    localStorage.setItem(STORAGE_KEY_API, JSON.stringify({ ...current, ...settings }));
+}
+
+function getOpenAIClient() {
+    const settings = getApiSettings();
+    return new OpenAI({
+        baseURL: settings.baseURL,
+        apiKey: settings.apiKey,
+        dangerouslyAllowBrowser: true,
+    });
+}
+
 
 export async function chatWithAgent(
     chatType: ChatType,
@@ -111,8 +140,10 @@ export async function chatWithAgent(
         // }
 
         // Call the LLM
+        const openai = getOpenAIClient();
+        const settings = getApiSettings();
         const completion = await openai.chat.completions.create({
-            model: model_name[chatType],
+            model: settings.model,
             messages: [
                 {
                     role: "system",

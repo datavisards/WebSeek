@@ -137,9 +137,13 @@
             urlInfo!.textContent = `Original URL: ${snapshotData.originalUrl}`;
         }
         
-        // Set up iframe with sandbox for security
+        // Set up iframe — use Blob URL for faster rendering than srcdoc on large documents
         (iframe as HTMLIFrameElement).sandbox = 'allow-same-origin';
-        (iframe as HTMLIFrameElement).srcdoc = snapshotData.htmlContent;
+        const blob = new Blob([snapshotData.htmlContent], { type: 'text/html' });
+        const blobUrl = URL.createObjectURL(blob);
+        (iframe as HTMLIFrameElement).src = blobUrl;
+        // Release the blob URL once the iframe has loaded
+        (iframe as HTMLIFrameElement).addEventListener('load', () => URL.revokeObjectURL(blobUrl), { once: true });
         
         // Wait for iframe to load and then highlight element
         (iframe as HTMLIFrameElement).onload = () => {
@@ -185,10 +189,9 @@
                     }
                     
                     if (retryCount < 5) {
-                        console.log(`Element not found on attempt ${retryCount + 1}, retrying in ${500 * (retryCount + 1)}ms...`);
-                        console.log('Available elements with data-aid-id:', 
-                            Array.from(iframeDocument.querySelectorAll('[data-aid-id]')).slice(0, 5).map(el => el.getAttribute('data-aid-id')));
-                        const timeoutId = setTimeout(() => tryHighlight(retryCount + 1), 500 * (retryCount + 1)) as any;
+                        const delay = 200 * (retryCount + 1); // 200ms, 400ms, 600ms, 800ms, 1000ms
+                        console.log(`Element not found on attempt ${retryCount + 1}, retrying in ${delay}ms...`);
+                        const timeoutId = setTimeout(() => tryHighlight(retryCount + 1), delay) as any;
                         retryTimeouts.push(timeoutId);
                     } else {
                         console.warn('Target element not found after all retries');
@@ -198,7 +201,7 @@
                 };
                 
                 // Start highlighting attempts after iframe loads
-                setTimeout(() => tryHighlight(), 500);
+                setTimeout(() => tryHighlight(), 200);
             }
         };
         

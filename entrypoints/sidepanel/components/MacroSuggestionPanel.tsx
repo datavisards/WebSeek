@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ProactiveSuggestion } from '../types';
+import { ProactiveSuggestion, ToolCall } from '../types';
 import { detectMarkdown, renderMarkdown } from '../utils';
 import { MACRO_TOOLS } from '../macro-tools';
 import './MacroSuggestionPanel.css';
@@ -14,8 +14,8 @@ interface MacroSuggestionPanelProps {
   onAccept: (suggestionId: string) => void;
   onDismiss: (suggestionId: string) => void;
   onDismissAll?: () => void; // Add dismiss all callback
-  onExecuteTool: (toolCall: { function: string; parameters: any }, suggestionId: string) => void;
-  onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => void;
+  onExecuteTool: (toolCall: ToolCall, suggestionId: string) => void;
+  onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: ToolCall }> }, suggestionId: string) => void;
   className?: string;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -212,7 +212,17 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
 
                   {expandedSuggestion === suggestion.id && (
                     <div className="expanded-details">
-                      {suggestion.detailedDescription && (
+                      {suggestion.toolSequence ? (
+                        <div className="tool-sequence-overview">
+                          <strong>Tools: </strong>
+                          {suggestion.toolSequence.steps.map((step, index) => (
+                            <span key={index} className="tool-name">
+                              {getToolIcon(step.toolCall.function)} {step.toolCall.function}
+                              {index < (suggestion.toolSequence?.steps.length || 0) - 1 ? ' → ' : ''}
+                            </span>
+                          ))}
+                        </div>
+                      ) : suggestion.detailedDescription && (
                         detectMarkdown(suggestion.detailedDescription) ? (
                           <div 
                             className="detailed-description markdown-content"
@@ -227,18 +237,9 @@ const MacroSuggestionPanel: React.FC<MacroSuggestionPanelProps> = ({
 
                       {suggestion.toolCall && (
                         <div className="tool-details">
-                          <strong>Tool Action:</strong>
-                          <div className="tool-info">
-                            <div className="tool-header">
-                              <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
-                              <span className="tool-title">{getToolDisplayName(suggestion.toolCall.function)}</span>
-                            </div>
-                            <p className="tool-description">{getToolDescription(suggestion.toolCall.function)}</p>
-                            <div className="tool-parameters">
-                              <strong>Parameters:</strong>
-                              <pre>{JSON.stringify(suggestion.toolCall.parameters, null, 2)}</pre>
-                            </div>
-                          </div>
+                          <strong>Tool: </strong>
+                          <span className="tool-icon">{getToolIcon(suggestion.toolCall.function)}</span>
+                          <span className="tool-name">{suggestion.toolCall.function}</span>
                         </div>
                       )}
                       

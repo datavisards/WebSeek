@@ -1,0 +1,412 @@
+[
+  {
+    "description": "Extract all camera products from Amazon, clean the price format, and sort them by price in ascending order.",
+    "source_pages": [
+      "amazon_cameras"
+    ],
+    "task_id": "task_001",
+    "difficulty": "easy"
+  },
+  {
+    "description": "Filter eBay used camera listings to show only items with a 'Buy It Now' price, then sort these listings by 'Current Bid' in descending order.",
+    "source_pages": [
+      "ebay_cameras"
+    ],
+    "task_id": "task_002",
+    "difficulty": "easy"
+  },
+  {
+    "description": "From the Wikipedia list of countries by population, extract the data and convert the growth rate to absolute numbers without symbols, then filter for countries with a positive growth rate.",
+    "source_pages": [
+      "wikipedia_countries"
+    ],
+    "task_id": "task_003",
+    "difficulty": "easy"
+  },
+  {
+    "description": "List the top 30 IMDb movies, split the 'Genre' column to only show the primary genre, and then filter the list to display only 'Drama' movies.",
+    "source_pages": [
+      "imdb_movies"
+    ],
+    "task_id": "task_004",
+    "difficulty": "easy"
+  },
+  {
+    "description": "Normalize the dataset sizes on Kaggle to megabytes (MB), then sort the datasets by size in descending order.",
+    "source_pages": [
+      "kaggle_datasets"
+    ],
+    "task_id": "task_005",
+    "difficulty": "easy"
+  },
+  {
+    "description": "Extract GitHub data analysis repositories, convert 'Stars' from the k format to a number, and filter to show only repositories with more than 100 stars.",
+    "source_pages": [
+      "github_repos"
+    ],
+    "task_id": "task_006",
+    "difficulty": "easy"
+  },
+  {
+    "description": "From Twitter trending topics, remove the K suffix from the Tweets column and sort by Tweets in descending order.",
+    "source_pages": [
+      "twitter_trending"
+    ],
+    "task_id": "task_007",
+    "difficulty": "easy"
+  },
+  {
+    "description": "List Reddit r/datascience hot posts, convert 'Upvotes' from the k format to a number, and filter for posts with more than 1k upvotes.",
+    "source_pages": [
+      "reddit_posts"
+    ],
+    "task_id": "task_008",
+    "difficulty": "easy"
+  },
+  {
+    "description": "Filter LinkedIn data analyst job postings to show only 'Senior' level positions and sort by the number of applicants in descending order.",
+    "source_pages": [
+      "linkedin_jobs"
+    ],
+    "task_id": "task_009",
+    "difficulty": "easy"
+  },
+  {
+    "description": "Sort Stack Overflow Python questions by 'Votes' in descending order, then filter to show questions with more than 100 votes.",
+    "source_pages": [
+      "stackoverflow_questions"
+    ],
+    "task_id": "task_010",
+    "difficulty": "easy"
+  },
+  {
+    "description": "Convert the temperature in Weather.com major city forecasts to Celsius, then filter to display only cities with a temperature below 20°C.",
+    "source_pages": [
+      "weather_cities"
+    ],
+    "task_id": "task_011",
+    "difficulty": "easy"
+  },
+  {
+    "description": "Extract Zillow home listings, remove the '$' and commas from the price, and sort by price in ascending order.",
+    "source_pages": [
+      "zillow_homes"
+    ],
+    "task_id": "task_012",
+    "difficulty": "easy"
+  },
+  {
+    "description": "List Google Finance stock prices, remove the $ and % symbols from the 'Change%' column, and filter for stocks with a positive change.",
+    "source_pages": [
+      "google_finance"
+    ],
+    "task_id": "task_013",
+    "difficulty": "easy"
+  },
+  {
+    "description": "From ESPN NBA team standings, convert 'Win%' from decimal to percentage format and filter to show only teams with a win rate above 50%.",
+    "source_pages": [
+      "espn_nba"
+    ],
+    "task_id": "task_014",
+    "difficulty": "easy"
+  },
+  {
+    "description": "List Booking.com hotel search results, convert 'Distance' to kilometers, and filter for hotels within 5 km from the center.",
+    "source_pages": [
+      "booking_hotels"
+    ],
+    "task_id": "task_015",
+    "difficulty": "easy"
+  },
+  {
+    "description": "Normalize the 'Price' column in Yelp restaurant listings from $ to $$$$ to a numerical range (1-4), then filter for restaurants with a price range of 2 or less.",
+    "source_pages": [
+      "yelp_restaurants"
+    ],
+    "task_id": "task_016",
+    "difficulty": "easy"
+  },
+  {
+    "description": "Convert 'Market Cap' in CoinMarketCap top cryptocurrencies from B/M suffixes to numeric billions and millions, then sort by market cap in descending order.",
+    "source_pages": [
+      "coinmarketcap"
+    ],
+    "task_id": "task_017",
+    "difficulty": "easy"
+  },
+  {
+    "description": "Extract the list of Goodreads bestselling books, split the 'Genre' column to show only the primary genre, and filter for 'Fantasy' books.",
+    "source_pages": [
+      "goodreads_books"
+    ],
+    "task_id": "task_018",
+    "difficulty": "easy"
+  },
+  {
+    "description": "List Crunchbase AI startup funding, convert 'Funding' from M/B to numeric millions and billions, and filter for startups with at least $100 million in funding.",
+    "source_pages": [
+      "crunchbase_startups"
+    ],
+    "task_id": "task_019",
+    "difficulty": "easy"
+  },
+  {
+    "description": "From Product Hunt featured products, filter for products with more than 500 upvotes and sort them by the number of comments in descending order.",
+    "source_pages": [
+      "producthunt_products"
+    ],
+    "task_id": "task_020",
+    "difficulty": "easy"
+  },
+  {
+    "description": "Extract camera product listings from Amazon and eBay, clean the price formats to remove symbols and letters, merge the listings into a single table, and create a bar chart comparing the price by brand.",
+    "source_pages": [
+      "amazon_cameras",
+      "ebay_cameras"
+    ],
+    "task_id": "task_021",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract population and area data for countries from Wikipedia, calculate the population density by dividing the population by the area for each country, and produce a scatter plot of population vs. density.",
+    "source_pages": [
+      "wikipedia_countries"
+    ],
+    "task_id": "task_022",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract movie data from IMDb, split the genre column into separate rows for each genre, count the number of movies per genre, and display this information in a bar chart.",
+    "source_pages": [
+      "imdb_movies"
+    ],
+    "task_id": "task_023",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract climate dataset information from Kaggle, standardize size units to megabytes, and create a bar chart of dataset sizes.",
+    "source_pages": [
+      "kaggle_datasets"
+    ],
+    "task_id": "task_024",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract data analysis repositories from GitHub, clean the stars column to convert the k suffix to a numeric multiplier, and rank the repositories by stars in a descending order table.",
+    "source_pages": [
+      "github_repos"
+    ],
+    "task_id": "task_025",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract trending topics from Twitter, normalize the Tweets column to remove the K suffix and convert to a number, and create a bar chart showing the tweets for the topic topics.",
+    "source_pages": [
+      "twitter_trending"
+    ],
+    "task_id": "task_026",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract hot posts from Reddit, clean the Upvotes column by removing the k suffix and converting to a number, and create a bar chart to show the posts and comments.",
+    "source_pages": [
+      "reddit_posts"
+    ],
+    "task_id": "task_027",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract data analyst job postings from LinkedIn, calculate the days since each job was posted from the relative dates, and generate a line graph showing the trend of job postings over the last month.",
+    "source_pages": [
+      "linkedin_jobs"
+    ],
+    "task_id": "task_028",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract Python questions from Stack Overflow, split the Tags column into separate rows for each tag, count the number of questions per tag, and visualize this in a bar chart.",
+    "source_pages": [
+      "stackoverflow_questions"
+    ],
+    "task_id": "task_029",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract major city weather forecasts from Weather.com, convert temperature to Celsius where needed, and create a chart showing the temperature of each day.",
+    "source_pages": [
+      "weather_cities"
+    ],
+    "task_id": "task_030",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract home listings from Zillow, clean the price format to remove symbols and commas, convert square footage to square meters, and generate a scatter plot of price vs. square meters.",
+    "source_pages": [
+      "zillow_homes"
+    ],
+    "task_id": "task_031",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract stock prices from Google Finance, clean the Change% column to remove symbols and convert to a number, and create a line chart showing the daily percentage change for selected stocks.",
+    "source_pages": [
+      "google_finance"
+    ],
+    "task_id": "task_032",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract NBA team standings from ESPN, clean the Win% column to convert from decimal to percentage, and produce a bar chart ranking teams by wins.",
+    "source_pages": [
+      "espn_nba"
+    ],
+    "task_id": "task_033",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract hotel search results from Booking.com, clean the Reviews column to remove the word 'reviews' and convert to a number, and create a histogram of hotel ratings.",
+    "source_pages": [
+      "booking_hotels"
+    ],
+    "task_id": "task_034",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract restaurant listings from Yelp, normalize the Price column to a numerical value (e.g., $ = 1, $$ = 2), and generate a histogram showing the distribution of restaurants by price range.",
+    "source_pages": [
+      "yelp_restaurants"
+    ],
+    "task_id": "task_035",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract cryptocurrency data from CoinMarketCap, clean the Market Cap column to convert B and M suffixes to numeric multipliers and create a visualization of market cap distribution among the top cryptocurrencies.",
+    "source_pages": [
+      "coinmarketcap"
+    ],
+    "task_id": "task_036",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract bestselling book data from Goodreads, extract the first genre in the Genre column for each item, calculate the average rating per genre, and visualize this in a bar chart.",
+    "source_pages": [
+      "goodreads_books"
+    ],
+    "task_id": "task_037",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract AI startup funding data from Crunchbase, standardize funding amounts to millions of dollars, and create a bar chart showing the top 5 startups by funding.",
+    "source_pages": [
+      "crunchbase_startups"
+    ],
+    "task_id": "task_038",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Extract featured product data from Product Hunt, convert the Upvotes column from natural language to numbers, and generate a bar chart of the top 10 products by upvotes.",
+    "source_pages": [
+      "producthunt_products"
+    ],
+    "task_id": "task_039",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Combine job postings from LinkedIn and Stack Overflow questions to identify trends in data analyst skills demand, convert relative dates to absolute, and create a timeline visualization of job postings and Python question frequency over time.",
+    "source_pages": [
+      "linkedin_jobs",
+      "stackoverflow_questions"
+    ],
+    "task_id": "task_040",
+    "difficulty": "medium"
+  },
+  {
+    "description": "Merge camera listings from Amazon and eBay, standardize price formats, and identify the top 10 most expensive cameras combined from both platforms. Visualize the price of top 10 cameras by brand.",
+    "source_pages": [
+      "amazon_cameras",
+      "ebay_cameras"
+    ],
+    "task_id": "task_041",
+    "difficulty": "hard"
+  },
+  {
+    "description": "Compare the population density of countries from Wikipedia with their growth rates. Clean the data, calculate the average growth rate for countries with a density above the median, and create a scatter plot of density vs growth rate.",
+    "source_pages": [
+      "wikipedia_countries"
+    ],
+    "task_id": "task_042",
+    "difficulty": "hard"
+  },
+  {
+    "description": "Merge the IMDb movies dataset with the Goodreads bestselling books dataset, standardize the rating formats, separate genres for movies, and visualize the distribution of ratings across books and movies.",
+    "source_pages": [
+      "imdb_movies",
+      "goodreads_books"
+    ],
+    "task_id": "task_043",
+    "difficulty": "hard"
+  },
+  {
+    "description": "Combine GitHub data analysis repositories with Stack Overflow Python questions to identify trends in data analysis topics. Clean and standardize the data, including converting 'k' suffix to numeric, and visualize the top repos with the most stars.",
+    "source_pages": [
+      "github_repos",
+      "stackoverflow_questions"
+    ],
+    "task_id": "task_044",
+    "difficulty": "hard"
+  },
+  {
+    "description": "Analyze trends in the job market using LinkedIn data analyst job postings and Crunchbase AI startup funding. Standardize the dates and funding amounts, and create visualizations analyzing the the number of job postings and the amount of funding in the AI sector.",
+    "source_pages": [
+      "linkedin_jobs",
+      "crunchbase_startups"
+    ],
+    "task_id": "task_045",
+    "difficulty": "hard"
+  },
+  {
+    "description": "Compare climate dataset downloads and sizes from Kaggle with the popularity (upvotes) of Reddit r/datascience posts. Clean and standardize dataset sizes and post upvotes, and create charts to visualize dataset popularity on Kaggle and the discussion popularity on Reddit respectively.",
+    "source_pages": [
+      "kaggle_datasets",
+      "reddit_posts"
+    ],
+    "task_id": "task_046",
+    "difficulty": "hard"
+  },
+  {
+    "description": "Extract weather forecasts from Weather.com and stock prices from Google Finance. Clean and standardize temperature and stock change formats, and visualize the data for analysis respectively.",
+    "source_pages": [
+      "weather_cities",
+      "google_finance"
+    ],
+    "task_id": "task_047",
+    "difficulty": "hard"
+  },
+  {
+    "description": "Extract and analyze the performance of NBA teams from ESPN. Standardize and clean the data, particularly win percentages and streak, and create a visualization to compare the win rates of western and eastern cities.",
+    "source_pages": [
+      "espn_nba"
+    ],
+    "task_id": "task_048",
+    "difficulty": "hard"
+  },
+  {
+    "description": "Merge and compare cryptocurrency data from CoinMarketCap with stock prices from Google Finance. Clean data to standardize price and percentage change formats, and visualize which investment type (cryptocurrencies vs stocks) was more volatile over the past week.",
+    "source_pages": [
+      "coinmarketcap",
+      "google_finance"
+    ],
+    "task_id": "task_049",
+    "difficulty": "hard"
+  },
+  {
+    "description": "Combine hotel ratings and prices from Booking.com with restaurant ratings and price ranges from Yelp for major cities. Standardize ratings and price formats, and create a combined 'city attractiveness' index based on average hotel and restaurant ratings. Visualize the top 5 cities with the highest attractiveness index.",
+    "source_pages": [
+      "booking_hotels",
+      "yelp_restaurants"
+    ],
+    "task_id": "task_050",
+    "difficulty": "hard"
+  }
+]

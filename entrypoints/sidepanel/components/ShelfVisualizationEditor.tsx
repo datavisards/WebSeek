@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import VisualizationRenderer, { InteractionConfig } from './visualizationrenderer';
+import VisualizationRenderer from './visualizationrenderer';
 import { Instance, TableInstance, TextInstance } from '../types';
 import './shelfvisualizationeditor.css';
 
 interface Column {
   id: string;
   name: string;
+  actualColumnName: string; // The real column name from the table
   type: 'numeral' | 'categorical';
   instanceId: string;
   instanceType: 'table' | 'text';
@@ -31,6 +32,7 @@ interface Shelf {
   x?: Column[];
   y?: Column[];
   color?: Column[];
+  size?: Column[];
 }
 
 // Utility function to sanitize field names for Vega-Lite
@@ -41,24 +43,60 @@ const sanitizeFieldName = (name: string): string => {
     .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
 };
 
-// Default interaction configurations for different chart types
-const DEFAULT_INTERACTIONS: Record<string, InteractionConfig> = {
-  point: {
-    hover: { enabled: true },
-    selection: { enabled: true, type: 'box' }
-  },
-  bar: {
-    hover: { enabled: true },
-    selection: { enabled: true, type: 'single' }
-  },
-  line: {
-    hover: { enabled: true },
-    selection: { enabled: false, type: 'single' }
-  },
-  histogram: {
-    hover: { enabled: true },
-    selection: { enabled: true, type: 'single' }
+// Helper function to find the best matching column, preferring more specific table names
+const findBestMatchingColumn = (availableColumns: Column[], fieldName: string, spec?: any): Column | null => {
+  const allMatchingColumns = availableColumns.filter(col => {
+    // Try multiple matching strategies:
+    // 1. Direct field name match with column ID (old format)
+    const idMatch = col.id === fieldName;
+    // 2. Column name after colon matches field
+    const nameMatch = col.name.split(': ')[1] === fieldName;
+    // 3. Field is a column letter (A, B, C) and matches the column position
+    const letterMatch = /^[A-Z]+$/.test(fieldName) && col.name.split(': ')[1] === fieldName;
+    // 4. Extract column index from col.id and convert to letter to match field
+    const colIdParts = col.id.split('_col_');
+    const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
+    // 5. Direct match with sanitized actual column name
+    const sanitizedMatch = sanitizeFieldName(col.actualColumnName) === fieldName;
+    // 6. Direct match with actual column name
+    const actualNameMatch = col.actualColumnName === fieldName;
+    // 7. Check if the field name sanitized matches the sanitized actual column name
+    const bothSanitizedMatch = sanitizeFieldName(fieldName) === sanitizeFieldName(col.actualColumnName);
+    // 8. Check if field name matches the original column name from data values in the spec
+    let dataColumnMatch = false;
+    if (spec?.data?.values && spec.data.values.length > 0) {
+      const dataColumns = Object.keys(spec.data.values[0]);
+      dataColumnMatch = dataColumns.includes(fieldName) && dataColumns.includes(col.actualColumnName) && 
+                       dataColumns.indexOf(fieldName) === dataColumns.indexOf(col.actualColumnName);
+    }
+    
+    return idMatch || nameMatch || letterMatch || letterFromIndex || sanitizedMatch || actualNameMatch || bothSanitizedMatch || dataColumnMatch;
+  });
+  
+  if (allMatchingColumns.length === 0) {
+    return null;
   }
+  
+  // If only one match, return it
+  if (allMatchingColumns.length === 1) {
+    return allMatchingColumns[0];
+  }
+  
+  // If multiple matches, prefer tables with more specific/longer names (likely original tables)
+  // Sort by: 1) table name length (longer = more specific), 2) presence of numbers/underscores (more specific)
+  return allMatchingColumns.sort((a, b) => {
+    const aTableName = a.instanceId;
+    const bTableName = b.instanceId;
+    
+    // Prefer tables with longer names (table1_1 over table)
+    const lengthDiff = bTableName.length - aTableName.length;
+    if (lengthDiff !== 0) return lengthDiff;
+    
+    // Prefer tables with numbers/underscores (more specific identifiers)
+    const aSpecificity = (aTableName.match(/[0-9_]/g) || []).length;
+    const bSpecificity = (bTableName.match(/[0-9_]/g) || []).length;
+    return bSpecificity - aSpecificity;
+  })[0];
 };
 
 // Helper function to generate column names (A, B, C, etc.)
@@ -128,15 +166,14 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
   const [shelves, setShelves] = useState<Shelf>({
     x: [],
     y: [],
-    color: []
+    color: [],
+    size: []
   });
 
   const [chartType, setChartType] = useState<'bar' | 'line' | 'point' | 'histogram'>('point');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
   const [draggedOver, setDraggedOver] = useState<string | null>(null);
-  const [isInteractive, setIsInteractive] = useState<boolean>(true);
-  const [interactionConfig, setInteractionConfig] = useState<InteractionConfig>(DEFAULT_INTERACTIONS.point);
 
   // Extract columns from available instances
   const availableColumns = useMemo((): Column[] => {
@@ -164,7 +201,10 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           // Extract column values for profiling
           const columnValues: (string | number | null)[] = [];
           for (let row = 0; row < tableInstance.rows; row++) {
-            const cell = tableInstance.cells[row][i];
+            // Defensive coding: check if the row exists and has the cell
+            const cell = tableInstance.cells[row] && tableInstance.cells[row][i] 
+              ? tableInstance.cells[row][i] 
+              : null;
             const rawValue = cell && cell.type === 'text' ? cell.content : null;
             
             // Convert value based on column type for profiling
@@ -189,6 +229,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           columns.push({
             id: `${instance.id}_col_${i}`,
             name: `${instance.id}: ${columnName}`,
+            actualColumnName: columnName,
             type: columnType,
             instanceId: instance.id,
             instanceType: 'table',
@@ -199,6 +240,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
         columns.push({
           id: `${instance.id}_text`,
           name: `${instance.id}: Text`,
+          actualColumnName: 'Text',
           type: 'categorical',
           instanceId: instance.id,
           instanceType: 'text'
@@ -226,16 +268,29 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
     try {
       const spec = typeof initialSpec === 'string' ? JSON.parse(initialSpec) : initialSpec;
       console.log('[ShelfVisualizationEditor] Parsing spec:', spec);
+      
+      // Log data values for debugging
+      if (spec.data?.values && spec.data.values.length > 0) {
+        console.log('[ShelfVisualizationEditor] Spec data sample:', {
+          firstRow: spec.data.values[0],
+          dataColumns: Object.keys(spec.data.values[0]),
+          totalRows: spec.data.values.length
+        });
+      }
 
       // Extract chart type from mark and encoding
       if (spec.mark) {
         const markType = typeof spec.mark === 'string' ? spec.mark : spec.mark.type;
+        console.log('[ShelfVisualizationEditor] Detected mark type:', markType);
         
         // Special case: detect histograms by checking for binning in x-axis and count in y-axis
         if (markType === 'bar' && spec.encoding?.x?.bin && spec.encoding?.y?.aggregate === 'count') {
           setChartType('histogram');
         } else if (['bar', 'line', 'point', 'histogram'].includes(markType)) {
           setChartType(markType);
+        } else if (markType === 'circle') {
+          // Convert 'circle' to 'point' for compatibility
+          setChartType('point');
         }
       }
 
@@ -244,7 +299,8 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
         const newShelves: Shelf = {
           x: [],
           y: [],
-          color: []
+          color: [],
+          size: []
         };
 
         // Map x-axis encoding
@@ -252,30 +308,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           const fieldName = spec.encoding.x.field;
           console.log('[ShelfVisualizationEditor] Looking for x-axis field:', fieldName);
           
-          const matchingColumn = availableColumns.find(col => {
-            // Try multiple matching strategies:
-            // 1. Direct field name match with column ID
-            const idMatch = col.id === fieldName;
-            // 2. Column name after colon matches field
-            const nameMatch = col.name.split(': ')[1] === fieldName;
-            // 3. Field is a column letter (A, B, C) and matches the column position
-            const letterMatch = /^[A-Z]+$/.test(fieldName) && col.name.split(': ')[1] === fieldName;
-            // 4. Extract column index from col.id and convert to letter to match field
-            const colIdParts = col.id.split('_col_');
-            const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
-            
-            console.log('[ShelfVisualizationEditor] Checking column:', {
-              colId: col.id,
-              colName: col.name,
-              fieldName,
-              idMatch,
-              nameMatch,
-              letterMatch,
-              letterFromIndex
-            });
-            
-            return idMatch || nameMatch || letterMatch || letterFromIndex;
-          });
+          const matchingColumn = findBestMatchingColumn(availableColumns, fieldName, spec);
           
           if (matchingColumn) {
             newShelves.x = [matchingColumn];
@@ -290,30 +323,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           const fieldName = spec.encoding.y.field;
           console.log('[ShelfVisualizationEditor] Looking for y-axis field:', fieldName);
           
-          const matchingColumn = availableColumns.find(col => {
-            // Try multiple matching strategies:
-            // 1. Direct field name match with column ID
-            const idMatch = col.id === fieldName;
-            // 2. Column name after colon matches field
-            const nameMatch = col.name.split(': ')[1] === fieldName;
-            // 3. Field is a column letter (A, B, C) and matches the column position
-            const letterMatch = /^[A-Z]+$/.test(fieldName) && col.name.split(': ')[1] === fieldName;
-            // 4. Extract column index from col.id and convert to letter to match field
-            const colIdParts = col.id.split('_col_');
-            const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
-            
-            console.log('[ShelfVisualizationEditor] Checking column:', {
-              colId: col.id,
-              colName: col.name,
-              fieldName,
-              idMatch,
-              nameMatch,
-              letterMatch,
-              letterFromIndex
-            });
-            
-            return idMatch || nameMatch || letterMatch || letterFromIndex;
-          });
+          const matchingColumn = findBestMatchingColumn(availableColumns, fieldName, spec);
           
           if (matchingColumn) {
             newShelves.y = [matchingColumn];
@@ -328,20 +338,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           const fieldName = spec.encoding.color.field;
           console.log('[ShelfVisualizationEditor] Looking for color field:', fieldName);
           
-          const matchingColumn = availableColumns.find(col => {
-            // Try multiple matching strategies:
-            // 1. Direct field name match with column ID
-            const idMatch = col.id === fieldName;
-            // 2. Column name after colon matches field
-            const nameMatch = col.name.split(': ')[1] === fieldName;
-            // 3. Field is a column letter (A, B, C) and matches the column position
-            const letterMatch = /^[A-Z]+$/.test(fieldName) && col.name.split(': ')[1] === fieldName;
-            // 4. Extract column index from col.id and convert to letter to match field
-            const colIdParts = col.id.split('_col_');
-            const letterFromIndex = colIdParts.length === 2 ? getColumnName(parseInt(colIdParts[1])) === fieldName : false;
-            
-            return idMatch || nameMatch || letterMatch || letterFromIndex;
-          });
+          const matchingColumn = findBestMatchingColumn(availableColumns, fieldName, spec);
           
           if (matchingColumn) {
             newShelves.color = [matchingColumn];
@@ -351,10 +348,26 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           }
         }
 
+        // Map size encoding
+        if (spec.encoding.size && spec.encoding.size.field) {
+          const fieldName = spec.encoding.size.field;
+          console.log('[ShelfVisualizationEditor] Looking for size field:', fieldName);
+          
+          const matchingColumn = findBestMatchingColumn(availableColumns, fieldName, spec);
+          
+          if (matchingColumn) {
+            newShelves.size = [matchingColumn];
+            console.log('[ShelfVisualizationEditor] Found size column:', matchingColumn);
+          } else {
+            console.log('[ShelfVisualizationEditor] No matching column found for size field:', fieldName);
+          }
+        }
+
         // Only update shelves if we found matches
         if ((newShelves.x && newShelves.x.length) ||
           (newShelves.y && newShelves.y.length) ||
-          (newShelves.color && newShelves.color.length)) {
+          (newShelves.color && newShelves.color.length) ||
+          (newShelves.size && newShelves.size.length)) {
           setShelves(newShelves);
           console.log('[ShelfVisualizationEditor] Populated shelves from initial spec:', newShelves);
         } else {
@@ -405,14 +418,9 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
 
   // Stable reference for interaction config to prevent unnecessary re-renders
   const stableInteractionConfig = useMemo(() => ({
-    hover: { enabled: interactionConfig.hover?.enabled || false },
-    selection: { 
-      enabled: interactionConfig.selection?.enabled || false,
-      type: interactionConfig.selection?.type || 'single'
-    }
-  }), [interactionConfig.hover?.enabled, interactionConfig.selection?.enabled, interactionConfig.selection?.type]);
-
-  // Generate Vega-Lite spec from shelves
+    hover: { enabled: true },
+    zoom: { enabled: true }
+  }), []);  // Generate Vega-Lite spec from shelves
   const generateSpec = useMemo((): object | null => {
     // Need at least one encoding
     if (!shelves.x?.length && !shelves.y?.length) {
@@ -423,7 +431,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
     // Collect all data sources
     const dataSources = new Map<string, any[]>();
 
-    [...(shelves.x || []), ...(shelves.y || []), ...(shelves.color || [])]
+    [...(shelves.x || []), ...(shelves.y || []), ...(shelves.color || []), ...(shelves.size || [])]
       .forEach(column => {
         if (dataSources.has(column.instanceId)) return;
 
@@ -436,12 +444,48 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
         if (instance.type === 'table') {
           const tableInstance = instance as TableInstance;
           const data: any[] = [];
+          
 
           for (let i = 0; i < tableInstance.rows; i++) {
             const row: any = {};
+            let rowSource: any = null;
+            let prioritySource: any = null; // Source from cells used in visualization
+            let fallbackSource: any = null; // Source from any cell in the row
+            
+            
             for (let j = 0; j < tableInstance.cols; j++) {
-              const cell = tableInstance.cells[i][j];
+              // Defensive coding: check if the row exists and has the cell
+              const cell = tableInstance.cells[i] && tableInstance.cells[i][j] 
+                ? tableInstance.cells[i][j] 
+                : null;
               const rawValue = cell && cell.type === 'text' ? cell.content : null;
+              
+              const columnName = tableInstance.columnNames?.[j] || getColumnName(j);
+              
+              // Check if this cell has web source information
+              if (cell?.source?.type === 'web' && cell.source.pageId && cell.source.locator) {
+                const cellSource = {
+                  pageId: cell.source.pageId,
+                  locator: cell.source.locator
+                };
+                
+                
+                // Check if this column is being used in the visualization
+                const isVisualizationColumn = [...(shelves.x || []), ...(shelves.y || []), ...(shelves.color || []), ...(shelves.size || [])]
+                  .some(shelfColumn => {
+                    const matches = shelfColumn.instanceId === column.instanceId && 
+                           (shelfColumn.actualColumnName === columnName || 
+                            sanitizeFieldName(shelfColumn.actualColumnName) === sanitizeFieldName(columnName));
+                    return matches;
+                  });
+                
+                console.log(`[ShelfVisualizationEditor] Column ${columnName} isVisualizationColumn:`, isVisualizationColumn);
+                if (isVisualizationColumn && !prioritySource) {
+                  prioritySource = cellSource;
+                } else if (!fallbackSource) {
+                  fallbackSource = cellSource;
+                }
+              }
               
               // Convert value based on column type
               let convertedValue: string | number | null = rawValue;
@@ -460,15 +504,29 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
                 }
               }
               
-              row[`${instance.id}_col_${j}`] = convertedValue;
+              // Use actual column name instead of instanceId_col_j
+              const sanitizedColumnName = sanitizeFieldName(columnName);
+              row[sanitizedColumnName] = convertedValue;
             }
+            
+            // Use priority source first, then fallback source
+            rowSource = prioritySource || fallbackSource;
+            
+            
+            // Add source information to the row if found in ANY cell
+            if (rowSource) {
+              row._pageId = rowSource.pageId;
+              row._locator = rowSource.locator;
+            } else {
+            }
+            
             data.push(row);
           }
           dataSources.set(column.instanceId, data);
-          console.log('Table data for', column.instanceId, ':', data);
         } else if (instance.type === 'text') {
           const textInstance = instance as TextInstance;
-          dataSources.set(column.instanceId, [{ [`${instance.id}_text`]: textInstance.content }]);
+          const sanitizedTextFieldName = sanitizeFieldName('Text');
+          dataSources.set(column.instanceId, [{ [sanitizedTextFieldName]: textInstance.content }]);
         }
       });
 
@@ -483,28 +541,41 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
 
     if (shelves.x?.length) {
       const xColumn = shelves.x[0];
+      const sanitizedFieldName = sanitizeFieldName(xColumn.actualColumnName);
       encoding.x = {
-        field: xColumn.id,
+        field: sanitizedFieldName,
         type: xColumn.type === 'numeral' ? 'quantitative' : 'nominal',
-        title: xColumn.name.split(': ')[1]
+        title: xColumn.actualColumnName
       };
     }
 
     if (shelves.y?.length) {
       const yColumn = shelves.y[0];
+      const sanitizedFieldName = sanitizeFieldName(yColumn.actualColumnName);
       encoding.y = {
-        field: yColumn.id,
+        field: sanitizedFieldName,
         type: yColumn.type === 'numeral' ? 'quantitative' : 'nominal',
-        title: yColumn.name.split(': ')[1]
+        title: yColumn.actualColumnName
       };
     }
 
     if (shelves.color?.length) {
       const colorColumn = shelves.color[0];
+      const sanitizedFieldName = sanitizeFieldName(colorColumn.actualColumnName);
       encoding.color = {
-        field: colorColumn.id,
+        field: sanitizedFieldName,
         type: colorColumn.type === 'numeral' ? 'quantitative' : 'nominal',
-        title: colorColumn.name.split(': ')[1]
+        title: colorColumn.actualColumnName
+      };
+    }
+
+    if (shelves.size?.length) {
+      const sizeColumn = shelves.size[0];
+      const sanitizedFieldName = sanitizeFieldName(sizeColumn.actualColumnName);
+      encoding.size = {
+        field: sanitizedFieldName,
+        type: sizeColumn.type === 'numeral' ? 'quantitative' : 'nominal',
+        title: sizeColumn.actualColumnName
       };
     }
 
@@ -514,12 +585,13 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
       // For histograms, we need special encoding
       if (shelves.x?.length) {
         const xColumn = shelves.x[0];
+        const sanitizedFieldName = sanitizeFieldName(xColumn.actualColumnName);
         // For histograms, X should be binned and Y should be count
         encoding.x = {
-          field: xColumn.id,
+          field: sanitizedFieldName,
           type: 'quantitative',
           bin: true,
-          title: xColumn.name.split(': ')[1]
+          title: xColumn.actualColumnName
         };
         encoding.y = {
           aggregate: 'count',
@@ -539,10 +611,9 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
       height: 'container'
     };
 
-    // Add interactivity if enabled
-    if (isInteractive && stableInteractionConfig) {
-      // Add tooltip for hover
-      if (stableInteractionConfig.hover?.enabled) {
+    // Add interactivity with default settings
+    // Add tooltip for hover
+    if (stableInteractionConfig.hover?.enabled) {
         // Add tooltip to encoding - include ALL fields from the data, not just the ones used in the chart
         const tooltipFields = [];
         
@@ -553,87 +624,17 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
           tooltipFields.push(...allFields);
         } else {
           // Fallback to only chart fields if no data available
-          if (shelves.x?.length) tooltipFields.push(shelves.x[0].id);
-          if (shelves.y?.length) tooltipFields.push(shelves.y[0].id);
-          if (shelves.color?.length) tooltipFields.push(shelves.color[0].id);
+          if (shelves.x?.length) tooltipFields.push(sanitizeFieldName(shelves.x[0].actualColumnName));
+          if (shelves.y?.length) tooltipFields.push(sanitizeFieldName(shelves.y[0].actualColumnName));
+          if (shelves.color?.length) tooltipFields.push(sanitizeFieldName(shelves.color[0].actualColumnName));
         }
 
         encoding.tooltip = tooltipFields.map(field => ({ field }));
       }
 
-      // Add selection for interactivity
-      if (stableInteractionConfig.selection?.enabled) {
-        const selectionName = 'brush';
-
-        // Use params instead of selection for Vega-Lite v5+
-        if (!spec.params) {
-          spec.params = [];
-        }
-
-        if (stableInteractionConfig.selection.type === 'box') {
-          // Box selection for scatter plots
-          spec.params.push({
-            name: selectionName,
-            select: {
-              type: 'interval'
-            }
-          });
-        } else if (stableInteractionConfig.selection.type === 'multi') {
-          // Multi-select
-          spec.params.push({
-            name: selectionName,
-            select: {
-              type: 'point',
-              toggle: true
-            }
-          });
-        } else {
-          // Single selection (default)
-          spec.params.push({
-            name: selectionName,
-            select: {
-              type: 'point'
-            }
-          });
-        }
-
-        // Apply selection styling to marks
-        if (typeof spec.mark === 'string') {
-          spec.mark = {
-            type: spec.mark,
-            cursor: 'pointer'
-          };
-        } else {
-          spec.mark.cursor = 'pointer';
-        }
-
-        // Add conditional formatting for selected items
-        const originalColor = encoding.color;
-        if (originalColor) {
-          // If there was already a color encoding, preserve it in the condition
-          encoding.color = {
-            condition: {
-              param: selectionName,
-              ...originalColor
-            },
-            value: 'lightgray'
-          };
-        } else {
-          // Default color scheme for selection
-          encoding.color = {
-            condition: {
-              param: selectionName,
-              value: '#FF6B35'
-            },
-            value: '#1f77b4'
-          };
-        }
-      }
-    }
-
     console.log('Generated spec:', spec);
     return spec;
-  }, [shelves, chartType, availableInstances, isInteractive, stableInteractionConfig]);
+  }, [shelves, chartType, availableInstances, stableInteractionConfig]);
 
   // Call onSpecChange whenever the generated spec changes (for state preservation)
   useEffect(() => {
@@ -682,8 +683,6 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
   const handleChartTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newChartType = e.target.value as 'bar' | 'line' | 'point' | 'histogram';
     setChartType(newChartType);
-    // Update interaction configuration based on chart type
-    setInteractionConfig(DEFAULT_INTERACTIONS[newChartType]);
   };
 
   const handleSave = useCallback(() => {
@@ -810,82 +809,32 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
                   </div>
                 </div>
               </div>
-            </div>
 
-            <section className="interaction-config-section">
-              <h4>Interactivity</h4>
-              <div className="interaction-controls">
-                <div className="interaction-row">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={isInteractive}
-                      onChange={(e) => setIsInteractive(e.target.checked)}
-                    />
-                    Enable Interactive Mode
-                  </label>
-                </div>
-
-                {isInteractive && (
-                  <>
-                    <div className="interaction-row">
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={interactionConfig.hover?.enabled || false}
-                          onChange={(e) => setInteractionConfig(prev => ({
-                            ...prev,
-                            hover: {
-                              ...(prev.hover || {}),
-                              enabled: e.target.checked
-                            }
-                          }))}
-                        />
-                        Show details on hover
-                      </label>
-                    </div>
-
-                    <div className="interaction-row">
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={interactionConfig.selection?.enabled || false}
-                          onChange={(e) => setInteractionConfig(prev => ({
-                            ...prev,
-                            selection: {
-                              ...(prev.selection || { type: 'single' }),
-                              enabled: e.target.checked
-                            }
-                          }))}
-                        />
-                        Enable data selection
-                      </label>
-                    </div>
-
-                    {interactionConfig.selection?.enabled && (
-                      <div className="interaction-row">
-                        <label htmlFor="selection-type">Selection Type:</label>
-                        <select
-                          id="selection-type"
-                          value={interactionConfig.selection.type}
-                          onChange={(e) => setInteractionConfig(prev => ({
-                            ...prev,
-                            selection: {
-                              ...prev.selection!,
-                              type: e.target.value as 'single' | 'multi' | 'box'
-                            }
-                          }))}
+              <div className="shelf-section">
+                <div className="shelf-row">
+                  <div className="shelf-label">Size</div>
+                  <div
+                    className={`shelf size-shelf ${draggedOver === 'size' ? 'dragged-over' : ''}`}
+                    onDrop={(e) => handleDrop(e, 'size')}
+                    onDragOver={(e) => handleDragOver(e, 'size')}
+                    onDragLeave={handleDragLeave}
+                  >
+                    {shelves.size?.map(column => (
+                      <div key={column.id} className={`shelf-item ${column.type}`}>
+                        <span>{column.name.split(': ')[1]}</span>
+                        <button
+                          className="remove-btn"
+                          onClick={() => removeFromShelf('size', column.id)}
                         >
-                          <option value="single">Single Click</option>
-                          <option value="multi">Multi Select</option>
-                          {chartType === 'point' && <option value="box">Box Select</option>}
-                        </select>
+                          ×
+                        </button>
                       </div>
-                    )}
-                  </>
-                )}
+                    ))}
+                    {!shelves.size?.length && <span className="shelf-placeholder">Drag columns here (optional)</span>}
+                  </div>
+                </div>
               </div>
-            </section>
+            </div>
           </div>
 
           {/* Bottom: Available Data */}
@@ -935,7 +884,7 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
                     onDragStart={(e) => handleDragStart(e, column)}
                     title={`${column.instanceType}: ${column.name} (${column.type})\n${profileText}`}
                   >
-                    <div className="column-header">
+                    <div className="column-item-header">
                       <span className="column-icon">
                         {column.type === 'numeral' ? '#' : 'Abc'}
                       </span>
@@ -960,6 +909,8 @@ const ShelfVisualizationEditor: React.FC<ShelfVisualizationEditorProps> = ({
               <VisualizationRenderer
                 spec={generateSpec}
                 onImageUrlReady={handleImageUrlReady}
+                zoomEnabled={stableInteractionConfig.zoom?.enabled || false}
+                chartType={chartType}
               />
             ) : (
               <div className="no-preview">

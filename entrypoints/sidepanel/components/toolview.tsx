@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { Message, Instance, ProactiveSuggestion } from '../types';
+import { Message, Instance, ProactiveSuggestion, ToolCall } from '../types';
 import './toolview.css';
 import ChatTab from './chattab';
-import CodeTab from './codetab';
 import HistoryTab from './historytab';
 import MacroSuggestionPanel from './MacroSuggestionPanel';
 import SystemLogsViewer from './SystemLogsViewer';
@@ -24,8 +23,8 @@ interface ToolViewProps {
     onAcceptSuggestion?: (suggestionId: string) => void;
     onDismissSuggestion?: (suggestionId: string) => void;
     onDismissAllSuggestions?: () => void; // Add dismiss all callback
-    onExecuteTool?: (toolCall: { function: string; parameters: any }, suggestionId: string) => void;
-    onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: { function: string; parameters: any } }> }, suggestionId: string) => void;
+    onExecuteTool?: (toolCall: ToolCall, suggestionId: string) => void;
+    onExecuteToolSequence?: (toolSequence: { goal: string; steps: Array<{ description: string; toolCall: ToolCall }> }, suggestionId: string) => void;
     // History restoration callback
     onRestoreToCheckpoint?: (logIndex: number) => void;
     // Application state context
@@ -33,6 +32,8 @@ interface ToolViewProps {
     isInEditor?: boolean;
     editingTableId?: string | null;
     onTableModified?: (tableId: string) => void; // Add callback for table modifications
+    updateHTMLContext?: React.Dispatch<React.SetStateAction<Record<string, { pageURL: string, htmlContent: string }>>>;
+    onOpenApiSettings?: () => void;
 }
 
 const ToolView: React.FC<ToolViewProps> = ({
@@ -57,9 +58,11 @@ const ToolView: React.FC<ToolViewProps> = ({
     currentPageInfo,
     isInEditor,
     editingTableId,
-    onTableModified
+    onTableModified,
+    updateHTMLContext,
+    onOpenApiSettings
 }) => {
-    const [activeTab, setActiveTab] = useState<'chat' | 'code' | 'suggestions' | 'history' | 'logs'>('suggestions');
+    const [activeRightTab, setActiveRightTab] = useState<'chat' | 'history' | 'logs'>('chat');
     const [showSystemLogs, setShowSystemLogs] = useState(false);
 
     const isMinimized = heightMode === 'minimum';
@@ -87,41 +90,42 @@ const ToolView: React.FC<ToolViewProps> = ({
     return (
         <div className={`view-container tool-view height-${heightMode}`}>
             <div className="view-title-container">
-                <h3
-                    className={`tab-button ${activeTab === 'suggestions' ? 'active' : ''} ${isMinimized ? 'disabled' : ''}`}
-                    onClick={() => !isMinimized && setActiveTab('suggestions')}
-                >
-                    AI Suggestions {suggestions.filter(s => s.scope === 'macro').length > 0 && `(${suggestions.filter(s => s.scope === 'macro').length})`}
-                </h3>
-                <h3
-                    className={`tab-button ${activeTab === 'chat' ? 'active' : ''} ${isMinimized ? 'disabled' : ''}`}
-                    onClick={() => !isMinimized && setActiveTab('chat')}
-                >
-                    Chat
-                </h3>
-                <h3
-                    className={`tab-button ${activeTab === 'history' ? 'active' : ''} ${isMinimized ? 'disabled' : ''}`}
-                    onClick={() => !isMinimized && setActiveTab('history')}
-                >
-                    History {logs.length > 0 && `(${logs.length})`}
-                </h3>
-                <button
-                    className={`system-logs-btn ${isMinimized ? 'disabled' : ''}`}
-                    onClick={() => !isMinimized && setShowSystemLogs(true)}
-                    title="View System Logs for Data Analysis"
-                    disabled={isMinimized}
-                >
-                    📊 System Logs
-                </button>
-                {activeTab === 'suggestions' && onDismissAllSuggestions && suggestions.filter(s => s.scope === 'macro').length > 0 && (
-                    <button
-                        className="dismiss-all-btn"
-                        onClick={onDismissAllSuggestions}
-                        title="Dismiss all AI suggestions"
+                <div className="left-pane-header">
+                    <h3 className={`pane-title ${isMinimized ? 'disabled' : ''}`}>
+                        AI Suggestions {suggestions.filter(s => s.scope === 'macro').length > 0 && `(${suggestions.filter(s => s.scope === 'macro').length})`}
+                    </h3>
+                    {onDismissAllSuggestions && suggestions.filter(s => s.scope === 'macro').length > 0 && (
+                        <button
+                            className="dismiss-all-btn"
+                            onClick={onDismissAllSuggestions}
+                            title="Dismiss all AI suggestions"
+                            disabled={isMinimized}
+                        >
+                            Dismiss All
+                        </button>
+                    )}
+                </div>
+                <div className="right-pane-header">
+                    <h3
+                        className={`tab-button ${activeRightTab === 'chat' ? 'active' : ''} ${isMinimized ? 'disabled' : ''}`}
+                        onClick={() => !isMinimized && setActiveRightTab('chat')}
                     >
-                        Dismiss All
-                    </button>
-                )}
+                        Chat
+                    </h3>
+                    <h3
+                        className={`tab-button ${activeRightTab === 'history' ? 'active' : ''} ${isMinimized ? 'disabled' : ''}`}
+                        onClick={() => !isMinimized && setActiveRightTab('history')}
+                    >
+                        History {logs.length > 0 && `(${logs.length})`}
+                    </h3>
+                    {onOpenApiSettings && (
+                        <button
+                            onClick={onOpenApiSettings}
+                            title="API Settings"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', padding: '0 4px', color: '#666', marginLeft: 4 }}
+                        >⚙</button>
+                    )}
+                </div>
                 <div className="collapse-toggle-container">
                     <span className="height-mode-indicator">{getHeightModeDisplay()}</span>
                     <button
@@ -135,12 +139,9 @@ const ToolView: React.FC<ToolViewProps> = ({
             </div>
 
             {!isMinimized && (
-                <div className="view-content" style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    flex: 1,
-                }}>
-                    {activeTab === 'suggestions' && (
+                <div className="view-content split-pane-layout">
+                    {/* Left Pane: AI Suggestions */}
+                    <div className="left-pane">
                         <MacroSuggestionPanel
                             suggestions={suggestions}
                             onAccept={onAcceptSuggestion || (() => {})}
@@ -151,31 +152,36 @@ const ToolView: React.FC<ToolViewProps> = ({
                             className="embedded-suggestions-panel"
                             isCollapsed={false}
                         />
-                    )}
-                    {activeTab === 'chat' && (
-                        <ChatTab
-                            messages={messages}
-                            addMessage={addMessage}
-                            setMessages={setMessages}
-                            agentLoading={agentLoading}
-                            setAgentLoading={setAgentLoading}
-                            instances={instances}
-                            htmlContext={htmlContext}
-                            setInstances={setInstances}
-                            logs={logs}
-                            currentToolViewTab={activeTab}
-                            currentPageInfo={currentPageInfo}
-                            isInEditor={isInEditor}
-                            editingTableId={editingTableId}
-                            onTableModified={onTableModified}
-                        />
-                    )}
-                    {activeTab === 'history' && (
-                        <HistoryTab
-                            logs={logs}
-                            onRestoreToCheckpoint={onRestoreToCheckpoint}
-                        />
-                    )}
+                    </div>
+                    
+                    {/* Right Pane: Chat, History, System Logs */}
+                    <div className="right-pane">
+                        {activeRightTab === 'chat' && (
+                            <ChatTab
+                                messages={messages}
+                                addMessage={addMessage}
+                                setMessages={setMessages}
+                                agentLoading={agentLoading}
+                                setAgentLoading={setAgentLoading}
+                                instances={instances}
+                                htmlContext={htmlContext}
+                                setInstances={setInstances}
+                                logs={logs}
+                                currentToolViewTab={activeRightTab}
+                                currentPageInfo={currentPageInfo}
+                                isInEditor={isInEditor}
+                                editingTableId={editingTableId}
+                                onTableModified={onTableModified}
+                                updateHTMLContext={updateHTMLContext}
+                            />
+                        )}
+                        {activeRightTab === 'history' && (
+                            <HistoryTab
+                                logs={logs}
+                                onRestoreToCheckpoint={onRestoreToCheckpoint}
+                            />
+                        )}
+                    </div>
                 </div>
             )}
             

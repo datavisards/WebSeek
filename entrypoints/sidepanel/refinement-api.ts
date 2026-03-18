@@ -1,6 +1,7 @@
 import { chatWithAgent } from './apis';
 import { createRuleBasedSuggestionPrompt } from './prompts';
-import { Message, Instance } from './types';
+import { pruneHtmlContext } from './context-filter';
+import { Message, Instance, ToolCall } from './types';
 
 /**
  * Specialized API wrapper for suggestion refinement
@@ -8,7 +9,7 @@ import { Message, Instance } from './types';
  */
 export async function requestSuggestionRefinement(
   originalSuggestion: { id: string; message: string; category?: string },
-  failedToolCall: { function: string; parameters: any },
+  failedToolCall: ToolCall,
   errorMessage: string,
   context: {
     messages: Message[];
@@ -26,8 +27,8 @@ export async function requestSuggestionRefinement(
     priority: string;
     confidence: number;
     category: string;
-    toolCall?: any;
-    toolSequence?: any;
+    toolCall?: ToolCall;
+    toolSequence?: { goal: string; steps: Array<{ description: string; toolCall: ToolCall }> };
   };
   error?: string;
 }> {
@@ -88,7 +89,7 @@ The refined suggestion should accomplish: "${originalSuggestion.message}"`;
       context.messages, // Include conversation history
       JSON.stringify(context.instances), // Current instance context
       [], // No image context needed for refinement
-      context.htmlContext, // Include HTML context
+      pruneHtmlContext(context.htmlContext, context.instances), // Include only relevant HTML context
       context.logs // Include recent logs
     );
 

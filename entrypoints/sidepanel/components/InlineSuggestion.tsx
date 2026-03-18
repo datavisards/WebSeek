@@ -136,7 +136,7 @@ const InlineSuggestion: React.FC<InlineSuggestionProps> = ({
           </div>
           <div className={`suggestion-mark ${action}`}>×</div>
           <div className="suggestion-controls">
-            <kbd>Tab</kbd> accept • <kbd>Esc</kbd> dismiss
+            ↵ accept · Esc dismiss
           </div>
         </>
       );
@@ -176,7 +176,7 @@ const InlineSuggestion: React.FC<InlineSuggestionProps> = ({
             </div>
             <div className={`suggestion-mark ${action}`}>↻</div>
             <div className="suggestion-controls">
-              <kbd>Tab</kbd> accept • <kbd>Esc</kbd> dismiss
+              ↵ accept · Esc dismiss
             </div>
           </>
         );
@@ -194,7 +194,7 @@ const InlineSuggestion: React.FC<InlineSuggestionProps> = ({
             </div>
             <div className={`suggestion-mark ${action}`}>↻</div>
             <div className="suggestion-controls">
-              <kbd>Tab</kbd> accept • <kbd>Esc</kbd> dismiss
+              ↵ accept · Esc dismiss
             </div>
           </>
         );
@@ -208,7 +208,7 @@ const InlineSuggestion: React.FC<InlineSuggestionProps> = ({
             {renderInstanceContent(instance)}
           </div>
           <div className="suggestion-controls">
-            <kbd>Tab</kbd> accept • <kbd>Esc</kbd> dismiss
+            ↵ accept · Esc dismiss
           </div>
         </>
       );
