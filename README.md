@@ -31,15 +31,15 @@ Chrome Extension (WXT + React + TypeScript)
 
 - Node.js ≥ 18
 - Chrome ≥ 114 (for Side Panel API)
-- The [WebSeek backend](https://github.com/your-org/webseek_backend) running locally or on a server
+- The [WebSeek backend](https://github.com/datavisards/webseek-backend) running locally or on a server
 
 ## Setup
 
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/your-org/webseek.git
-cd webseek
+git clone https://github.com/datavisards/WebSeek.git
+cd WebSeek
 npm install
 ```
 

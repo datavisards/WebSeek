@@ -17,7 +17,7 @@ WebSeek is a Chrome extension that brings AI-powered data analysis directly into
 Visit the WebSeek page on the Chrome Web Store and click **Add to Chrome**.
 
 **Option B – Load unpacked (developer mode)**
-1. Download the latest release ZIP from the [Releases](https://github.com/your-org/webseek/releases) page and unzip it.
+1. Download the latest release ZIP from the [Releases](https://github.com/datavisards/WebSeek/releases) page and unzip it.
 2. Open `chrome://extensions` in Chrome.
 3. Enable **Developer mode** (toggle in the top-right corner).
 4. Click **Load unpacked** and select the unzipped folder.
@@ -137,4 +137,4 @@ Only the LLM prompt (which may include page content and table data) is sent to O
 
 ## Support
 
-Open an issue on [GitHub](https://github.com/your-org/webseek/issues).
+Open an issue on [GitHub](https://github.com/datavisards/WebSeek/issues).
